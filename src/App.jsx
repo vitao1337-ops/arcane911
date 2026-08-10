@@ -148,16 +148,65 @@ function CardBack({ selectedOrder, isDisabled, onClick, style }) {
 }
 
 function MysticField({ compact = false }) {
+  const viewBox = compact ? "0 0 1200 480" : "0 0 1200 720";
+  const rosetteTransform = compact ? "translate(152 392)" : "translate(152 584)";
+  const rightConstellationTransform = compact ? "translate(0 -118)" : undefined;
+
   return (
     <div className={`mystic-field ${compact ? "is-compact" : ""}`} aria-hidden="true">
-      <span className="mystic-veil" />
-      <span className="mystic-ring mystic-ring-one"><i>✦</i></span>
-      <span className="mystic-ring mystic-ring-two"><i>✧</i></span>
-      <span className="mystic-constellation constellation-one"><i /><i /><i /></span>
-      <span className="mystic-constellation constellation-two"><i /><i /><i /></span>
-      <span className="mystic-sigil sigil-one">✦</span>
-      <span className="mystic-sigil sigil-two">☽</span>
-      <span className="mystic-sigil sigil-three">✧</span>
+      <svg
+        className="mystic-lace"
+        viewBox={viewBox}
+        preserveAspectRatio="xMidYMid slice"
+        focusable="false"
+      >
+        <g className="mystic-lace-threads">
+          <path d="M-80 170C145 36 314 278 560 160S930 36 1285 214" />
+          <path d="M-110 604C128 458 336 674 596 542S966 402 1290 568" />
+          <path d="M194-46C322 118 220 266 350 396S596 578 510 778" />
+        </g>
+
+        <g className="mystic-lace-constellation constellation-left">
+          <path d="M78 248L164 190L252 234L334 126" />
+          <circle cx="78" cy="248" r="3" />
+          <circle cx="164" cy="190" r="2.5" />
+          <circle cx="252" cy="234" r="3.5" />
+          <circle cx="334" cy="126" r="2.5" />
+        </g>
+
+        <g
+          className="mystic-lace-constellation constellation-right"
+          transform={rightConstellationTransform}
+        >
+          <path d="M868 496L948 428L1034 470L1132 354" />
+          <circle cx="868" cy="496" r="2.5" />
+          <circle cx="948" cy="428" r="3.5" />
+          <circle cx="1034" cy="470" r="2.5" />
+          <circle cx="1132" cy="354" r="3" />
+        </g>
+
+        <g className="mystic-lace-sigil sigil-crescent">
+          <circle cx="1080" cy="126" r="58" />
+          <path d="M1097 84C1068 96 1052 129 1067 158C1076 176 1092 186 1110 188C1078 200 1040 185 1026 151C1011 115 1029 74 1066 59C1083 52 1102 53 1118 59C1109 64 1102 73 1097 84Z" />
+          <path d="M1080 46V28M1080 224V206M990 126H972M1188 126H1170" />
+        </g>
+
+        <g className="mystic-lace-sigil sigil-rosette" transform={rosetteTransform}>
+          <circle r="46" />
+          <path d="M0-34C12-26 13-11 0 0C-13-11-12-26 0-34Z" />
+          <path d="M0-34C12-26 13-11 0 0C-13-11-12-26 0-34Z" transform="rotate(60)" />
+          <path d="M0-34C12-26 13-11 0 0C-13-11-12-26 0-34Z" transform="rotate(120)" />
+          <path d="M0-34C12-26 13-11 0 0C-13-11-12-26 0-34Z" transform="rotate(180)" />
+          <path d="M0-34C12-26 13-11 0 0C-13-11-12-26 0-34Z" transform="rotate(240)" />
+          <path d="M0-34C12-26 13-11 0 0C-13-11-12-26 0-34Z" transform="rotate(300)" />
+          <circle r="5" />
+        </g>
+      </svg>
+
+      <span className="mystic-star star-one">✦</span>
+      <span className="mystic-star star-two">✧</span>
+      <span className="mystic-star star-three">✦</span>
+      <span className="mystic-star star-four">✧</span>
     </div>
   );
 }

@@ -119,3 +119,33 @@ test("a landing mantém a composição completa e a centralização óptica das 
   assert.match(styles, /top: 7\.2%/);
   assert.match(styles, /top: 91\.15%/);
 });
+
+test("os campos místicos preservam o desenho sem reintroduzir efeitos pesados", () => {
+  const appPath = fileURLToPath(new URL("../src/App.jsx", import.meta.url));
+  const stylesPath = fileURLToPath(new URL("../src/styles.css", import.meta.url));
+  const app = readFileSync(appPath, "utf8");
+  const styles = readFileSync(stylesPath, "utf8");
+  const mysticStyles = styles.slice(
+    styles.indexOf(".mystic-field"),
+    styles.indexOf(".free-reading-badge"),
+  );
+
+  assert.match(app, /className="mystic-lace"/);
+  assert.match(app, /mystic-lace-constellation/);
+  assert.match(app, /mystic-lace-sigil/);
+  assert.match(styles, /content-visibility: auto/);
+  assert.match(styles, /\.gallery-item \.gallery-card[\s\S]*animation: gallery-arrival/);
+  assert.equal((mysticStyles.match(/infinite/g) ?? []).length, 2);
+
+  [
+    "mystic-panel-breathe",
+    "starfield-drift",
+    "mystic-field-rotate",
+    "mystic-veil-cross",
+    "mystic-veil-breathe",
+    "constellation-float",
+    "closing-symbol-breathe",
+  ].forEach((removedEffect) => {
+    assert.doesNotMatch(styles, new RegExp(removedEffect));
+  });
+});

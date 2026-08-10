@@ -1,6 +1,6 @@
-# Arcane911 — V2 Mística
+# Arcane911 — V3 Lapidada
 
-Primeira versão navegável do Projeto Arcano, criada em 10/08/2026 a partir do DNA visual do Sorriso Marcado e das 22 cartas originais dos Arcanos Maiores.
+Terceira lapidação navegável do Projeto Arcano, criada em 10/08/2026 a partir do DNA visual do Sorriso Marcado e das 22 cartas originais dos Arcanos Maiores.
 
 ## O que já funciona
 
@@ -16,7 +16,9 @@ Primeira versão navegável do Projeto Arcano, criada em 10/08/2026 a partir do 
 - Galeria ampliada em composição ritual 7–8–7 no desktop, quatro por fileira no tablet com fechamento centralizado e pares completos no celular.
 - Nomes e algarismos calibrados pelo centro real das placas e medalhões das cartas.
 - Molduras de vidro renovadas nas cartas principais e na coleção completa.
-- Painéis roxos vivos, com constelações, órbitas, sigilos, feixes de luz e borda respirando.
+- Painéis noturnos lapidados, com constelações, traços e sigilos em rosé/champagne; somente estrelas pequenas respiram em baixa frequência.
+- Campo místico refeito sem rotação de áreas grandes, blur animado, feixe atravessando o painel ou sombra pulsante.
+- Seções abaixo da dobra usam renderização sob demanda e a entrada da galeria não anima mais o vidro com blur.
 - Funil gratuito → Leitura Profunda com oferta contextual após a síntese.
 - Checkout desacoplado por variável de ambiente e eventos comerciais prontos para GTM/dataLayer.
 - Layout responsivo, navegação por teclado e redução de movimento.
