@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { intents, tarotCards } from "../src/data/tarot.js";
@@ -104,4 +104,18 @@ test("a oferta comercial fica configurável sem acoplar um provedor de pagamento
   assert.equal(url.searchParams.get("product_id"), "leitura-profunda");
   assert.equal(url.searchParams.get("intent"), "amor");
   assert.equal(url.searchParams.get("cards"), "o-louco,a-estrela,o-mundo");
+});
+
+test("a landing mantém a composição completa e a centralização óptica das cartas", () => {
+  const appPath = fileURLToPath(new URL("../src/App.jsx", import.meta.url));
+  const stylesPath = fileURLToPath(new URL("../src/styles.css", import.meta.url));
+  const app = readFileSync(appPath, "utf8");
+  const styles = readFileSync(stylesPath, "utf8");
+
+  assert.match(app, /tarotCards\.map\(\(card, index\)/);
+  assert.match(app, /composição ritual 7 · 8 · 7/);
+  assert.match(styles, /grid-template-columns: repeat\(16, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.deck-gallery > \.gallery-item:nth-child\(16\)/);
+  assert.match(styles, /top: 7\.2%/);
+  assert.match(styles, /top: 91\.15%/);
 });

@@ -58,8 +58,6 @@ const evolution = [
   },
 ];
 
-const deckRows = [tarotCards.slice(0, 11), tarotCards.slice(11, 22)];
-
 const premiumLayers = [
   {
     eyebrow: "Carta oculta",
@@ -146,6 +144,21 @@ function CardBack({ selectedOrder, isDisabled, onClick, style }) {
       </span>
       {selectedOrder ? <span className="selection-order">{selectedOrder}</span> : null}
     </button>
+  );
+}
+
+function MysticField({ compact = false }) {
+  return (
+    <div className={`mystic-field ${compact ? "is-compact" : ""}`} aria-hidden="true">
+      <span className="mystic-veil" />
+      <span className="mystic-ring mystic-ring-one"><i>✦</i></span>
+      <span className="mystic-ring mystic-ring-two"><i>✧</i></span>
+      <span className="mystic-constellation constellation-one"><i /><i /><i /></span>
+      <span className="mystic-constellation constellation-two"><i /><i /><i /></span>
+      <span className="mystic-sigil sigil-one">✦</span>
+      <span className="mystic-sigil sigil-two">☽</span>
+      <span className="mystic-sigil sigil-three">✧</span>
+    </div>
   );
 }
 
@@ -678,15 +691,22 @@ function App() {
             <div className="hero-orbit orbit-outer" aria-hidden="true" />
             <div className="hero-orbit orbit-inner" aria-hidden="true" />
             <div className="hero-glow" aria-hidden="true">✦</div>
-            <TarotCardVisual card={tarotCards[18]} className="hero-card hero-card-left" eager />
-            <TarotCardVisual card={tarotCards[17]} className="hero-card hero-card-center" eager />
-            <TarotCardVisual card={tarotCards[1]} className="hero-card hero-card-right" eager />
+            <div className="hero-card hero-card-left">
+              <TarotCardVisual card={tarotCards[18]} eager />
+            </div>
+            <div className="hero-card hero-card-center">
+              <TarotCardVisual card={tarotCards[17]} eager />
+            </div>
+            <div className="hero-card hero-card-right">
+              <TarotCardVisual card={tarotCards[1]} eager />
+            </div>
             <span className="hero-caption"><Sparkles size={14} /> Sistema simbólico Rider–Waite–Smith</span>
           </div>
         </section>
 
         <section className="ritual-section" id="ritual" ref={ritualRef}>
           <div className="ritual-shell">
+            <MysticField />
             <div className="free-reading-badge">
               <span aria-hidden="true">✦</span>
               <div>
@@ -763,30 +783,27 @@ function App() {
           </div>
 
           <div className="deck-gallery">
-            {deckRows.map((row, rowIndex) => (
-              <div className="deck-row" key={`fileira-${rowIndex + 1}`}>
-                {row.map((card) => (
-                  <div className="gallery-item" key={card.slug}>
-                    <TarotCardVisual
-                      card={card}
-                      className="gallery-card"
-                      onClick={() => setActiveCard(card)}
-                    />
-                  </div>
-                ))}
+            {tarotCards.map((card, index) => (
+              <div className="gallery-item" key={card.slug} style={{ "--gallery-index": index }}>
+                <TarotCardVisual
+                  card={card}
+                  className="gallery-card"
+                  onClick={() => setActiveCard(card)}
+                />
               </div>
             ))}
           </div>
           <div className="deck-order" aria-label="Ordem do baralho">
             <span>0 · O Louco</span>
             <i />
-            <strong>22 Arcanos · duas fileiras de 11</strong>
+            <strong>22 Arcanos · composição ritual 7 · 8 · 7</strong>
             <i />
             <span>XXI · O Mundo</span>
           </div>
         </section>
 
         <section className="closing-section">
+          <MysticField compact />
           <div className="closing-symbol" aria-hidden="true"><span>✦</span></div>
           <span className="section-kicker">Sua primeira leitura começa aqui</span>
           <h2>As cartas não decidem.<br />Elas acendem.</h2>

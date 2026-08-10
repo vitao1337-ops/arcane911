@@ -1,4 +1,4 @@
-# Arcane911 — V1.1 Polida
+# Arcane911 — V2 Mística
 
 Primeira versão navegável do Projeto Arcano, criada em 10/08/2026 a partir do DNA visual do Sorriso Marcado e das 22 cartas originais dos Arcanos Maiores.
 
@@ -13,7 +13,10 @@ Primeira versão navegável do Projeto Arcano, criada em 10/08/2026 a partir do 
 - Diário local com até 24 leituras neste dispositivo.
 - Compartilhamento nativo ou cópia da leitura.
 - Galeria completa dos 22 Arcanos, com modal de significado e simbologia.
-- Galeria fechada em duas fileiras de 11, sem linhas incompletas.
+- Galeria ampliada em composição ritual 7–8–7 no desktop, quatro por fileira no tablet com fechamento centralizado e pares completos no celular.
+- Nomes e algarismos calibrados pelo centro real das placas e medalhões das cartas.
+- Molduras de vidro renovadas nas cartas principais e na coleção completa.
+- Painéis roxos vivos, com constelações, órbitas, sigilos, feixes de luz e borda respirando.
 - Funil gratuito → Leitura Profunda com oferta contextual após a síntese.
 - Checkout desacoplado por variável de ambiente e eventos comerciais prontos para GTM/dataLayer.
 - Layout responsivo, navegação por teclado e redução de movimento.
@@ -48,7 +51,7 @@ npm run preview
 
 ## Direção de produto
 
-O tarot começou como jogo de triunfos na Europa do século XV, passou a ser usado para cartomancia no fim do século XVIII e ganhou uma linguagem fortemente intuitiva com as cenas ilustradas por Pamela Colman Smith no baralho Rider–Waite–Smith, publicado em 1909. A V1 traduz essa evolução em quatro decisões:
+O tarot começou como jogo de triunfos na Europa do século XV, passou a ser usado para cartomancia no fim do século XVIII e ganhou uma linguagem fortemente intuitiva com as cenas ilustradas por Pamela Colman Smith no baralho Rider–Waite–Smith, publicado em 1909. O Arcane911 traduz essa evolução em quatro decisões:
 
 1. A imagem vem antes da explicação.
 2. O usuário escolhe as cartas; a interface não finge neutralidade algorítmica.
