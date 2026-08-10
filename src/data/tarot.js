@@ -47,6 +47,58 @@ export const positions = [
   },
 ];
 
+export const completePositions = [
+  {
+    id: "past",
+    number: "01",
+    eyebrow: "A origem",
+    title: "O que ainda ecoa do passado",
+    prompt: "O que desta história ainda está escolhendo por você?",
+  },
+  {
+    id: "present",
+    number: "02",
+    eyebrow: "O presente",
+    title: "Onde a situação realmente está",
+    prompt: "O que exige uma resposta honesta agora?",
+  },
+  {
+    id: "hidden",
+    number: "03",
+    eyebrow: "A influência oculta",
+    title: "O padrão que age por baixo",
+    prompt: "O que você percebe, mas ainda não nomeou?",
+  },
+  {
+    id: "obstacle",
+    number: "04",
+    eyebrow: "O nó central",
+    title: "O que interrompe o movimento",
+    prompt: "Que padrão precisa deixar de ser alimentado?",
+  },
+  {
+    id: "external",
+    number: "05",
+    eyebrow: "O campo ao redor",
+    title: "Pessoas, contexto e forças externas",
+    prompt: "O que pertence ao ambiente — e não apenas a você?",
+  },
+  {
+    id: "action",
+    number: "06",
+    eyebrow: "A melhor ação",
+    title: "O gesto que muda a leitura",
+    prompt: "Qual gesto pode ser feito sem esperar outra certeza?",
+  },
+  {
+    id: "outcome",
+    number: "07",
+    eyebrow: "A direção provável",
+    title: "Para onde o caminho tende",
+    prompt: "Se nada essencial mudar, essa direção serve ao que você quer viver?",
+  },
+];
+
 export const tarotCards = [
   {
     index: 0,

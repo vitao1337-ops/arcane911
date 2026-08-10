@@ -1951,6 +1951,224 @@ footer {
   color: #fffaf2;
 }
 
+.complete-map {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 48px;
+  border: 1px solid rgba(229, 201, 146, 0.2);
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at 50% 86%, rgba(124, 58, 237, 0.2), transparent 34rem),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.035));
+  box-shadow: 0 30px 68px rgba(0, 0, 0, 0.19), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  padding: clamp(24px, 4vw, 42px);
+}
+
+.complete-map::before {
+  position: absolute;
+  top: 34%;
+  right: 8%;
+  left: 8%;
+  height: 58%;
+  border: 1px solid rgba(229, 201, 146, 0.08);
+  border-bottom-color: transparent;
+  border-radius: 50% 50% 0 0;
+  content: "";
+  pointer-events: none;
+}
+
+.complete-map-heading,
+.complete-group-heading {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);
+  align-items: end;
+  gap: clamp(24px, 5vw, 64px);
+}
+
+.complete-map-heading h3,
+.complete-group-heading h3 {
+  margin: 8px 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(2.1rem, 3.4vw, 3.35rem);
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+
+.complete-map-heading > p,
+.complete-group-heading > p {
+  margin: 0;
+  color: rgba(255, 250, 242, 0.56);
+  font-size: 0.69rem;
+  line-height: 1.7;
+}
+
+.complete-horseshoe {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  margin-top: 28px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: start;
+  gap: clamp(7px, 1.45vw, 18px);
+  padding: 8px 4px 96px;
+}
+
+.complete-horseshoe-item {
+  --horseshoe-y: 0px;
+  position: relative;
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 9px;
+  color: #fffaf2;
+  text-align: center;
+  transform: translateY(var(--horseshoe-y));
+  transition: filter 180ms ease;
+}
+
+.complete-horseshoe-item:nth-child(2),
+.complete-horseshoe-item:nth-child(6) {
+  --horseshoe-y: 28px;
+}
+
+.complete-horseshoe-item:nth-child(3),
+.complete-horseshoe-item:nth-child(5) {
+  --horseshoe-y: 55px;
+}
+
+.complete-horseshoe-item:nth-child(4) {
+  --horseshoe-y: 78px;
+}
+
+.complete-horseshoe-item:hover,
+.complete-horseshoe-item:focus-visible {
+  filter: brightness(1.09);
+}
+
+.complete-horseshoe-card {
+  width: min(100%, 126px);
+}
+
+.complete-horseshoe-card .tarot-roman,
+.complete-horseshoe-card .tarot-name {
+  font-size: clamp(0.34rem, 0.52vw, 0.5rem);
+}
+
+.complete-horseshoe-number {
+  position: absolute;
+  z-index: 2;
+  top: -9px;
+  left: 50%;
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  border: 1px solid rgba(229, 201, 146, 0.5);
+  border-radius: 50%;
+  background: #251631;
+  box-shadow: 0 7px 16px rgba(0, 0, 0, 0.28);
+  color: #e6c98f;
+  font-family: var(--font-ui);
+  font-size: 0.52rem;
+  transform: translateX(-50%);
+}
+
+.complete-horseshoe-label {
+  display: grid;
+  gap: 3px;
+}
+
+.complete-horseshoe-label strong {
+  color: #ead1ff;
+  font-family: var(--font-ui);
+  font-size: 0.56rem;
+  font-weight: 500;
+  letter-spacing: 0.055em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.complete-horseshoe-label small {
+  color: rgba(255, 250, 242, 0.48);
+  font-size: 0.5rem;
+  line-height: 1.25;
+}
+
+.complete-reading-body {
+  display: grid;
+  gap: clamp(48px, 6vw, 72px);
+}
+
+.complete-reading-group {
+  scroll-margin-top: 100px;
+}
+
+.complete-group-heading {
+  margin-bottom: 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 20px;
+}
+
+.complete-group-heading .section-kicker {
+  color: #c7a0ff;
+}
+
+.complete-reading-grid {
+  display: grid;
+  gap: clamp(14px, 2vw, 24px);
+}
+
+.complete-reading-grid.has-2-cards {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.complete-reading-grid.has-3-cards {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.complete-spread-card {
+  scroll-margin-top: 100px;
+}
+
+.complete-spread-card > .tarot-card {
+  max-width: 250px;
+}
+
+.complete-invitation small {
+  display: grid;
+  margin-top: 11px;
+  gap: 5px;
+  border-top: 1px solid rgba(200, 167, 106, 0.15);
+  padding-top: 10px;
+  color: rgba(255, 250, 242, 0.55);
+  font-size: 0.6rem;
+  line-height: 1.65;
+}
+
+.complete-invitation small strong {
+  color: #dfc187;
+  font-family: var(--font-ui);
+  font-size: 0.52rem;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.complete-synthesis-card {
+  margin-top: clamp(44px, 6vw, 72px);
+}
+
+.complete-synthesis-card p + p {
+  margin-top: 9px;
+}
+
+.complete-reading-actions {
+  margin-top: 30px;
+}
+
 .section-heading {
   margin-bottom: 38px;
 }
@@ -2972,6 +3190,17 @@ footer > span {
     margin-bottom: 0;
   }
 
+  .complete-map-heading,
+  .complete-group-heading {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .complete-reading-grid.has-2-cards,
+  .complete-reading-grid.has-3-cards {
+    grid-template-columns: 1fr;
+  }
+
   .conversion-gate {
     grid-template-columns: 1fr;
   }
@@ -3164,6 +3393,73 @@ footer > span {
   .spread-card > .tarot-card {
     max-width: 260px;
     margin-bottom: 22px;
+  }
+
+  .complete-map {
+    margin-bottom: 40px;
+    border-radius: 23px;
+    padding: 21px 12px 18px;
+  }
+
+  .complete-map-heading {
+    padding-inline: 7px;
+  }
+
+  .complete-map-heading h3,
+  .complete-group-heading h3 {
+    font-size: clamp(2rem, 10vw, 2.85rem);
+  }
+
+  .complete-horseshoe {
+    margin-top: 22px;
+    gap: 4px;
+    padding: 6px 0 54px;
+  }
+
+  .complete-horseshoe-item:nth-child(2),
+  .complete-horseshoe-item:nth-child(6) {
+    --horseshoe-y: 14px;
+  }
+
+  .complete-horseshoe-item:nth-child(3),
+  .complete-horseshoe-item:nth-child(5) {
+    --horseshoe-y: 28px;
+  }
+
+  .complete-horseshoe-item:nth-child(4) {
+    --horseshoe-y: 42px;
+  }
+
+  .complete-horseshoe-number {
+    top: -7px;
+    width: 20px;
+    height: 20px;
+    font-size: 0.44rem;
+  }
+
+  .complete-horseshoe-label {
+    gap: 0;
+  }
+
+  .complete-horseshoe-label strong {
+    font-size: clamp(0.38rem, 1.65vw, 0.52rem);
+    letter-spacing: 0.02em;
+  }
+
+  .complete-horseshoe-label small {
+    display: none;
+  }
+
+  .complete-reading-body {
+    gap: 44px;
+  }
+
+  .complete-group-heading {
+    margin-bottom: 16px;
+  }
+
+  .complete-spread-card > .tarot-card {
+    max-width: 260px;
   }
 
   .synthesis-card {

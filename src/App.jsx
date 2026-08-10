@@ -19,7 +19,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { intents, positions, tarotBySlug, tarotCards } from "./data/tarot";
+import { completePositions, intents, positions, tarotBySlug, tarotCards } from "./data/tarot";
 import { salesConfig } from "./config/sales";
 import {
   buildCheckoutUrl,
@@ -27,8 +27,12 @@ import {
   trackCommercialEvent,
 } from "./lib/checkout";
 import {
+  buildCompleteSpread,
+  buildCompleteSynthesis,
   buildSynthesis,
   cardReading,
+  completeCardReading,
+  formatCompleteReading,
   formatReading,
   hashString,
 } from "./lib/reading";
@@ -60,23 +64,55 @@ const evolution = [
 
 const premiumLayers = [
   {
-    eyebrow: "Carta oculta",
+    eyebrow: "Influência oculta",
     title: "O padrão que opera por baixo da pergunta",
   },
   {
-    eyebrow: "Tensão central",
+    eyebrow: "Nó central",
     title: "O ponto que pode repetir ou travar o movimento",
   },
   {
-    eyebrow: "Integração",
-    title: "Uma direção prática para os próximos sete dias",
+    eyebrow: "Direção provável",
+    title: "A tendência criada pelo caminho que está aberto",
+  },
+];
+
+const completeReadingGroups = [
+  {
+    id: "terreno",
+    kicker: "Camada I · O terreno",
+    title: "De onde isso vem e onde está agora.",
+    text: "As duas primeiras posições conectam a origem da pergunta ao presente sem apagar o que ainda exerce influência.",
+    indexes: [0, 1],
+  },
+  {
+    id: "subsolo",
+    kicker: "Camada II · O que opera",
+    title: "O oculto, o nó e o mundo ao redor.",
+    text: "O centro da Ferradura separa padrão interno, obstáculo principal e forças externas para a leitura não colocar tudo na mesma conta.",
+    indexes: [2, 3, 4],
+  },
+  {
+    id: "travessia",
+    kicker: "Camada III · A travessia",
+    title: "O gesto possível e a direção que ele cria.",
+    text: "As duas últimas posições transformam compreensão em escolha: primeiro a melhor ação, depois a tendência do caminho atual.",
+    indexes: [5, 6],
   },
 ];
 
 function getStoredJournal() {
   try {
     const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "[]");
-    return Array.isArray(stored) ? stored : [];
+    return Array.isArray(stored)
+      ? stored.filter(
+        (record) => record
+          && typeof record.id === "string"
+          && typeof record.createdAt === "string"
+          && typeof record.question === "string"
+          && Array.isArray(record.cards),
+      )
+      : [];
   } catch {
     return [];
   }
@@ -218,6 +254,7 @@ function App() {
   const [drawPool, setDrawPool] = useState([]);
   const [selectedCards, setSelectedCards] = useState([]);
   const [spread, setSpread] = useState([]);
+  const [completeSpread, setCompleteSpread] = useState([]);
   const [isShuffling, setIsShuffling] = useState(false);
   const [createdAt, setCreatedAt] = useState(null);
   const [journal, setJournal] = useState(getStoredJournal);
@@ -235,7 +272,23 @@ function App() {
   );
 
   const resolvedQuestion = question.trim() || selectedIntent.prompt;
-  const readingSaved = createdAt ? journal.some((record) => record.id === createdAt) : false;
+  const activeReadingCards = phase === "complete" && completeSpread.length === 7
+    ? completeSpread
+    : spread;
+  const readingSaved = createdAt
+    ? journal.some((record) => {
+      if (record.id !== createdAt || !Array.isArray(record.cards)) return false;
+
+      if (activeReadingCards.length === 3 && record.cards.length === 7) {
+        return record.cards[0] === activeReadingCards[0]?.slug
+          && record.cards[1] === activeReadingCards[1]?.slug
+          && record.cards[5] === activeReadingCards[2]?.slug;
+      }
+
+      return record.cards.length === activeReadingCards.length
+        && record.cards.every((slug, index) => slug === activeReadingCards[index]?.slug);
+    })
+    : false;
   const checkoutConfigured = isCheckoutConfigured(salesConfig.checkoutUrl);
 
   useEffect(() => {
@@ -278,6 +331,7 @@ function App() {
     setDrawPool([]);
     setSelectedCards([]);
     setSpread([]);
+    setCompleteSpread([]);
     setStatus("");
     setPhase("deck");
     trackCommercialEvent("free_reading_started", {
@@ -336,31 +390,38 @@ function App() {
     setDrawPool([]);
     setSelectedCards([]);
     setSpread([]);
+    setCompleteSpread([]);
     setCreatedAt(null);
     setStatus("");
     moveToRitual();
   }
 
   function saveReading() {
-    if (!createdAt || spread.length !== 3 || readingSaved) return;
+    if (!createdAt || ![3, 7].includes(activeReadingCards.length) || readingSaved) return;
 
     const record = {
       id: createdAt,
       createdAt,
       intentId,
       question: resolvedQuestion,
-      cards: spread.map((card) => card.slug),
+      kind: activeReadingCards.length === 7 ? "horseshoe" : "opening",
+      cards: activeReadingCards.map((card) => card.slug),
     };
-    const nextJournal = [record, ...journal].slice(0, 24);
+    const nextJournal = [record, ...journal.filter((item) => item.id !== createdAt)].slice(0, 24);
     setJournal(nextJournal);
     saveStoredJournal(nextJournal);
-    setStatus("Leitura guardada neste dispositivo.");
+    setStatus(
+      activeReadingCards.length === 7
+        ? "Ferradura completa guardada neste dispositivo."
+        : "Leitura guardada neste dispositivo.",
+    );
   }
 
   async function shareReading() {
-    if (!createdAt || spread.length !== 3) return;
-    const text = formatReading({
-      cards: spread,
+    if (!createdAt || ![3, 7].includes(activeReadingCards.length)) return;
+    const formatter = activeReadingCards.length === 7 ? formatCompleteReading : formatReading;
+    const text = formatter({
+      cards: activeReadingCards,
       intentId,
       intentLabel: selectedIntent.label,
       question: resolvedQuestion,
@@ -380,6 +441,32 @@ function App() {
         setStatus("Não foi possível compartilhar agora. Sua leitura continua aqui.");
       }
     }
+  }
+
+  function openCompleteReading() {
+    if (!createdAt || spread.length !== 3) return;
+
+    const nextSpread = completeSpread.length === 7
+      ? completeSpread
+      : buildCompleteSpread(
+        `${createdAt}-${intentId}-${resolvedQuestion}-${spread.map((card) => card.slug).join("-")}`,
+        spread,
+      );
+
+    if (nextSpread.length !== 7) {
+      setStatus("Não foi possível completar a Ferradura agora. Suas três cartas continuam aqui.");
+      return;
+    }
+
+    setCompleteSpread(nextSpread);
+    setPhase("complete");
+    setStatus("A Ferradura de sete cartas está aberta.");
+    trackCommercialEvent("complete_reading_opened", {
+      intent: intentId,
+      reading_id: createdAt,
+      cards: nextSpread.map((card) => card.slug).join(","),
+    });
+    moveToRitual();
   }
 
   function openCheckout() {
@@ -610,7 +697,7 @@ function App() {
             <div className="premium-preview-orbit"><Gem size={22} /></div>
             {premiumLayers.map((layer, index) => (
               <article key={layer.eyebrow} style={{ "--premium-index": index }}>
-                <span><LockKeyhole size={14} /></span>
+                <span><Sparkles size={14} /></span>
                 <div>
                   <small>{layer.eyebrow}</small>
                   <strong>{layer.title}</strong>
@@ -620,10 +707,10 @@ function App() {
           </div>
 
           <div className="conversion-copy">
-            <span className="section-kicker">Sua leitura gratuita termina aqui</span>
+            <span className="section-kicker">Tiragem completa liberada</span>
             <h3 id="deep-reading-title">O sinal apareceu.<br />Agora falta entender o movimento inteiro.</h3>
             <p>
-              A leitura profunda continua exatamente desta pergunta e destas três cartas. Ela revela o padrão oculto, a tensão que pode repetir a história e uma direção prática para os próximos sete dias.
+              A Ferradura continua exatamente desta pergunta e destas três cartas. Quatro novos Arcanos revelam o padrão oculto, o nó central, o campo ao redor e a direção provável do caminho atual.
             </p>
 
             <ul>
@@ -634,18 +721,18 @@ function App() {
 
             <div className="offer-line">
               <div>
-                <small>{salesConfig.offer.paymentLabel}</small>
-                <strong>{salesConfig.offer.price}</strong>
+                <small>experiência liberada</small>
+                <strong>7 cartas</strong>
               </div>
-              <button className="button button-primary button-large" type="button" onClick={openCheckout}>
-                Aprofundar esta leitura
+              <button className="button button-primary button-large" type="button" onClick={openCompleteReading}>
+                Abrir tiragem completa
                 <ArrowRight size={18} />
               </button>
             </div>
 
             <div className="offer-trust">
-              <span><ShieldCheck size={14} /> Sem assinatura</span>
-              <span><CreditCard size={14} /> Pagamento único</span>
+              <span><ShieldCheck size={14} /> Sem cadastro</span>
+              <span><CreditCard size={14} /> Sem cartão</span>
               <span><Bookmark size={14} /> Mantém suas três cartas</span>
             </div>
           </div>
@@ -664,6 +751,163 @@ function App() {
           <button className="button button-glass" type="button" onClick={shareReading}>
             <Share2 size={17} />
             Compartilhar
+          </button>
+          <button className="text-button" type="button" onClick={restartReading}>
+            <RotateCcw size={15} />
+            Nova pergunta
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderCompleteReadingPhase() {
+    const synthesisParagraphs = buildCompleteSynthesis(completeSpread, intentId).split("\n\n");
+
+    return (
+      <div className="reading-result complete-reading-result">
+        <div className="reading-header">
+          <div>
+            <span className="section-kicker">04 · Ferradura completa</span>
+            <h2>Sete posições. O movimento inteiro.</h2>
+          </div>
+          <div className="reading-question">
+            <span>{selectedIntent.label}</span>
+            <q>{resolvedQuestion}</q>
+          </div>
+        </div>
+
+        <section className="complete-map" aria-labelledby="complete-map-title">
+          <div className="complete-map-heading">
+            <div>
+              <span className="section-kicker">Mapa da tiragem</span>
+              <h3 id="complete-map-title">A Ferradura de 7 cartas</h3>
+            </div>
+            <p>
+              A leitura percorre origem, presente, forças invisíveis e escolha até chegar à direção provável. Toque em uma posição para ir ao detalhe.
+            </p>
+          </div>
+
+          <div className="complete-horseshoe" role="list" aria-label="As sete posições da Ferradura">
+            {completeSpread.map((card, index) => {
+              const position = completePositions[index];
+              return (
+                <a
+                  className="complete-horseshoe-item"
+                  href={`#complete-card-${position.id}`}
+                  key={position.id}
+                  role="listitem"
+                  style={{ "--horseshoe-index": index }}
+                >
+                  <span className="complete-horseshoe-number">{position.number}</span>
+                  <TarotCardVisual card={card} className="complete-horseshoe-card" />
+                  <span className="complete-horseshoe-label">
+                    <strong>{position.eyebrow}</strong>
+                    <small>{card.name}</small>
+                  </span>
+                </a>
+              );
+            })}
+          </div>
+        </section>
+
+        <div className="complete-reading-body">
+          {completeReadingGroups.map((group) => (
+            <section
+              className="complete-reading-group"
+              aria-labelledby={`complete-group-${group.id}`}
+              key={group.id}
+            >
+              <div className="complete-group-heading">
+                <div>
+                  <span className="section-kicker">{group.kicker}</span>
+                  <h3 id={`complete-group-${group.id}`}>{group.title}</h3>
+                </div>
+                <p>{group.text}</p>
+              </div>
+
+              <div className={`complete-reading-grid has-${group.indexes.length}-cards`}>
+                {group.indexes.map((cardIndex) => {
+                  const card = completeSpread[cardIndex];
+                  const position = completePositions[cardIndex];
+
+                  return (
+                    <article
+                      className="spread-card complete-spread-card"
+                      id={`complete-card-${position.id}`}
+                      key={position.id}
+                      style={{ "--reveal-index": cardIndex }}
+                    >
+                      <div className="spread-position">
+                        <span>{position.number}</span>
+                        <div>
+                          <strong>{position.eyebrow}</strong>
+                          <small>{position.title}</small>
+                        </div>
+                      </div>
+
+                      <TarotCardVisual card={card} />
+
+                      <div className="spread-copy">
+                        <div className="keyword-row">
+                          {card.keywords.map((keyword) => (
+                            <span key={keyword}>{keyword}</span>
+                          ))}
+                        </div>
+                        <h3>{card.archetype}</h3>
+                        <p>{completeCardReading(card, position.id)}</p>
+                        <details>
+                          <summary>Olhar a sombra <ChevronRight size={15} /></summary>
+                          <p>{card.shadow}</p>
+                        </details>
+                        <div className="card-invitation complete-invitation">
+                          <span>Pergunta de integração</span>
+                          <p>{position.prompt}</p>
+                          <small><strong>Movimento possível</strong>{card.action}</small>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
+
+        <article className="synthesis-card complete-synthesis-card">
+          <div className="synthesis-orb" aria-hidden="true">✦</div>
+          <div>
+            <span className="section-kicker">Síntese completa Arcane911</span>
+            <h3>O desenho da Ferradura</h3>
+            {synthesisParagraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+            <small>Tarot é linguagem de reflexão, não sentença nem substituto de orientação profissional.</small>
+          </div>
+        </article>
+
+        <div className="reading-actions complete-reading-actions">
+          <button
+            className="button button-glass"
+            type="button"
+            onClick={saveReading}
+            disabled={readingSaved}
+          >
+            {readingSaved ? <Check size={17} /> : <Bookmark size={17} />}
+            {readingSaved ? "Ferradura no diário" : "Guardar Ferradura"}
+          </button>
+          <button className="button button-glass" type="button" onClick={shareReading}>
+            <Share2 size={17} />
+            Compartilhar leitura
+          </button>
+          <button
+            className="button button-glass"
+            type="button"
+            onClick={() => {
+              setPhase("reading");
+              setStatus("Suas três cartas iniciais continuam abertas.");
+              moveToRitual();
+            }}
+          >
+            Voltar às 3 cartas
           </button>
           <button className="text-button" type="button" onClick={restartReading}>
             <RotateCcw size={15} />
@@ -759,10 +1003,10 @@ function App() {
             <div className="free-reading-badge">
               <span aria-hidden="true">✦</span>
               <div>
-                <strong>Leitura de apresentação</strong>
-                <small>Três cartas + síntese, sem cadastro</small>
+                <strong>{phase === "complete" ? "Ferradura completa" : "Leitura de apresentação"}</strong>
+                <small>{phase === "complete" ? "Sete cartas + síntese completa" : "Três cartas + síntese, sem cadastro"}</small>
               </div>
-              <b>Gratuita</b>
+              <b>{phase === "complete" ? "Liberada" : "Gratuita"}</b>
             </div>
             <div className="ritual-progress" aria-label="Etapas da leitura">
               {["Intenção", "Escolha", "Leitura"].map((label, index) => {
@@ -782,6 +1026,7 @@ function App() {
             {phase === "intent" ? renderIntentPhase() : null}
             {phase === "deck" ? renderDeckPhase() : null}
             {phase === "reading" ? renderReadingPhase() : null}
+            {phase === "complete" ? renderCompleteReadingPhase() : null}
 
             <p className="live-status" aria-live="polite">{status}</p>
           </div>
@@ -899,7 +1144,7 @@ function App() {
                   return (
                     <article key={record.id}>
                       <div className="journal-meta">
-                        <span>{recordIntent.label}</span>
+                        <span>{recordIntent.label}{recordCards.length === 7 ? " · Ferradura" : ""}</span>
                         <small><Clock3 size={13} /> {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date(record.createdAt))}</small>
                       </div>
                       <q>{record.question}</q>
@@ -914,7 +1159,7 @@ function App() {
               <div className="empty-journal">
                 <History size={28} />
                 <h3>Seu diário ainda está em silêncio.</h3>
-                <p>Depois de revelar três cartas, você pode guardar a leitura neste dispositivo.</p>
+                <p>Depois de revelar três cartas ou completar a Ferradura, você pode guardar a leitura neste dispositivo.</p>
                 <button className="button button-primary" type="button" onClick={() => setJournalOpen(false)}>Fazer leitura gratuita</button>
               </div>
             )}

@@ -2,10 +2,19 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { intents, tarotCards } from "../src/data/tarot.js";
+import { completePositions, intents, tarotCards } from "../src/data/tarot.js";
 import { salesConfig } from "../src/config/sales.js";
 import { buildCheckoutUrl, isCheckoutConfigured } from "../src/lib/checkout.js";
-import { buildSynthesis, cardReading, formatReading, pickSpread } from "../src/lib/reading.js";
+import {
+  buildCompleteSpread,
+  buildCompleteSynthesis,
+  buildSynthesis,
+  cardReading,
+  completeCardReading,
+  formatCompleteReading,
+  formatReading,
+  pickSpread,
+} from "../src/lib/reading.js";
 
 const expectedOrder = [
   "O Louco",
@@ -57,6 +66,24 @@ test("um embaralhamento sempre entrega três cartas distintas e é reproduzível
   assert.deepEqual(first.map((card) => card.slug), second.map((card) => card.slug));
 });
 
+test("a Ferradura completa sete posições sem perder as três cartas escolhidas", () => {
+  const opening = [tarotCards[0], tarotCards[11], tarotCards[21]];
+  const first = buildCompleteSpread("pergunta-ferradura", opening);
+  const second = buildCompleteSpread("pergunta-ferradura", opening);
+
+  assert.equal(completePositions.length, 7);
+  assert.deepEqual(
+    completePositions.map((position) => position.id),
+    ["past", "present", "hidden", "obstacle", "external", "action", "outcome"],
+  );
+  assert.equal(first.length, 7);
+  assert.equal(new Set(first.map((card) => card.slug)).size, 7);
+  assert.equal(first[0], opening[0]);
+  assert.equal(first[1], opening[1]);
+  assert.equal(first[5], opening[2]);
+  assert.deepEqual(first.map((card) => card.slug), second.map((card) => card.slug));
+});
+
 test("as leituras têm luz, sombra, ação e síntese contextual", () => {
   const cards = [tarotCards[0], tarotCards[11], tarotCards[21]];
   const reading = cardReading(cards[0], "root");
@@ -85,6 +112,37 @@ test("o texto compartilhável contém pergunta, três posições e síntese", ()
   assert.match(text, /O espelho/);
   assert.match(text, /O movimento/);
   assert.match(text, /Síntese/);
+});
+
+test("a leitura completa cobre as sete posições, integração e síntese", () => {
+  const opening = [tarotCards[2], tarotCards[8], tarotCards[17]];
+  const cards = buildCompleteSpread("leitura-completa", opening);
+  const synthesis = buildCompleteSynthesis(cards, "caminhos");
+  const text = formatCompleteReading({
+    cards,
+    intentId: intents[0].id,
+    intentLabel: intents[0].label,
+    question: "O que precisa ganhar forma?",
+    createdAt: "2026-08-10T12:00:00.000Z",
+  });
+
+  assert.match(completeCardReading(cards[3], "obstacle"), /nó central/i);
+  assert.match(synthesis, /travessia/i);
+  completePositions.forEach((position) => {
+    assert.match(text, new RegExp(position.eyebrow, "i"));
+  });
+  assert.match(text, /Pergunta-chave/);
+  assert.match(text, /Síntese completa/);
+});
+
+test("a tiragem de sete cartas está liberada no fluxo, sem passar pelo checkout", () => {
+  const appPath = fileURLToPath(new URL("../src/App.jsx", import.meta.url));
+  const app = readFileSync(appPath, "utf8");
+
+  assert.match(app, /Tiragem completa liberada/);
+  assert.match(app, /onClick=\{openCompleteReading\}/);
+  assert.match(app, /phase === "complete" \? renderCompleteReadingPhase\(\)/);
+  assert.match(app, /A Ferradura de 7 cartas/);
 });
 
 test("a oferta comercial fica configurável sem acoplar um provedor de pagamento", () => {

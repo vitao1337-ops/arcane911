@@ -9,9 +9,9 @@ export const salesConfig = Object.freeze({
     paymentLabel: "pagamento único",
     promise: "Aprofunde a mesma pergunta sem perder as três cartas que já escolheram você.",
     features: Object.freeze([
-      "A carta oculta — o padrão que age por baixo da situação",
-      "A tensão central — o que pode travar o movimento",
-      "Conselho de integração — como atravessar os próximos 7 dias",
+      "Ferradura de 7 cartas, da origem à direção provável",
+      "Quatro novas cartas sem perder as três que você escolheu",
+      "Leitura de cada posição, com sombra e convite prático",
       "Leitura completa salva no seu diário",
     ]),
   }),
