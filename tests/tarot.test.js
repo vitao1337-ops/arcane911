@@ -137,12 +137,35 @@ test("a leitura completa cobre as sete posições, integração e síntese", () 
 
 test("a tiragem de sete cartas está liberada no fluxo, sem passar pelo checkout", () => {
   const appPath = fileURLToPath(new URL("../src/App.jsx", import.meta.url));
+  const vercelPath = fileURLToPath(new URL("../vercel.json", import.meta.url));
   const app = readFileSync(appPath, "utf8");
+  const vercel = JSON.parse(readFileSync(vercelPath, "utf8"));
 
   assert.match(app, /Tiragem completa liberada/);
   assert.match(app, /onClick=\{openCompleteReading\}/);
-  assert.match(app, /phase === "complete" \? renderCompleteReadingPhase\(\)/);
+  assert.match(app, /navigate\("\/tiragem-completa"\)/);
+  assert.match(app, /isCompleteRoute \? renderCompleteRoute\(\)/);
+  assert.match(app, /saveReadingSession/);
   assert.match(app, /A Ferradura de 7 cartas/);
+  assert.deepEqual(vercel.rewrites, [{ source: "/(.*)", destination: "/index.html" }]);
+});
+
+test("a plataforma separa landing, tarot, mapa astral e produtos específicos", () => {
+  const appPath = fileURLToPath(new URL("../src/App.jsx", import.meta.url));
+  const mainPath = fileURLToPath(new URL("../src/main.jsx", import.meta.url));
+  const productsPath = fileURLToPath(new URL("../src/data/products.js", import.meta.url));
+  const app = readFileSync(appPath, "utf8");
+  const main = readFileSync(mainPath, "utf8");
+  const products = readFileSync(productsPath, "utf8");
+
+  assert.match(main, /BrowserRouter/);
+  ["/tiragem-gratis", "/tiragem-completa", "/mapa-astral", "/leituras/"].forEach((path) => {
+    assert.match(app, new RegExp(path.replaceAll("/", "\\/")));
+  });
+  ["amor", "caminhos", "trabalho", "decisao"].forEach((slug) => {
+    assert.match(products, new RegExp(`slug: "${slug}"`));
+  });
+  assert.match(app, /lazy\(\(\) => import\("\.\/pages\/AstralMapPage"\)\)/);
 });
 
 test("a oferta comercial fica configurável sem acoplar um provedor de pagamento", () => {

@@ -1,6 +1,14 @@
-# Arcane911 — V4 · Ferradura Completa
+# Arcane911 — V5 · Plataforma Arcana
 
-Quarta versão navegável do Projeto Arcano, criada em 10/08/2026 a partir do DNA visual do Sorriso Marcado e das 22 cartas originais dos Arcanos Maiores.
+Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual do Sorriso Marcado e das 22 cartas originais dos Arcanos Maiores.
+
+## Rotas
+
+- `/`: landing original, com ritual integrado, história e os 22 Arcanos.
+- `/tiragem-gratis`: ritual focado de três cartas.
+- `/tiragem-completa`: Ferradura de sete cartas em página própria, preservando pergunta e cartas da abertura.
+- `/mapa-astral`: mapa natal completo com cálculo local.
+- `/leituras/amor`, `/leituras/caminhos`, `/leituras/trabalho` e `/leituras/decisao`: produtos específicos preparados para a próxima fase, ainda sem cobrança.
 
 ## O que já funciona
 
@@ -23,6 +31,12 @@ Quarta versão navegável do Projeto Arcano, criada em 10/08/2026 a partir do DN
 - Campo místico refeito sem rotação de áreas grandes, blur animado, feixe atravessando o painel ou sombra pulsante.
 - Seções abaixo da dobra usam renderização sob demanda e a entrada da galeria não anima mais o vidro com blur.
 - Transição contextual da abertura de três cartas para a Ferradura completa, liberada nesta versão e sem passagem pelo checkout.
+- Memória de sessão entre as páginas gratuita e completa, sem colocar a pergunta na URL.
+- Página de Mapa Astral com busca de cidade, fuso histórico, Sol, Lua, Ascendente, Meio do Céu, dez planetas, doze casas e aspectos maiores.
+- Cálculo tropical em Casas Iguais com verificação independente das longitudes planetárias pelo Astronomy Engine.
+- Resultado astrológico serializável, compartilhável e guardado somente no navegador.
+- Carregamento sob demanda: o motor astral não pesa no JavaScript inicial da landing.
+- Quatro rotas de leituras específicas com estrutura de cinco cartas e produto comercial já modelado, sem ativar preço ou checkout.
 - Checkout permanece desacoplado no código para monetização futura, com eventos comerciais prontos para GTM/dataLayer.
 - Layout responsivo, navegação por teclado e redução de movimento.
 
@@ -45,14 +59,26 @@ npm run preview
 
 ## Estrutura
 
-- `src/App.jsx`: experiência completa e estados do ritual.
+- `src/App.jsx`: navegação, landing, estados do ritual e continuidade entre páginas.
 - `src/styles.css`: direção visual, animações e responsividade.
 - `src/data/tarot.js`: conteúdo dos 22 Arcanos.
+- `src/data/products.js`: estrutura dos produtos específicos futuros.
 - `src/lib/reading.js`: embaralhamento, Ferradura determinística, leituras e textos compartilháveis.
+- `src/lib/astrology.js`: cálculo natal, dupla verificação, interpretações e busca de cidades.
+- `src/pages/AstralMapPage.jsx`: formulário, mandala e leitura do mapa.
+- `src/pages/SpecificReadingPage.jsx`: vitrine das leituras específicas.
+- `src/components/NatalWheel.jsx`: mandala SVG responsiva.
 - `src/config/sales.js`: produto, preço, benefícios e endereço de checkout.
 - `src/lib/checkout.js`: parâmetros de compra e eventos comerciais.
 - `public/cards/`: 22 imagens WebP otimizadas para o site.
-- `tests/tarot.test.js`: contratos do baralho e da leitura.
+- `tests/`: contratos do baralho, rotas, Ferradura e cálculo astrológico.
+- `vercel.json`: fallback de SPA para abrir todas as rotas diretamente na Vercel.
+
+## Método e privacidade do mapa astral
+
+O cálculo usa `circular-natal-horoscope-js` para casas, ângulos e aspectos, e confere as longitudes dos dez planetas com `astronomy-engine`. O local é convertido em coordenadas e fuso pela busca do Open-Meteo; se a rede falhar, as principais capitais brasileiras continuam disponíveis localmente.
+
+Somente o texto digitado na busca de cidade é enviado ao serviço de geocodificação. Nome, data, horário, mapa e síntese permanecem no navegador. Astrologia é apresentada como linguagem simbólica de autoconhecimento, não como determinação ou orientação profissional.
 
 ## Direção de produto
 

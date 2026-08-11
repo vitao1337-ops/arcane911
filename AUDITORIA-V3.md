@@ -1,4 +1,18 @@
-# Auditoria visual e de performance — Arcane911 V3
+# Auditoria visual e de performance — histórico V3 e release V5
+
+## Validação da plataforma V5
+
+- Landing, tarot gratuito, Ferradura completa, mapa astral e leitura específica abertos em Chromium, em 1440 × 980 e 390 × 844 px.
+- Fluxo completo automatizado: intenção → embaralhamento → três escolhas → leitura → Ferradura em outra página.
+- Continuidade confirmada: as três cartas originais ocupam as posições definidas e a nova página abre no topo.
+- Mapa de referência calculado no navegador com Sol em Capricórnio, Lua em Peixes e Ascendente em Peixes; 10 planetas, 12 casas e verificação independente com desvio máximo abaixo de 0,05°.
+- Zero overflow horizontal, zero imagens quebradas, zero erros de execução e zero erros no console nas nove cenas auditadas.
+- Todas as oito rotas públicas responderam HTTP 200 no build de produção.
+- 16 testes automatizados aprovados e `npm audit --omit=dev` com zero vulnerabilidades.
+- JavaScript inicial isolado em 256,26 kB (82,27 kB gzip). O motor astral de 876,34 kB (257 kB gzip) é carregado somente em `/mapa-astral`.
+- Fontes Cormorant Garamond, Oswald e Poppins servidas localmente em WOFF2, sem dependência do Google Fonts.
+
+## Histórico da lapidação V3
 
 ## Baseline observado no deploy
 

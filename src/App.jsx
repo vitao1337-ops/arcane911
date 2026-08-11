@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -20,7 +21,9 @@ import {
   X,
 } from "lucide-react";
 import { completePositions, intents, positions, tarotBySlug, tarotCards } from "./data/tarot";
+import { getReadingForIntent, specificReadings } from "./data/products";
 import { salesConfig } from "./config/sales";
+import NatalWheel from "./components/NatalWheel";
 import {
   buildCheckoutUrl,
   isCheckoutConfigured,
@@ -37,7 +40,37 @@ import {
   hashString,
 } from "./lib/reading";
 
+const AstralMapPage = lazy(() => import("./pages/AstralMapPage"));
+const SpecificReadingPage = lazy(() => import("./pages/SpecificReadingPage"));
+
 const STORAGE_KEY = "arcane911.readings.v1";
+const READING_SESSION_KEY = "arcane911.active-reading.v1";
+
+function getStoredReadingSession() {
+  try {
+    const stored = JSON.parse(window.sessionStorage.getItem(READING_SESSION_KEY) ?? "null");
+    if (!stored || !Array.isArray(stored.openingCards)) return null;
+    return stored;
+  } catch {
+    return null;
+  }
+}
+
+function saveReadingSession(session) {
+  try {
+    window.sessionStorage.setItem(READING_SESSION_KEY, JSON.stringify(session));
+  } catch {
+    // A leitura segue aberta mesmo em navegadores que bloqueiam armazenamento de sessão.
+  }
+}
+
+function clearReadingSession() {
+  try {
+    window.sessionStorage.removeItem(READING_SESSION_KEY);
+  } catch {
+    // Sem impacto no ritual atual.
+  }
+}
 
 const evolution = [
   {
@@ -248,15 +281,31 @@ function MysticField({ compact = false }) {
 }
 
 function App() {
-  const [phase, setPhase] = useState("intent");
-  const [intentId, setIntentId] = useState("caminhos");
-  const [question, setQuestion] = useState("");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const route = location.pathname.replace(/\/+$/, "") || "/";
+  const initialSession = useMemo(getStoredReadingSession, []);
+  const initialOpening = useMemo(
+    () => (initialSession?.openingCards ?? []).map((slug) => tarotBySlug[slug]).filter(Boolean),
+    [initialSession],
+  );
+  const initialComplete = useMemo(
+    () => (initialSession?.completeCards ?? []).map((slug) => tarotBySlug[slug]).filter(Boolean),
+    [initialSession],
+  );
+  const [phase, setPhase] = useState(() => {
+    if (route === "/tiragem-completa" && initialComplete.length === 7) return "complete";
+    if (["/", "/tiragem-gratis"].includes(route) && initialOpening.length === 3) return "reading";
+    return "intent";
+  });
+  const [intentId, setIntentId] = useState(initialSession?.intentId ?? "caminhos");
+  const [question, setQuestion] = useState(initialSession?.question ?? "");
   const [drawPool, setDrawPool] = useState([]);
   const [selectedCards, setSelectedCards] = useState([]);
-  const [spread, setSpread] = useState([]);
-  const [completeSpread, setCompleteSpread] = useState([]);
+  const [spread, setSpread] = useState(initialOpening);
+  const [completeSpread, setCompleteSpread] = useState(initialComplete);
   const [isShuffling, setIsShuffling] = useState(false);
-  const [createdAt, setCreatedAt] = useState(null);
+  const [createdAt, setCreatedAt] = useState(initialSession?.createdAt ?? null);
   const [journal, setJournal] = useState(getStoredJournal);
   const [journalOpen, setJournalOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -265,6 +314,12 @@ function App() {
   const [status, setStatus] = useState("");
   const timerRef = useRef(null);
   const ritualRef = useRef(null);
+  const isLanding = route === "/";
+  const isFreeRoute = route === "/tiragem-gratis";
+  const isCompleteRoute = route === "/tiragem-completa";
+  const isAstroRoute = route === "/mapa-astral";
+  const isSpecificRoute = route.startsWith("/leituras/");
+  const featuredSpecificReading = getReadingForIntent(intentId);
 
   const selectedIntent = useMemo(
     () => intents.find((intent) => intent.id === intentId) ?? intents[0],
@@ -272,7 +327,7 @@ function App() {
   );
 
   const resolvedQuestion = question.trim() || selectedIntent.prompt;
-  const activeReadingCards = phase === "complete" && completeSpread.length === 7
+  const activeReadingCards = isCompleteRoute && completeSpread.length === 7
     ? completeSpread
     : spread;
   const readingSaved = createdAt
@@ -290,6 +345,42 @@ function App() {
     })
     : false;
   const checkoutConfigured = isCheckoutConfigured(salesConfig.checkoutUrl);
+
+  useEffect(() => {
+    const queryIntent = new URLSearchParams(location.search).get("intencao");
+    if (queryIntent && intents.some((intent) => intent.id === queryIntent)) {
+      clearReadingSession();
+      setIntentId(queryIntent);
+      setQuestion("");
+      setDrawPool([]);
+      setSelectedCards([]);
+      setSpread([]);
+      setCompleteSpread([]);
+      setCreatedAt(null);
+      setPhase("intent");
+      setStatus("Uma nova intenção está pronta para ser selada.");
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    if (isCompleteRoute && completeSpread.length === 7) setPhase("complete");
+    if (!isCompleteRoute && phase === "complete") setPhase(spread.length === 3 ? "reading" : "intent");
+    const firstFrame = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "instant" }));
+    });
+    return () => window.cancelAnimationFrame(firstFrame);
+  }, [route]);
+
+  useEffect(() => {
+    const titles = {
+      "/": "Arcane911 · Tarot como espelho",
+      "/tiragem-gratis": "Tiragem gratuita · Arcane911",
+      "/tiragem-completa": "Ferradura completa · Arcane911",
+      "/mapa-astral": "Mapa Astral · Arcane911",
+    };
+    document.title = titles[route]
+      ?? (isSpecificRoute ? "Leitura específica · Arcane911" : "Arcane911");
+  }, [isSpecificRoute, route]);
 
   useEffect(() => {
     const closeOnEscape = (event) => {
@@ -328,6 +419,7 @@ function App() {
 
   function beginRitual() {
     if (!question.trim()) setQuestion(selectedIntent.prompt);
+    clearReadingSession();
     setDrawPool([]);
     setSelectedCards([]);
     setSpread([]);
@@ -377,6 +469,13 @@ function App() {
     setCreatedAt(timestamp);
     setPhase("reading");
     setStatus("A leitura está aberta.");
+    saveReadingSession({
+      intentId,
+      question: resolvedQuestion,
+      openingCards: selectedCards.map((card) => card.slug),
+      completeCards: [],
+      createdAt: timestamp,
+    });
     trackCommercialEvent("free_reading_completed", {
       intent: intentId,
       cards: selectedCards.map((card) => card.slug).join(","),
@@ -385,6 +484,7 @@ function App() {
   }
 
   function restartReading() {
+    clearReadingSession();
     setPhase("intent");
     setQuestion("");
     setDrawPool([]);
@@ -393,7 +493,11 @@ function App() {
     setCompleteSpread([]);
     setCreatedAt(null);
     setStatus("");
-    moveToRitual();
+    if (isCompleteRoute) {
+      navigate("/tiragem-gratis");
+    } else {
+      moveToRitual();
+    }
   }
 
   function saveReading() {
@@ -461,12 +565,19 @@ function App() {
     setCompleteSpread(nextSpread);
     setPhase("complete");
     setStatus("A Ferradura de sete cartas está aberta.");
+    saveReadingSession({
+      intentId,
+      question: resolvedQuestion,
+      openingCards: spread.map((card) => card.slug),
+      completeCards: nextSpread.map((card) => card.slug),
+      createdAt,
+    });
     trackCommercialEvent("complete_reading_opened", {
       intent: intentId,
       reading_id: createdAt,
       cards: nextSpread.map((card) => card.slug).join(","),
     });
-    moveToRitual();
+    navigate("/tiragem-completa");
   }
 
   function openCheckout() {
@@ -692,6 +803,28 @@ function App() {
           </div>
         </article>
 
+        <section className="specific-teasers" aria-labelledby="specific-teasers-title">
+          <div className="specific-teasers-heading">
+            <div>
+              <span className="section-kicker">Perguntas que pedem outra lente</span>
+              <h3 id="specific-teasers-title">Aprofunde exatamente onde apertou.</h3>
+            </div>
+            <p>Estruturas específicas já preparadas para a próxima fase. Por enquanto, você pode conhecer cada caminho sem pagar.</p>
+          </div>
+
+          <div className="specific-teasers-grid">
+            {[featuredSpecificReading, ...specificReadings.filter((item) => item.slug !== featuredSpecificReading.slug)].map((reading, index) => (
+              <Link className={`specific-teaser-card ${index === 0 ? "is-featured" : ""}`} to={`/leituras/${reading.slug}`} key={reading.slug}>
+                <span className="specific-teaser-icon">{index === 0 ? <Sparkles size={17} /> : <LockKeyhole size={16} />}</span>
+                <small>{index === 0 ? "Combina com sua pergunta" : reading.eyebrow.replace("Leitura específica · ", "")}</small>
+                <strong>{reading.shortTitle}</strong>
+                <p>{reading.promise}</p>
+                <b>Conhecer estrutura <ArrowRight size={15} /></b>
+              </Link>
+            ))}
+          </div>
+        </section>
+
         <section className="conversion-gate" aria-labelledby="deep-reading-title">
           <div className="premium-preview" aria-hidden="true">
             <div className="premium-preview-orbit"><Gem size={22} /></div>
@@ -904,7 +1037,7 @@ function App() {
             onClick={() => {
               setPhase("reading");
               setStatus("Suas três cartas iniciais continuam abertas.");
-              moveToRitual();
+              navigate("/tiragem-gratis");
             }}
           >
             Voltar às 3 cartas
@@ -918,25 +1051,129 @@ function App() {
     );
   }
 
+  function renderRitualSection(standalone = false) {
+    const visiblePhase = phase === "complete" ? "reading" : phase;
+
+    return (
+      <section className={`ritual-section ${standalone ? "is-standalone" : ""}`} id="ritual" ref={ritualRef}>
+        <div className="ritual-shell">
+          <MysticField />
+          <div className="free-reading-badge">
+            <span aria-hidden="true">✦</span>
+            <div>
+              <strong>Leitura de apresentação</strong>
+              <small>Três cartas + síntese, sem cadastro</small>
+            </div>
+            <b>Gratuita</b>
+          </div>
+          <div className="ritual-progress" aria-label="Etapas da leitura">
+            {["Intenção", "Escolha", "Leitura"].map((label, index) => {
+              const currentIndex = visiblePhase === "intent" ? 0 : visiblePhase === "deck" ? 1 : 2;
+              return (
+                <div
+                  className={`${index === currentIndex ? "is-current" : ""} ${index < currentIndex ? "is-complete" : ""}`}
+                  key={label}
+                >
+                  <span>{index < currentIndex ? <Check size={13} /> : index + 1}</span>
+                  <small>{label}</small>
+                </div>
+              );
+            })}
+          </div>
+
+          {visiblePhase === "intent" ? renderIntentPhase() : null}
+          {visiblePhase === "deck" ? renderDeckPhase() : null}
+          {visiblePhase === "reading" ? renderReadingPhase() : null}
+          <p className="live-status" aria-live="polite">{status}</p>
+        </div>
+      </section>
+    );
+  }
+
+  function renderFreeRoute() {
+    return (
+      <main className="experience-route-main" id="free-reading-top">
+        <section className="experience-route-hero">
+          <div>
+            <span className="section-kicker">Ritual gratuito · 3 cartas</span>
+            <h1>Uma pergunta.<br /><em>Três pontos de verdade.</em></h1>
+          </div>
+          <p>
+            Raiz, espelho e movimento. A mesma experiência da landing, agora em um espaço próprio para você entrar sem distração e continuar depois na Ferradura completa.
+          </p>
+        </section>
+        {renderRitualSection(true)}
+      </main>
+    );
+  }
+
+  function renderCompleteRoute() {
+    if (completeSpread.length !== 7 || spread.length !== 3 || !createdAt) {
+      return (
+        <main className="complete-route-main complete-route-empty" id="complete-reading-top">
+          <section>
+            <div className="complete-empty-symbol" aria-hidden="true"><span>✦</span></div>
+            <span className="section-kicker">Ferradura de 7 cartas</span>
+            <h1>Esta leitura começa<br /><em>nas três cartas anteriores.</em></h1>
+            <p>
+              Para manter a pergunta e o fio simbólico, abra primeiro a tiragem gratuita. As quatro novas cartas entram depois, sem trocar nenhuma das escolhas iniciais.
+            </p>
+            <Link className="button button-primary button-large" to="/tiragem-gratis">
+              Começar pelas 3 cartas
+              <ArrowRight size={18} />
+            </Link>
+            <small><ShieldCheck size={15} /> Liberada para testes · sem cadastro e sem cobrança</small>
+          </section>
+        </main>
+      );
+    }
+
+    return (
+      <main className="complete-route-main" id="complete-reading-top">
+        <section className="complete-route-intro">
+          <div>
+            <span className="section-kicker">Tiragem completa · Ferradura</span>
+            <h1>O movimento inteiro,<br /><em>sem quebrar o fio.</em></h1>
+          </div>
+          <p>As três cartas escolhidas foram preservadas. Quatro novos Arcanos completam a leitura em uma página feita para atravessar cada camada com calma.</p>
+        </section>
+        <section className="ritual-section complete-route-ritual" id="ritual" ref={ritualRef}>
+          <div className="ritual-shell">
+            <MysticField />
+            <div className="free-reading-badge complete-reading-badge">
+              <span aria-hidden="true">✦</span>
+              <div><strong>Ferradura completa</strong><small>Sete cartas + síntese integrada</small></div>
+              <b>Liberada</b>
+            </div>
+            {renderCompleteReadingPhase()}
+            <p className="live-status" aria-live="polite">{status}</p>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <div className="app-shell">
-      <a className="skip-link" href="#ritual">Pular para a leitura</a>
+      <a className="skip-link" href={isAstroRoute ? "#criar-mapa" : isCompleteRoute ? "#complete-reading-top" : isSpecificRoute ? "#specific-reading-top" : "#ritual"}>
+        {isAstroRoute ? "Pular para criar o mapa" : isSpecificRoute ? "Pular para o conteúdo" : "Pular para a leitura"}
+      </a>
       <div className="ambient ambient-one" aria-hidden="true" />
       <div className="ambient ambient-two" aria-hidden="true" />
 
       <header className="topbar">
-        <a className="brand" href="#top" aria-label="Arcane911, início">
+        <Link className="brand" to="/" aria-label="Arcane911, início">
           <span className="brand-mark" aria-hidden="true"><span>✦</span></span>
           <span>
             <strong>Arcane911</strong>
             <small>Projeto Arcano · 10.08.26</small>
           </span>
-        </a>
+        </Link>
 
         <nav className="desktop-nav" aria-label="Navegação principal">
-          <a href="#ritual">Leitura gratuita</a>
-          <a href="#metodo">A origem</a>
-          <a href="#baralho">Os 22 Arcanos</a>
+          <Link to="/tiragem-gratis" aria-current={isFreeRoute ? "page" : undefined}>Tarot gratuito</Link>
+          <Link to="/mapa-astral" aria-current={isAstroRoute ? "page" : undefined}>Mapa Astral</Link>
+          <a href="/#baralho">Os 22 Arcanos</a>
         </nav>
 
         <div className="topbar-actions">
@@ -956,6 +1193,7 @@ function App() {
         </div>
       </header>
 
+      {isLanding ? (
       <main>
         <section className="hero" id="top">
           <div className="hero-copy">
@@ -997,40 +1235,7 @@ function App() {
           </div>
         </section>
 
-        <section className="ritual-section" id="ritual" ref={ritualRef}>
-          <div className="ritual-shell">
-            <MysticField />
-            <div className="free-reading-badge">
-              <span aria-hidden="true">✦</span>
-              <div>
-                <strong>{phase === "complete" ? "Ferradura completa" : "Leitura de apresentação"}</strong>
-                <small>{phase === "complete" ? "Sete cartas + síntese completa" : "Três cartas + síntese, sem cadastro"}</small>
-              </div>
-              <b>{phase === "complete" ? "Liberada" : "Gratuita"}</b>
-            </div>
-            <div className="ritual-progress" aria-label="Etapas da leitura">
-              {["Intenção", "Escolha", "Leitura"].map((label, index) => {
-                const currentIndex = phase === "intent" ? 0 : phase === "deck" ? 1 : 2;
-                return (
-                  <div
-                    className={`${index === currentIndex ? "is-current" : ""} ${index < currentIndex ? "is-complete" : ""}`}
-                    key={label}
-                  >
-                    <span>{index < currentIndex ? <Check size={13} /> : index + 1}</span>
-                    <small>{label}</small>
-                  </div>
-                );
-              })}
-            </div>
-
-            {phase === "intent" ? renderIntentPhase() : null}
-            {phase === "deck" ? renderDeckPhase() : null}
-            {phase === "reading" ? renderReadingPhase() : null}
-            {phase === "complete" ? renderCompleteReadingPhase() : null}
-
-            <p className="live-status" aria-live="polite">{status}</p>
-          </div>
-        </section>
+        {renderRitualSection()}
 
         <section className="origin-section" id="metodo">
           <div className="section-heading split-heading">
@@ -1096,6 +1301,28 @@ function App() {
           </div>
         </section>
 
+        <section className="astro-entry-section" id="mapa-astral">
+          <div className="astro-entry-copy">
+            <span className="section-kicker">Novo espaço · Mapa Astral</span>
+            <h2>As cartas capturam o agora.<br /><em>O mapa guarda o instante de chegada.</em></h2>
+            <p>
+              Descubra Sol, Lua, Ascendente, planetas, casas e aspectos em uma experiência separada — calculada com data, horário e cidade reais.
+            </p>
+            <div className="astro-entry-proof">
+              <span><Check size={15} /> Cálculo real</span>
+              <span><ShieldCheck size={15} /> Dados no navegador</span>
+              <span><Sparkles size={15} /> Leitura inicial gratuita</span>
+            </div>
+            <Link className="button button-primary button-large" to="/mapa-astral">
+              Criar meu mapa astral
+              <ArrowRight size={18} />
+            </Link>
+          </div>
+          <div className="astro-entry-wheel">
+            <NatalWheel preview />
+          </div>
+        </section>
+
         <section className="closing-section">
           <MysticField compact />
           <div className="closing-symbol" aria-hidden="true"><span>✦</span></div>
@@ -1108,23 +1335,43 @@ function App() {
           </a>
         </section>
       </main>
+      ) : null}
+
+      {isFreeRoute ? renderFreeRoute() : null}
+      {isCompleteRoute ? renderCompleteRoute() : null}
+      {isAstroRoute ? (
+        <Suspense fallback={<div className="route-loading"><span>✦</span><p>Alinhando o céu…</p></div>}>
+          <AstralMapPage />
+        </Suspense>
+      ) : null}
+      {isSpecificRoute ? (
+        <Suspense fallback={<div className="route-loading"><span>✦</span><p>Abrindo a estrutura…</p></div>}>
+          <SpecificReadingPage slug={route.split("/")[2]} />
+        </Suspense>
+      ) : null}
+      {!["/", "/tiragem-gratis", "/tiragem-completa", "/mapa-astral"].includes(route) && !isSpecificRoute ? <Navigate to="/" replace /> : null}
 
       <footer>
-        <a className="brand footer-brand" href="#top">
+        <Link className="brand footer-brand" to="/">
           <span className="brand-mark" aria-hidden="true"><span>✦</span></span>
           <span><strong>Arcane911</strong><small>Projeto Arcano · Fase 1</small></span>
-        </a>
+        </Link>
         <p>Uma experiência de reflexão simbólica criada no universo Sorriso Marcado.</p>
-        <span>© 2026 · 22 Arcanos Maiores</span>
+        <div className="footer-links">
+          <Link to="/tiragem-gratis">Tarot gratuito</Link>
+          <Link to="/mapa-astral">Mapa Astral</Link>
+          <span>© 2026 · Arcane911</span>
+        </div>
       </footer>
 
       {mobileNavOpen ? (
         <div className="overlay" role="presentation" onMouseDown={() => setMobileNavOpen(false)}>
           <nav className="mobile-nav" aria-label="Navegação móvel" onMouseDown={(event) => event.stopPropagation()}>
             <button type="button" onClick={() => setMobileNavOpen(false)} aria-label="Fechar menu"><X /></button>
-            <a href="#ritual" onClick={() => setMobileNavOpen(false)}>Leitura gratuita <ArrowRight size={18} /></a>
-            <a href="#metodo" onClick={() => setMobileNavOpen(false)}>A origem <ArrowRight size={18} /></a>
-            <a href="#baralho" onClick={() => setMobileNavOpen(false)}>Os 22 Arcanos <ArrowRight size={18} /></a>
+            <Link to="/tiragem-gratis" onClick={() => setMobileNavOpen(false)}>Tarot gratuito <ArrowRight size={18} /></Link>
+            <Link to="/mapa-astral" onClick={() => setMobileNavOpen(false)}>Mapa Astral <ArrowRight size={18} /></Link>
+            <a href="/#metodo" onClick={() => setMobileNavOpen(false)}>A origem <ArrowRight size={18} /></a>
+            <a href="/#baralho" onClick={() => setMobileNavOpen(false)}>Os 22 Arcanos <ArrowRight size={18} /></a>
           </nav>
         </div>
       ) : null}
@@ -1160,7 +1407,7 @@ function App() {
                 <History size={28} />
                 <h3>Seu diário ainda está em silêncio.</h3>
                 <p>Depois de revelar três cartas ou completar a Ferradura, você pode guardar a leitura neste dispositivo.</p>
-                <button className="button button-primary" type="button" onClick={() => setJournalOpen(false)}>Fazer leitura gratuita</button>
+                <button className="button button-primary" type="button" onClick={() => { setJournalOpen(false); navigate("/tiragem-gratis"); }}>Fazer leitura gratuita</button>
               </div>
             )}
           </aside>
@@ -1240,7 +1487,14 @@ function App() {
               <div className="modal-insight"><span>Sombra</span><p>{activeCard.shadow}</p></div>
               <div className="modal-insight"><span>Convite</span><p>{activeCard.action}</p></div>
               <small><Eye size={14} /> {activeCard.symbols}</small>
-              <button className="button button-primary" type="button" onClick={() => { setActiveCard(null); document.getElementById("ritual")?.scrollIntoView({ behavior: "smooth" }); }}>
+              <button className="button button-primary" type="button" onClick={() => {
+                setActiveCard(null);
+                if (isLanding || isFreeRoute) {
+                  document.getElementById("ritual")?.scrollIntoView({ behavior: "smooth" });
+                } else {
+                  navigate("/tiragem-gratis");
+                }
+              }}>
                 Levar ao ritual <ArrowRight size={17} />
               </button>
             </div>
