@@ -1,4 +1,4 @@
-# Arcane911 — V7 · Agente 911 Vivo
+# Arcane911 — V8 · Funil 911 Resiliente
 
 Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual do Sorriso Marcado e das 22 cartas originais dos Arcanos Maiores.
 
@@ -41,7 +41,11 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - Os quatro blocos de perguntas específicas também aparecem depois da Ferradura completa.
 - Formulário astral renovado com nome completo e superfícies clicáveis de data e horário.
 - Microtipografia ampliada somente no desktop, preservando fontes, blocos e direção visual.
-- Agente 911 ativo nas leituras de três e sete cartas, com resposta estruturada, relações entre cartas e até três aprofundamentos na Ferradura.
+- Síntese 911 automática nas leituras de três e sete cartas, pessoal e ancorada na pergunta, sem clique extra nem cadastro.
+- Fallback essencial instantâneo: a leitura nunca some nem vira um erro vermelho se a rota ou o provedor estiver indisponível.
+- Uma única síntese por tiragem; o antigo bloco genérico duplicado foi removido.
+- Consulta 911 separada da leitura, com cadastro solicitado somente ao entrar e até três aprofundamentos conectados à Ferradura.
+- Leituras específicas removidas da abertura gratuita e reposicionadas depois da consulta como alternativa direta de menor escopo.
 - Bíblia canônica própria dos 22 Arcanos e das 231 combinações possíveis entre pares; o servidor reconstrói a mesa e não confia em significados enviados pelo navegador.
 - Auditoria automática rejeita cartas inventadas, cartas omitidas, certezas deterministas e afirmações sem sustentação na tiragem.
 - Memória opcional, privada neste dispositivo, com consentimento explícito e exclusão integral em dois passos.
@@ -79,11 +83,14 @@ npm run preview
 - `src/components/NatalWheel.jsx`: mandala SVG responsiva.
 - `src/config/sales.js`: produto, preço, benefícios e endereço de checkout.
 - `src/config/agent911.js`: ativação, endpoint e oferta futura oculta do Agente 911.
-- `src/components/Agent911Panel.jsx`: experiência de leitura viva, memória e conversa.
+- `src/components/Agent911Summary.jsx`: síntese automática, cache de sessão e fallback resiliente.
+- `src/components/Agent911Consultation.jsx`: cadastro progressivo e conversa de três perguntas.
+- `src/lib/agent911Fallback.js`: leitura essencial ancorada para indisponibilidade da API.
+- `src/lib/agent911Session.js`: deduplicação de chamadas, cache e cadastro beta local.
 - `src/agent911.css`: camada visual isolada do agente, sem alterar o restante do site.
 - `src/lib/checkout.js`: parâmetros de compra e eventos comerciais.
 - `src/lib/agent911.js`: contexto, guardrails e cliente seguro da rota server-side.
-- `src/lib/agent911Memory.js`: consentimento e memória local opcional.
+- `src/lib/agent911Memory.js`: módulo de memória consentida preservado para a futura conta server-side; não é acionado na síntese automática.
 - `server/tarot-canon.js`: Bíblia 911 dos 22 Arcanos e relações de pares.
 - `server/agent911-core.js`: validação, prompt, Structured Output e auditoria.
 - `api/agent-911.js`: função serverless que conversa com a OpenAI sem expor a chave.

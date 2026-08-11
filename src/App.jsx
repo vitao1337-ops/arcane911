@@ -23,7 +23,8 @@ import {
 import { completePositions, intents, positions, tarotBySlug, tarotCards } from "./data/tarot";
 import { getReadingForIntent, specificReadings } from "./data/products";
 import { salesConfig } from "./config/sales";
-import Agent911Panel from "./components/Agent911Panel";
+import Agent911Consultation from "./components/Agent911Consultation";
+import Agent911Summary from "./components/Agent911Summary";
 import NatalWheel from "./components/NatalWheel";
 import {
   buildCheckoutUrl,
@@ -32,8 +33,6 @@ import {
 } from "./lib/checkout";
 import {
   buildCompleteSpreadFromSelections,
-  buildCompleteSynthesis,
-  buildSynthesis,
   cardReading,
   completeCardReading,
   formatCompleteReading,
@@ -319,6 +318,7 @@ function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [activeCard, setActiveCard] = useState(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [agentSummaries, setAgentSummaries] = useState({ opening: null, complete: null });
   const [status, setStatus] = useState("");
   const timerRef = useRef(null);
   const ritualRef = useRef(null);
@@ -368,6 +368,7 @@ function App() {
       setCompleteSelectedCards([]);
       setIsCompleteShuffling(false);
       setCreatedAt(null);
+      setAgentSummaries({ opening: null, complete: null });
       setPhase("intent");
       setStatus("Uma nova intenção está pronta para ser selada.");
     }
@@ -512,6 +513,7 @@ function App() {
     setCompleteSelectedCards([]);
     setIsCompleteShuffling(false);
     setCreatedAt(null);
+    setAgentSummaries({ opening: null, complete: null });
     setStatus("");
     if (isCompleteRoute) {
       navigate("/tiragem-gratis");
@@ -738,7 +740,7 @@ function App() {
               placeholder={selectedIntent.prompt}
               rows="4"
             />
-            <small>{question.length}/800 · se deixar em branco, usamos a pergunta sugerida</small>
+            <small>{question.length}/800 · ao revelar, o 911 lê esta pergunta junto das cartas, sem cadastro</small>
           </label>
 
           <button className="button button-primary button-large" type="button" onClick={beginRitual}>
@@ -877,39 +879,7 @@ function App() {
           })}
         </div>
 
-        <article className="synthesis-card">
-          <div className="synthesis-orb" aria-hidden="true">✦</div>
-          <div>
-            <span className="section-kicker">Síntese Arcane911</span>
-            <h3>O desenho entre as cartas</h3>
-            <p>{buildSynthesis(spread, intentId)}</p>
-            <small>Tarot é linguagem de reflexão, não sentença nem substituto de orientação profissional.</small>
-          </div>
-        </article>
-
-        {renderAgent911Experience("opening")}
-
-        <section className="specific-teasers" aria-labelledby="specific-teasers-title">
-          <div className="specific-teasers-heading">
-            <div>
-              <span className="section-kicker">Perguntas que pedem outra lente</span>
-              <h3 id="specific-teasers-title">Aprofunde exatamente onde apertou.</h3>
-            </div>
-            <p>Estruturas específicas já preparadas para a próxima fase. Por enquanto, você pode conhecer cada caminho sem pagar.</p>
-          </div>
-
-          <div className="specific-teasers-grid">
-            {[featuredSpecificReading, ...specificReadings.filter((item) => item.slug !== featuredSpecificReading.slug)].map((reading, index) => (
-              <Link className={`specific-teaser-card ${index === 0 ? "is-featured" : ""}`} to={`/leituras/${reading.slug}`} key={reading.slug}>
-                <span className="specific-teaser-icon">{index === 0 ? <Sparkles size={17} /> : <LockKeyhole size={16} />}</span>
-                <small>{index === 0 ? "Combina com sua pergunta" : reading.eyebrow.replace("Leitura específica · ", "")}</small>
-                <strong>{reading.shortTitle}</strong>
-                <p>{reading.promise}</p>
-                <b>Conhecer estrutura <ArrowRight size={15} /></b>
-              </Link>
-            ))}
-          </div>
-        </section>
+        {renderAgent911Summary("opening")}
 
         <section className="conversion-gate" aria-labelledby="deep-reading-title">
           <div className="premium-preview" aria-hidden="true">
@@ -929,7 +899,7 @@ function App() {
             <span className="section-kicker">Tiragem completa liberada</span>
             <h3 id="deep-reading-title">O sinal apareceu.<br />Agora falta entender o movimento inteiro.</h3>
             <p>
-              A Ferradura continua exatamente desta pergunta e destas três cartas. Quatro novos Arcanos revelam o padrão oculto, o nó central, o campo ao redor e a direção provável do caminho atual.
+              O 911 já encontrou o ponto vivo da sua pergunta. A Ferradura continua exatamente desta mesa: quatro novos Arcanos revelam o padrão oculto, o nó central, o campo ao redor e a direção provável do caminho atual.
             </p>
 
             <ul>
@@ -993,7 +963,7 @@ function App() {
             <span className="section-kicker">Depois do panorama, uma pergunta direta</span>
             <h3 id="complete-specific-teasers-title">Aprofunde o ponto que a Ferradura revelou.</h3>
           </div>
-          <p>Escolha uma estrutura específica para transformar a leitura ampla em vínculo, decisão, trabalho ou caminho. Todas seguem liberadas nesta fase.</p>
+          <p>Se você não precisa da síntese inteira nem de uma consulta, escolha uma lente direta para vínculo, decisão, trabalho ou caminho. Estas leituras ficam como uma alternativa menor.</p>
         </div>
 
         <div className="specific-teasers-grid">
@@ -1006,7 +976,7 @@ function App() {
               <span className="specific-teaser-icon">
                 {index === 0 ? <Sparkles size={17} /> : <LockKeyhole size={16} />}
               </span>
-              <small>{index === 0 ? "Combina com sua pergunta" : reading.eyebrow.replace("Leitura específica · ", "")}</small>
+              <small>{index === 0 ? "Resposta direta" : reading.eyebrow.replace("Leitura específica · ", "")}</small>
               <strong>{reading.shortTitle}</strong>
               <p>{reading.promise}</p>
               <b>Conhecer estrutura <ArrowRight size={15} /></b>
@@ -1017,12 +987,12 @@ function App() {
     );
   }
 
-  function renderAgent911Experience(variant) {
+  function renderAgent911Summary(variant) {
     const agentCards = variant === "complete" ? completeSpread : spread;
     if (!createdAt || ![3, 7].includes(agentCards.length)) return null;
 
     return (
-      <Agent911Panel
+      <Agent911Summary
         key={`${createdAt}-${variant}`}
         cards={agentCards}
         intentId={intentId}
@@ -1030,7 +1000,25 @@ function App() {
         question={resolvedQuestion}
         createdAt={createdAt}
         variant={variant}
-        onOpenComplete={openCompleteReading}
+        onResult={(result) => setAgentSummaries((current) => (
+          current[variant] === result ? current : { ...current, [variant]: result }
+        ))}
+      />
+    );
+  }
+
+  function renderAgent911Consultation() {
+    if (!createdAt || completeSpread.length !== 7) return null;
+
+    return (
+      <Agent911Consultation
+        key={`${createdAt}-consultation`}
+        cards={completeSpread}
+        intentId={intentId}
+        intentLabel={selectedIntent.label}
+        question={resolvedQuestion}
+        createdAt={createdAt}
+        initialResult={agentSummaries.complete}
       />
     );
   }
@@ -1181,8 +1169,6 @@ function App() {
   }
 
   function renderCompleteReadingPhase() {
-    const synthesisParagraphs = buildCompleteSynthesis(completeSpread, intentId).split("\n\n");
-
     return (
       <div className="reading-result complete-reading-result">
         <div className="reading-header">
@@ -1293,19 +1279,11 @@ function App() {
           ))}
         </div>
 
-        <article className="synthesis-card complete-synthesis-card">
-          <div className="synthesis-orb" aria-hidden="true">✦</div>
-          <div>
-            <span className="section-kicker">Síntese completa Arcane911</span>
-            <h3>O desenho da Ferradura</h3>
-            {synthesisParagraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
-            <small>Tarot é linguagem de reflexão, não sentença nem substituto de orientação profissional.</small>
-          </div>
-        </article>
+        {renderAgent911Summary("complete")}
+
+        {renderAgent911Consultation()}
 
         {renderCompleteSpecificTeasers()}
-
-        {renderAgent911Experience("complete")}
 
         <div className="reading-actions complete-reading-actions">
           <button

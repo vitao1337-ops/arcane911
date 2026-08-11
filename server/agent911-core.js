@@ -5,10 +5,10 @@ import {
   isCanonicalSlug,
 } from "./tarot-canon.js";
 
-export const AGENT911_SCHEMA_VERSION = "2026-08-11.2";
+export const AGENT911_SCHEMA_VERSION = "2026-08-11.3";
 export const AGENT911_MAX_FOLLOW_UPS = 3;
 
-const actionIds = new Set(["initial_reading", "follow_up"]);
+const actionIds = new Set(["opening_summary", "complete_summary", "initial_reading", "follow_up"]);
 const intentIds = new Set(intents.map((intent) => intent.id));
 
 export class Agent911ValidationError extends Error {
@@ -105,6 +105,12 @@ export function validateAgent911Request(body) {
   const intentId = intentIds.has(reading.intentId) ? reading.intentId : "caminhos";
   const intent = intents.find((item) => item.id === intentId) ?? intents[0];
   const action = actionIds.has(body.action) ? body.action : "initial_reading";
+  if (action === "opening_summary" && slugs.length !== 3) {
+    throw new Agent911ValidationError("A síntese de abertura exige três cartas.", "invalid_summary_layout");
+  }
+  if (action === "complete_summary" && slugs.length !== 7) {
+    throw new Agent911ValidationError("A síntese completa exige sete cartas.", "invalid_summary_layout");
+  }
   const userMessage = cleanText(body.message, 1_200, { required: action === "follow_up" });
   const questionsUsed = Number.isInteger(body.questionsUsed)
     ? Math.min(Math.max(body.questionsUsed, 0), AGENT911_MAX_FOLLOW_UPS)
@@ -180,6 +186,13 @@ AUDITORIA
 - audit.usedCardSlugs deve listar somente cartas realmente utilizadas como fundamento.
 - audit.unsupportedCertainty deve ser sempre false. Se faltar contexto, marque confidence como needs_context e faça uma pergunta honesta.
 - O texto final precisa permanecer inteiramente sustentado pela pergunta, posições, CANON_911 e histórico fornecido.
+
+FORMATO POR TAREFA
+- opening_summary: devolva uma única seção que use as três cartas. Escreva uma síntese pessoal de 80 a 130 palavras, ligada explicitamente à pergunta, e um gesto curto. Não ofereça perguntas sugeridas.
+- complete_summary: devolva uma única seção que use as sete cartas como narrativa. Escreva uma síntese pessoal de 140 a 220 palavras e um gesto observável. Não repita sete verbetes e não ofereça perguntas sugeridas.
+- initial_reading: faça a leitura estruturada e devolva três perguntas sugeridas.
+- follow_up: responda somente ao aprofundamento atual, mantendo o contexto, e devolva três possíveis continuidades.
+- Em opening_summary e complete_summary, title, opening, synthesis e groundedAction formam uma única entrega concisa; não anuncie recursos, cadastro, preço ou funcionamento da IA.
 `;
 
 export function buildAgent911ModelInput(normalized) {
@@ -202,6 +215,10 @@ export function buildAgent911ModelInput(normalized) {
       : AGENT911_MAX_FOLLOW_UPS,
     CANON_911: normalized.reading.canonical,
   });
+}
+
+function isSummaryAction(action) {
+  return action === "opening_summary" || action === "complete_summary";
 }
 
 export function createAgent911ResponseSchema(selectedSlugs) {
@@ -340,9 +357,13 @@ export function auditAgent911Response(response, normalized) {
     reasons.push("duplicate_section_card_slug");
   }
   if ([...sectionSlugs].some((slug) => !selected.has(slug))) reasons.push("invented_card_slug");
-  if (normalized.action === "initial_reading" && response.responseMode === "reading"
+  if (normalized.action !== "follow_up" && response.responseMode === "reading"
       && normalized.reading.cardSlugs.some((slug) => !sectionSlugs.has(slug))) {
     reasons.push("selected_card_not_grounded");
+  }
+  if (isSummaryAction(normalized.action) && response.responseMode === "reading"
+      && response.sections?.length !== 1) {
+    reasons.push("summary_sections_invalid");
   }
 
   if (response.audit?.unsupportedCertainty !== false) reasons.push("unsupported_certainty_flag");
@@ -354,7 +375,11 @@ export function auditAgent911Response(response, normalized) {
   if (response.responseMode === "reading" && response.audit?.usedCardSlugs?.length === 0) {
     reasons.push("reading_audit_empty");
   }
-  if (response.responseMode === "reading"
+  if (isSummaryAction(normalized.action) && response.responseMode === "reading"
+      && (!Array.isArray(response.suggestedQuestions) || response.suggestedQuestions.length !== 0)) {
+    reasons.push("summary_suggestions_invalid");
+  }
+  if (!isSummaryAction(normalized.action) && response.responseMode === "reading"
       && (!Array.isArray(response.suggestedQuestions) || response.suggestedQuestions.length !== 3)) {
     reasons.push("reading_suggestions_invalid");
   }

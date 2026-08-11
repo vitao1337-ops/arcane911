@@ -1,6 +1,7 @@
 import {
   AGENT911_INSTRUCTIONS,
   AGENT911_MAX_FOLLOW_UPS,
+  AGENT911_SCHEMA_VERSION,
   Agent911ValidationError,
   auditAgent911Response,
   buildAgent911ModelInput,
@@ -90,6 +91,7 @@ async function callOpenAI(normalized, repairReasons = []) {
     48_000,
   );
   const model = String(process.env.OPENAI_MODEL ?? "gpt-5.6-terra").trim();
+  const isSummary = normalized.action === "opening_summary" || normalized.action === "complete_summary";
   const repairInstruction = repairReasons.length
     ? `\n\nCORREÇÃO OBRIGATÓRIA: a auditoria anterior rejeitou a resposta por: ${repairReasons.join(", ")}. Refaça a leitura corrigindo esses pontos, sem comentar a auditoria.`
     : "";
@@ -104,10 +106,12 @@ async function callOpenAI(normalized, repairReasons = []) {
       body: JSON.stringify({
         model,
         store: false,
-        reasoning: { effort: normalized.reading.cardSlugs.length === 7 ? "medium" : "low" },
+        reasoning: { effort: isSummary ? "low" : normalized.reading.cardSlugs.length === 7 ? "medium" : "low" },
         instructions: AGENT911_INSTRUCTIONS + repairInstruction,
         input: buildAgent911ModelInput(normalized),
-        max_output_tokens: normalized.reading.cardSlugs.length === 7 ? 3_200 : 2_200,
+        max_output_tokens: isSummary
+          ? normalized.reading.cardSlugs.length === 7 ? 1_500 : 1_000
+          : normalized.reading.cardSlugs.length === 7 ? 3_200 : 2_200,
         text: {
           format: {
             type: "json_schema",
@@ -187,7 +191,7 @@ export default async function handler(request, response) {
       followUps: reading.suggestedQuestions,
       questionsRemaining,
       meta: {
-        schemaVersion: "2026-08-11.2",
+        schemaVersion: AGENT911_SCHEMA_VERSION,
         grounded: true,
       },
     }, rateHeaders);
