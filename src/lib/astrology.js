@@ -123,7 +123,7 @@ export function calculateNatalChart({ name, date, time, location }) {
   const [hour, minute] = String(time).split(":").map(Number);
 
   if (!name?.trim() || !year || !month || !day || !Number.isInteger(hour) || !Number.isInteger(minute)) {
-    throw new Error("Preencha nome, data e horário de nascimento.");
+    throw new Error("Preencha nome completo, data e horário de nascimento.");
   }
 
   if (!location || !Number.isFinite(Number(location.latitude)) || !Number.isFinite(Number(location.longitude))) {

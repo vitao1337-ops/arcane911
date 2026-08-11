@@ -54,4 +54,8 @@ test("a interface astrológica expõe cálculo, privacidade e atribuição", () 
   assert.match(page, /Open-Meteo/);
   assert.match(page, /10 planetas/);
   assert.match(page, /12 casas/);
+  assert.match(page, /Nome completo/);
+  assert.match(page, /showPicker/);
+  assert.match(page, /id="birth-date"/);
+  assert.match(page, /id="birth-time"/);
 });

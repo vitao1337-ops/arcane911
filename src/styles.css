@@ -2029,6 +2029,223 @@ footer {
   color: #fffaf2;
 }
 
+.complete-deck-phase {
+  max-width: 1150px;
+  margin: 0 auto;
+}
+
+.complete-deck-header {
+  margin-bottom: 34px;
+}
+
+.preserved-opening {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(229, 201, 146, 0.19);
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at 100% 0, rgba(124, 58, 237, 0.18), transparent 28rem),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.072), rgba(255, 255, 255, 0.032));
+  box-shadow: 0 26px 58px rgba(0, 0, 0, 0.17), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  padding: clamp(22px, 3.5vw, 38px);
+}
+
+.preserved-opening::before {
+  position: absolute;
+  top: -170px;
+  right: -110px;
+  width: 340px;
+  height: 340px;
+  border: 1px solid rgba(229, 201, 146, 0.1);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+}
+
+.preserved-opening-heading {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);
+  align-items: end;
+  gap: clamp(24px, 5vw, 62px);
+  margin-bottom: 24px;
+}
+
+.preserved-opening-heading h3 {
+  max-width: 620px;
+  margin: 8px 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 3.5vw, 3.25rem);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 0.98;
+}
+
+.preserved-opening-heading > p {
+  margin: 0;
+  color: rgba(255, 250, 242, 0.57);
+  font-size: 0.71rem;
+  line-height: 1.7;
+}
+
+.preserved-opening-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.preserved-opening-grid article {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 82px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 19px;
+  background: rgba(255, 255, 255, 0.047);
+  padding: 13px;
+}
+
+.preserved-opening-card {
+  width: 82px;
+}
+
+.preserved-opening-card .tarot-roman,
+.preserved-opening-card .tarot-name {
+  font-size: 0.34rem;
+}
+
+.preserved-opening-number {
+  position: absolute;
+  z-index: 3;
+  top: 7px;
+  left: 7px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid rgba(229, 201, 146, 0.5);
+  border-radius: 50%;
+  background: #251631;
+  color: #e6c98f;
+  font-family: var(--font-ui);
+  font-size: 0.49rem;
+}
+
+.preserved-opening-grid article > div:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.preserved-opening-grid small {
+  color: #d7b5ff;
+  font-family: var(--font-ui);
+  font-size: 0.49rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.preserved-opening-grid strong {
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 500;
+  line-height: 1;
+  text-overflow: ellipsis;
+}
+
+.preserved-opening-grid article > div:last-child > span {
+  width: fit-content;
+  margin-top: 4px;
+  border: 1px solid rgba(229, 201, 146, 0.17);
+  border-radius: 999px;
+  color: rgba(255, 250, 242, 0.46);
+  padding: 4px 7px;
+  font-size: 0.45rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.complete-deck-table {
+  margin-top: 44px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 42px;
+}
+
+.complete-shuffle-stage {
+  min-height: 420px;
+}
+
+.complete-position-guide {
+  display: grid;
+  max-width: 860px;
+  margin: 0 auto 30px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.complete-position-guide > span {
+  display: grid;
+  min-height: 58px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 250, 242, 0.42);
+  padding: 9px;
+  transition: border-color 180ms ease, background 180ms ease, color 180ms ease;
+}
+
+.complete-position-guide > span.is-filled {
+  border-color: rgba(229, 201, 146, 0.31);
+  background: rgba(124, 58, 237, 0.15);
+  color: #fffaf2;
+}
+
+.complete-position-guide b {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid rgba(229, 201, 146, 0.24);
+  border-radius: 50%;
+  color: #e4c68b;
+  font-family: var(--font-ui);
+  font-size: 0.55rem;
+}
+
+.complete-position-guide small {
+  font-size: 0.48rem;
+  letter-spacing: 0.055em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.draw-grid.complete-draw-grid {
+  max-width: 980px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 18px 12px;
+}
+
+.complete-draw-actions {
+  margin-top: 38px;
+}
+
+.complete-back-opening {
+  margin: 30px auto 0;
+}
+
+.complete-back-opening svg {
+  transform: rotate(180deg);
+}
+
 .complete-map {
   position: relative;
   overflow: hidden;
@@ -3974,6 +4191,120 @@ footer > span {
   font-size: 0.57rem;
 }
 
+.agent911-bridge {
+  position: relative;
+  display: grid;
+  margin-top: 34px;
+  overflow: hidden;
+  grid-template-columns: minmax(140px, 0.28fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(28px, 5vw, 70px);
+  border: 1px solid rgba(229, 201, 146, 0.2);
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at 8% 50%, rgba(124, 58, 237, 0.24), transparent 22rem),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.073), rgba(255, 255, 255, 0.034));
+  box-shadow: 0 28px 62px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  padding: clamp(26px, 4vw, 46px);
+}
+
+.agent911-bridge::after {
+  position: absolute;
+  right: -90px;
+  bottom: -210px;
+  width: 390px;
+  height: 390px;
+  border: 1px solid rgba(229, 201, 146, 0.08);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 34px rgba(124, 58, 237, 0.025), inset 0 0 0 68px rgba(229, 201, 146, 0.018);
+  content: "";
+  pointer-events: none;
+}
+
+.agent911-mark {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: clamp(112px, 13vw, 154px);
+  aspect-ratio: 1;
+  place-items: center;
+  align-content: center;
+  border: 1px solid rgba(229, 201, 146, 0.43);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.23), transparent 19%),
+    radial-gradient(circle, rgba(124, 58, 237, 0.42), rgba(22, 11, 34, 0.32) 68%);
+  box-shadow: inset 0 0 0 12px rgba(255, 255, 255, 0.022), 0 22px 48px rgba(0, 0, 0, 0.22);
+}
+
+.agent911-mark span {
+  color: #e7ca90;
+  font-size: 1.15rem;
+}
+
+.agent911-mark strong {
+  color: #fffaf2;
+  font-family: var(--font-display);
+  font-size: clamp(2.3rem, 4vw, 3.5rem);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 0.85;
+}
+
+.agent911-copy {
+  position: relative;
+  z-index: 1;
+}
+
+.agent911-copy h3 {
+  margin: 9px 0 14px;
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 4.2vw, 4rem);
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 0.94;
+}
+
+.agent911-copy > p {
+  max-width: 760px;
+  margin: 0;
+  color: rgba(255, 250, 242, 0.61);
+  font-size: 0.76rem;
+  line-height: 1.72;
+}
+
+.agent911-readiness {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 22px 0 18px;
+}
+
+.agent911-readiness span {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(229, 201, 146, 0.17);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.042);
+  color: rgba(255, 250, 242, 0.66);
+  padding: 0 11px;
+  font-size: 0.55rem;
+}
+
+.agent911-readiness svg {
+  color: #e5c98d;
+}
+
+.agent911-copy > small {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(255, 250, 242, 0.38);
+  font-size: 0.52rem;
+}
+
 /* Mapa astral compartilhado entre landing e experiência completa */
 
 .astro-entry-section {
@@ -4373,6 +4704,123 @@ footer > span {
 .astro-location-search input:focus {
   border-color: rgba(124, 58, 237, 0.42);
   box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.075);
+}
+
+.astro-temporal-field {
+  align-content: start;
+}
+
+.astro-picker-surface {
+  position: relative;
+  display: grid;
+  min-height: 76px;
+  overflow: hidden;
+  align-items: center;
+  border: 1px solid rgba(72, 58, 74, 0.14);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 94% 16%, rgba(124, 58, 237, 0.08), transparent 9rem),
+    rgba(255, 252, 247, 0.84);
+  cursor: pointer;
+  padding: 12px 126px 12px 17px;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.astro-picker-surface:hover {
+  border-color: rgba(124, 58, 237, 0.28);
+  background:
+    radial-gradient(circle at 94% 16%, rgba(124, 58, 237, 0.11), transparent 9rem),
+    rgba(255, 253, 249, 0.94);
+}
+
+.astro-temporal-field:focus-within .astro-picker-surface {
+  border-color: rgba(124, 58, 237, 0.42);
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.075);
+}
+
+.astro-picker-value {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.astro-picker-value strong {
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.73rem;
+  font-weight: 500;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.astro-picker-surface.has-value .astro-picker-value strong {
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+}
+
+.astro-picker-value small {
+  color: var(--muted);
+  font-size: 0.49rem;
+  letter-spacing: 0.035em;
+}
+
+.astro-picker-action {
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-left: 1px solid rgba(72, 58, 74, 0.09);
+  color: var(--violet-deep);
+  padding: 7px 2px 7px 13px;
+  font-size: 0.53rem;
+  font-weight: 600;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.astro-field input.astro-native-picker {
+  position: absolute;
+  z-index: 2;
+  inset: -1px;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  opacity: 0.001;
+  padding: 0;
+}
+
+.astro-field input.astro-native-picker:focus {
+  border: 0;
+  box-shadow: none;
+}
+
+.astro-native-picker::-webkit-calendar-picker-indicator {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.astro-picker-helper {
+  color: var(--muted);
+  font-size: 0.5rem;
+  line-height: 1.45;
+  padding-left: 2px;
 }
 
 .astro-location-search {
@@ -4895,6 +5343,54 @@ footer > span {
   color: var(--muted);
   font-size: 0.54rem;
   line-height: 1.55;
+}
+
+@media (min-width: 901px) {
+  .spread-copy > p,
+  .spread-copy details p,
+  .card-invitation p {
+    font-size: 0.75rem;
+  }
+
+  .conversion-copy > p,
+  .synthesis-card p {
+    font-size: 0.81rem;
+  }
+
+  .specific-teaser-card > p,
+  .specific-position-grid p {
+    font-size: 0.64rem;
+  }
+
+  .astro-section-heading > p,
+  .astro-section-heading.split-heading > p {
+    font-size: 0.75rem;
+  }
+
+  .big-three-grid p {
+    font-size: 0.71rem;
+  }
+
+  .planet-heading small {
+    font-size: 0.58rem;
+  }
+
+  .planet-position strong,
+  .planet-position span {
+    font-size: 0.62rem;
+  }
+
+  .planet-grid article > p {
+    font-size: 0.68rem;
+  }
+
+  .aspect-list p {
+    font-size: 0.64rem;
+  }
+
+  .house-grid p {
+    font-size: 0.6rem;
+  }
 }
 
 .astro-result-actions {
@@ -5578,6 +6074,55 @@ footer > span {
 
   .astro-chart-stage {
     padding-inline: 10px;
+  }
+}
+
+@media (max-width: 900px) {
+  .preserved-opening-heading {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+@media (max-width: 680px) {
+  .preserved-opening {
+    border-radius: 23px;
+    padding: 20px;
+  }
+
+  .preserved-opening-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .preserved-opening-grid article {
+    grid-template-columns: 76px minmax(0, 1fr);
+  }
+
+  .preserved-opening-card {
+    width: 76px;
+  }
+
+  .complete-position-guide {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .draw-grid.complete-draw-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px 9px;
+  }
+
+  .agent911-bridge {
+    grid-template-columns: 1fr;
+    justify-items: start;
+    border-radius: 23px;
+  }
+
+  .agent911-mark {
+    width: 104px;
+  }
+
+  .agent911-readiness {
+    display: grid;
   }
 }
 

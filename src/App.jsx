@@ -23,6 +23,7 @@ import {
 import { completePositions, intents, positions, tarotBySlug, tarotCards } from "./data/tarot";
 import { getReadingForIntent, specificReadings } from "./data/products";
 import { salesConfig } from "./config/sales";
+import Agent911Panel from "./components/Agent911Panel";
 import NatalWheel from "./components/NatalWheel";
 import {
   buildCheckoutUrl,
@@ -30,7 +31,7 @@ import {
   trackCommercialEvent,
 } from "./lib/checkout";
 import {
-  buildCompleteSpread,
+  buildCompleteSpreadFromSelections,
   buildCompleteSynthesis,
   buildSynthesis,
   cardReading,
@@ -133,6 +134,9 @@ const completeReadingGroups = [
     indexes: [5, 6],
   },
 ];
+
+const preservedOpeningPositions = [0, 1, 5];
+const completeSelectionPositions = [2, 3, 4, 6];
 
 function getStoredJournal() {
   try {
@@ -295,6 +299,7 @@ function App() {
   );
   const [phase, setPhase] = useState(() => {
     if (route === "/tiragem-completa" && initialComplete.length === 7) return "complete";
+    if (route === "/tiragem-completa" && initialOpening.length === 3) return "complete-deck";
     if (["/", "/tiragem-gratis"].includes(route) && initialOpening.length === 3) return "reading";
     return "intent";
   });
@@ -304,7 +309,10 @@ function App() {
   const [selectedCards, setSelectedCards] = useState([]);
   const [spread, setSpread] = useState(initialOpening);
   const [completeSpread, setCompleteSpread] = useState(initialComplete);
+  const [completeDrawPool, setCompleteDrawPool] = useState([]);
+  const [completeSelectedCards, setCompleteSelectedCards] = useState([]);
   const [isShuffling, setIsShuffling] = useState(false);
+  const [isCompleteShuffling, setIsCompleteShuffling] = useState(false);
   const [createdAt, setCreatedAt] = useState(initialSession?.createdAt ?? null);
   const [journal, setJournal] = useState(getStoredJournal);
   const [journalOpen, setJournalOpen] = useState(false);
@@ -356,6 +364,9 @@ function App() {
       setSelectedCards([]);
       setSpread([]);
       setCompleteSpread([]);
+      setCompleteDrawPool([]);
+      setCompleteSelectedCards([]);
+      setIsCompleteShuffling(false);
       setCreatedAt(null);
       setPhase("intent");
       setStatus("Uma nova intenção está pronta para ser selada.");
@@ -364,7 +375,10 @@ function App() {
 
   useEffect(() => {
     if (isCompleteRoute && completeSpread.length === 7) setPhase("complete");
-    if (!isCompleteRoute && phase === "complete") setPhase(spread.length === 3 ? "reading" : "intent");
+    if (isCompleteRoute && spread.length === 3 && completeSpread.length !== 7) setPhase("complete-deck");
+    if (!isCompleteRoute && ["complete", "complete-deck"].includes(phase)) {
+      setPhase(spread.length === 3 ? "reading" : "intent");
+    }
     const firstFrame = window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "instant" }));
     });
@@ -424,6 +438,9 @@ function App() {
     setSelectedCards([]);
     setSpread([]);
     setCompleteSpread([]);
+    setCompleteDrawPool([]);
+    setCompleteSelectedCards([]);
+    setIsCompleteShuffling(false);
     setStatus("");
     setPhase("deck");
     trackCommercialEvent("free_reading_started", {
@@ -491,6 +508,9 @@ function App() {
     setSelectedCards([]);
     setSpread([]);
     setCompleteSpread([]);
+    setCompleteDrawPool([]);
+    setCompleteSelectedCards([]);
+    setIsCompleteShuffling(false);
     setCreatedAt(null);
     setStatus("");
     if (isCompleteRoute) {
@@ -550,15 +570,79 @@ function App() {
   function openCompleteReading() {
     if (!createdAt || spread.length !== 3) return;
 
-    const nextSpread = completeSpread.length === 7
-      ? completeSpread
-      : buildCompleteSpread(
-        `${createdAt}-${intentId}-${resolvedQuestion}-${spread.map((card) => card.slug).join("-")}`,
-        spread,
-      );
+    if (completeSpread.length === 7) {
+      setPhase("complete");
+      navigate("/tiragem-completa");
+      return;
+    }
+
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    setCompleteDrawPool([]);
+    setCompleteSelectedCards([]);
+    setIsCompleteShuffling(false);
+    setPhase("complete-deck");
+    setStatus("Suas três cartas foram seladas. O novo baralho está pronto.");
+    saveReadingSession({
+      intentId,
+      question: resolvedQuestion,
+      openingCards: spread.map((card) => card.slug),
+      completeCards: [],
+      createdAt,
+    });
+    trackCommercialEvent("complete_reading_started", {
+      intent: intentId,
+      reading_id: createdAt,
+      opening_cards: spread.map((card) => card.slug).join(","),
+    });
+    navigate("/tiragem-completa");
+  }
+
+  function shuffleCompleteDeck() {
+    if (spread.length !== 3) return;
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+
+    setIsCompleteShuffling(true);
+    setCompleteSelectedCards([]);
+    setStatus("Os dezenove Arcanos restantes estão encontrando uma nova ordem.");
+
+    const openingSlugs = new Set(spread.map((card) => card.slug));
+    const seed = ["segundo-baralho", resolvedQuestion, intentId, Date.now()].join("-");
+
+    timerRef.current = window.setTimeout(() => {
+      const orderedDeck = tarotCards
+        .filter((card) => !openingSlugs.has(card.slug))
+        .sort(
+          (cardA, cardB) =>
+            hashString(seed + "-" + cardA.slug) - hashString(seed + "-" + cardB.slug),
+        )
+        .slice(0, 12);
+
+      setCompleteDrawPool(orderedDeck);
+      setIsCompleteShuffling(false);
+      setStatus("Escolha quatro cartas. A ordem define as novas posições da Ferradura.");
+      trackCommercialEvent("complete_deck_shuffled", {
+        intent: intentId,
+        reading_id: createdAt,
+      });
+    }, 1150);
+  }
+
+  function selectCompleteCard(card) {
+    setCompleteSelectedCards((current) => {
+      if (current.some((selected) => selected.slug === card.slug)) {
+        return current.filter((selected) => selected.slug !== card.slug);
+      }
+
+      if (current.length === 4) return current;
+      return [...current, card];
+    });
+  }
+
+  function revealCompleteReading() {
+    const nextSpread = buildCompleteSpreadFromSelections(spread, completeSelectedCards);
 
     if (nextSpread.length !== 7) {
-      setStatus("Não foi possível completar a Ferradura agora. Suas três cartas continuam aqui.");
+      setStatus("Escolha quatro cartas diferentes para completar a Ferradura.");
       return;
     }
 
@@ -577,7 +661,7 @@ function App() {
       reading_id: createdAt,
       cards: nextSpread.map((card) => card.slug).join(","),
     });
-    navigate("/tiragem-completa");
+    moveToRitual();
   }
 
   function openCheckout() {
@@ -650,11 +734,11 @@ function App() {
             <span>Sua pergunta</span>
             <textarea
               value={question}
-              onChange={(event) => setQuestion(event.target.value.slice(0, 220))}
+              onChange={(event) => setQuestion(event.target.value.slice(0, 800))}
               placeholder={selectedIntent.prompt}
               rows="4"
             />
-            <small>{question.length}/220 · se deixar em branco, usamos a pergunta sugerida</small>
+            <small>{question.length}/800 · se deixar em branco, usamos a pergunta sugerida</small>
           </label>
 
           <button className="button button-primary button-large" type="button" onClick={beginRitual}>
@@ -803,6 +887,8 @@ function App() {
           </div>
         </article>
 
+        {renderAgent911Experience("opening")}
+
         <section className="specific-teasers" aria-labelledby="specific-teasers-title">
           <div className="specific-teasers-heading">
             <div>
@@ -890,6 +976,206 @@ function App() {
             Nova pergunta
           </button>
         </div>
+      </div>
+    );
+  }
+
+  function renderCompleteSpecificTeasers() {
+    const orderedReadings = [
+      featuredSpecificReading,
+      ...specificReadings.filter((item) => item.slug !== featuredSpecificReading.slug),
+    ];
+
+    return (
+      <section className="specific-teasers" aria-labelledby="complete-specific-teasers-title">
+        <div className="specific-teasers-heading">
+          <div>
+            <span className="section-kicker">Depois do panorama, uma pergunta direta</span>
+            <h3 id="complete-specific-teasers-title">Aprofunde o ponto que a Ferradura revelou.</h3>
+          </div>
+          <p>Escolha uma estrutura específica para transformar a leitura ampla em vínculo, decisão, trabalho ou caminho. Todas seguem liberadas nesta fase.</p>
+        </div>
+
+        <div className="specific-teasers-grid">
+          {orderedReadings.map((reading, index) => (
+            <Link
+              className={"specific-teaser-card " + (index === 0 ? "is-featured" : "")}
+              to={"/leituras/" + reading.slug}
+              key={reading.slug}
+            >
+              <span className="specific-teaser-icon">
+                {index === 0 ? <Sparkles size={17} /> : <LockKeyhole size={16} />}
+              </span>
+              <small>{index === 0 ? "Combina com sua pergunta" : reading.eyebrow.replace("Leitura específica · ", "")}</small>
+              <strong>{reading.shortTitle}</strong>
+              <p>{reading.promise}</p>
+              <b>Conhecer estrutura <ArrowRight size={15} /></b>
+            </Link>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  function renderAgent911Experience(variant) {
+    const agentCards = variant === "complete" ? completeSpread : spread;
+    if (!createdAt || ![3, 7].includes(agentCards.length)) return null;
+
+    return (
+      <Agent911Panel
+        key={`${createdAt}-${variant}`}
+        cards={agentCards}
+        intentId={intentId}
+        intentLabel={selectedIntent.label}
+        question={resolvedQuestion}
+        createdAt={createdAt}
+        variant={variant}
+        onOpenComplete={openCompleteReading}
+      />
+    );
+  }
+
+  function renderCompleteDeckPhase() {
+    const deckIsReady = completeDrawPool.length > 0 && !isCompleteShuffling;
+
+    return (
+      <div className="complete-deck-phase">
+        <div className="reading-header complete-deck-header">
+          <div>
+            <span className="section-kicker">04 · Segundo baralho</span>
+            <h2>Três cartas seladas.<br />Quatro encontros novos.</h2>
+          </div>
+          <div className="reading-question">
+            <span>{selectedIntent.label}</span>
+            <q>{resolvedQuestion}</q>
+          </div>
+        </div>
+
+        <section className="preserved-opening" aria-labelledby="preserved-opening-title">
+          <div className="preserved-opening-heading">
+            <div>
+              <span className="section-kicker">O fio permanece</span>
+              <h3 id="preserved-opening-title">As três escolhas gratuitas não voltam para o monte.</h3>
+            </div>
+            <p>Elas ocupam origem, presente e melhor ação. O novo baralho contém somente os dezenove Arcanos que ainda não apareceram.</p>
+          </div>
+
+          <div className="preserved-opening-grid">
+            {preservedOpeningPositions.map((positionIndex, openingIndex) => {
+              const card = spread[openingIndex];
+              const position = completePositions[positionIndex];
+
+              return (
+                <article key={position.id}>
+                  <span className="preserved-opening-number">{position.number}</span>
+                  <TarotCardVisual card={card} className="preserved-opening-card" eager />
+                  <div>
+                    <small>{position.eyebrow}</small>
+                    <strong>{card.name}</strong>
+                    <span>preservada</span>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="complete-deck-table" aria-labelledby="complete-deck-title">
+          <div className="ritual-heading ritual-heading-centered">
+            <span className="section-kicker">O que ainda falta aparecer</span>
+            <h2 id="complete-deck-title">
+              {deckIsReady ? "Escolha sem tentar adivinhar." : "Agora, o baralho muda."}
+            </h2>
+            <p>
+              {deckIsReady
+                ? "Toque em quatro cartas. Elas entram como influência oculta, nó central, campo externo e direção provável."
+                : "Respire novamente com a mesma pergunta. Embaralhe os dezenove Arcanos restantes e abra uma nova mesa."}
+            </p>
+          </div>
+
+          {!deckIsReady ? (
+            <div className={"shuffle-stage complete-shuffle-stage " + (isCompleteShuffling ? "is-shuffling" : "")}>
+              <div className="shuffle-stack" aria-hidden="true">
+                <CardBack style={{ "--stack-index": 0 }} isDisabled />
+                <CardBack style={{ "--stack-index": 1 }} isDisabled />
+                <CardBack style={{ "--stack-index": 2 }} isDisabled />
+              </div>
+              <button
+                className="button button-primary button-large"
+                type="button"
+                onClick={shuffleCompleteDeck}
+                disabled={isCompleteShuffling}
+              >
+                <Shuffle size={18} className={isCompleteShuffling ? "spin-icon" : ""} />
+                {isCompleteShuffling ? "Embaralhando o novo baralho…" : "Embaralhar os 19 restantes"}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="complete-position-guide" aria-label="Ordem das quatro novas posições">
+                {completeSelectionPositions.map((positionIndex, index) => {
+                  const position = completePositions[positionIndex];
+                  return (
+                    <span className={completeSelectedCards[index] ? "is-filled" : ""} key={position.id}>
+                      <b>{index + 1}</b>
+                      <small>{position.eyebrow}</small>
+                    </span>
+                  );
+                })}
+              </div>
+
+              <div className="draw-grid complete-draw-grid">
+                {completeDrawPool.map((card, index) => {
+                  const selectedIndex = completeSelectedCards.findIndex(
+                    (selected) => selected.slug === card.slug,
+                  );
+                  const selectionOrder = selectedIndex >= 0 ? selectedIndex + 1 : null;
+                  const selectionFull = completeSelectedCards.length === 4 && !selectionOrder;
+
+                  return (
+                    <CardBack
+                      key={card.slug}
+                      selectedOrder={selectionOrder}
+                      isDisabled={selectionFull}
+                      onClick={() => selectCompleteCard(card)}
+                      style={{ "--draw-index": index }}
+                    />
+                  );
+                })}
+              </div>
+
+              <div className="draw-actions complete-draw-actions">
+                <span>{completeSelectedCards.length}/4 escolhidas</span>
+                <button
+                  className="button button-primary"
+                  type="button"
+                  onClick={revealCompleteReading}
+                  disabled={completeSelectedCards.length !== 4}
+                >
+                  Abrir a Ferradura completa
+                  <Sparkles size={17} />
+                </button>
+                <button className="text-button" type="button" onClick={shuffleCompleteDeck}>
+                  <RotateCcw size={15} />
+                  Embaralhar de novo
+                </button>
+              </div>
+            </>
+          )}
+
+          <button
+            className="text-button complete-back-opening"
+            type="button"
+            onClick={() => {
+              setPhase("reading");
+              setStatus("Suas três cartas iniciais continuam abertas.");
+              navigate("/tiragem-gratis");
+            }}
+          >
+            <ChevronRight size={15} />
+            Voltar às três cartas
+          </button>
+        </section>
       </div>
     );
   }
@@ -1017,6 +1303,10 @@ function App() {
           </div>
         </article>
 
+        {renderCompleteSpecificTeasers()}
+
+        {renderAgent911Experience("complete")}
+
         <div className="reading-actions complete-reading-actions">
           <button
             className="button button-glass"
@@ -1108,7 +1398,7 @@ function App() {
   }
 
   function renderCompleteRoute() {
-    if (completeSpread.length !== 7 || spread.length !== 3 || !createdAt) {
+    if (spread.length !== 3 || !createdAt) {
       return (
         <main className="complete-route-main complete-route-empty" id="complete-reading-top">
           <section>
@@ -1128,24 +1418,36 @@ function App() {
       );
     }
 
+    const readingIsComplete = completeSpread.length === 7;
+
     return (
       <main className="complete-route-main" id="complete-reading-top">
         <section className="complete-route-intro">
           <div>
             <span className="section-kicker">Tiragem completa · Ferradura</span>
-            <h1>O movimento inteiro,<br /><em>sem quebrar o fio.</em></h1>
+            <h1>
+              {readingIsComplete ? "O movimento inteiro," : "A mesma pergunta,"}<br />
+              <em>{readingIsComplete ? "sem quebrar o fio." : "um novo baralho."}</em>
+            </h1>
           </div>
-          <p>As três cartas escolhidas foram preservadas. Quatro novos Arcanos completam a leitura em uma página feita para atravessar cada camada com calma.</p>
+          <p>
+            {readingIsComplete
+              ? "As três cartas escolhidas foram preservadas. Quatro novos Arcanos completam a leitura em uma página feita para atravessar cada camada com calma."
+              : "As três cartas gratuitas continuam seladas. Agora você embaralha os dezenove Arcanos restantes e escolhe, com a própria mão, as quatro posições que completam a leitura."}
+          </p>
         </section>
         <section className="ritual-section complete-route-ritual" id="ritual" ref={ritualRef}>
           <div className="ritual-shell">
             <MysticField />
             <div className="free-reading-badge complete-reading-badge">
               <span aria-hidden="true">✦</span>
-              <div><strong>Ferradura completa</strong><small>Sete cartas + síntese integrada</small></div>
+              <div>
+                <strong>{readingIsComplete ? "Ferradura completa" : "Segundo baralho"}</strong>
+                <small>{readingIsComplete ? "Sete cartas + síntese integrada" : "3 preservadas + 4 novas escolhas"}</small>
+              </div>
               <b>Liberada</b>
             </div>
-            {renderCompleteReadingPhase()}
+            {readingIsComplete ? renderCompleteReadingPhase() : renderCompleteDeckPhase()}
             <p className="live-status" aria-live="polite">{status}</p>
           </div>
         </section>
@@ -1154,7 +1456,7 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-agent911-ready="true">
       <a className="skip-link" href={isAstroRoute ? "#criar-mapa" : isCompleteRoute ? "#complete-reading-top" : isSpecificRoute ? "#specific-reading-top" : "#ritual"}>
         {isAstroRoute ? "Pular para criar o mapa" : isSpecificRoute ? "Pular para o conteúdo" : "Pular para a leitura"}
       </a>

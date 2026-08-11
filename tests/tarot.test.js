@@ -7,6 +7,7 @@ import { salesConfig } from "../src/config/sales.js";
 import { buildCheckoutUrl, isCheckoutConfigured } from "../src/lib/checkout.js";
 import {
   buildCompleteSpread,
+  buildCompleteSpreadFromSelections,
   buildCompleteSynthesis,
   buildSynthesis,
   cardReading,
@@ -84,6 +85,21 @@ test("a Ferradura completa sete posições sem perder as três cartas escolhidas
   assert.deepEqual(first.map((card) => card.slug), second.map((card) => card.slug));
 });
 
+test("a segunda mesa monta a Ferradura com quatro escolhas manuais", () => {
+  const opening = [tarotCards[0], tarotCards[11], tarotCards[21]];
+  const selected = [tarotCards[2], tarotCards[8], tarotCards[16], tarotCards[19]];
+  const complete = buildCompleteSpreadFromSelections(opening, selected);
+
+  assert.equal(complete.length, 7);
+  assert.equal(new Set(complete.map((card) => card.slug)).size, 7);
+  assert.deepEqual(
+    complete.map((card) => card.slug),
+    [opening[0], opening[1], selected[0], selected[1], selected[2], opening[2], selected[3]].map((card) => card.slug),
+  );
+  assert.deepEqual(buildCompleteSpreadFromSelections(opening, [selected[0], selected[0], selected[1], selected[2]]), []);
+  assert.deepEqual(buildCompleteSpreadFromSelections(opening, [opening[0], ...selected.slice(0, 3)]), []);
+});
+
 test("as leituras têm luz, sombra, ação e síntese contextual", () => {
   const cards = [tarotCards[0], tarotCards[11], tarotCards[21]];
   const reading = cardReading(cards[0], "root");
@@ -147,6 +163,10 @@ test("a tiragem de sete cartas está liberada no fluxo, sem passar pelo checkout
   assert.match(app, /isCompleteRoute \? renderCompleteRoute\(\)/);
   assert.match(app, /saveReadingSession/);
   assert.match(app, /A Ferradura de 7 cartas/);
+  assert.match(app, /Segundo baralho/);
+  assert.match(app, /completeSelectedCards.length !== 4/);
+  assert.match(app, /renderCompleteSpecificTeasers/);
+  assert.doesNotMatch(app, /buildCompleteSpread[(]/);
   assert.deepEqual(vercel.rewrites, [{ source: "/(.*)", destination: "/index.html" }]);
 });
 

@@ -27,6 +27,66 @@ function formatLocation(location) {
   return [location.name, location.admin1, location.country].filter(Boolean).join(" · ");
 }
 
+function formatDateValue(value) {
+  const [year, month, day] = String(value).split("-");
+  return year && month && day ? [day, month, year].join("/") : "Escolha no calendário";
+}
+
+function formatTimeValue(value) {
+  return String(value).length >= 5 ? String(value).slice(0, 5) : "Escolha o horário";
+}
+
+function TemporalPickerField({
+  id,
+  type,
+  label,
+  value,
+  onChange,
+  max,
+  helper,
+  action,
+  icon: Icon,
+}) {
+  const helperId = id + "-helper";
+  const displayValue = type === "date" ? formatDateValue(value) : formatTimeValue(value);
+
+  function openNativePicker(event) {
+    try {
+      event.currentTarget.showPicker?.();
+    } catch {
+      // O clique nativo continua funcionando quando o navegador não permite showPicker().
+    }
+  }
+
+  return (
+    <label className="astro-field astro-temporal-field" htmlFor={id}>
+      <span><Icon size={16} /> {label}</span>
+      <span className={"astro-picker-surface " + (value ? "has-value" : "")}>
+        <span className="astro-picker-value" aria-hidden="true">
+          <strong>{displayValue}</strong>
+          <small>{type === "date" ? "dia · mês · ano" : "horário do local de nascimento"}</small>
+        </span>
+        <span className="astro-picker-action" aria-hidden="true">
+          {action}
+          <Icon size={17} />
+        </span>
+        <input
+          className="astro-native-picker"
+          id={id}
+          type={type}
+          value={value}
+          onChange={onChange}
+          onClick={openNativePicker}
+          max={max}
+          aria-describedby={helperId}
+          required
+        />
+      </span>
+      <small className="astro-picker-helper" id={helperId}>{helper}</small>
+    </label>
+  );
+}
+
 function readStoredChart() {
   try {
     const stored = JSON.parse(window.localStorage.getItem(ASTRO_STORAGE_KEY) ?? "null");
@@ -179,37 +239,39 @@ export default function AstralMapPage() {
 
         <form className="astro-form" onSubmit={createChart} noValidate>
           <label className="astro-field astro-field-wide">
-            <span><UserRound size={16} /> Como quer ser chamado?</span>
+            <span><UserRound size={16} /> Nome completo</span>
             <input
               type="text"
               value={form.name}
               onChange={(event) => updateField("name", event.target.value.slice(0, 60))}
-              placeholder="Seu nome"
+              placeholder="Digite seu nome completo"
               autoComplete="name"
               required
             />
           </label>
 
-          <label className="astro-field">
-            <span><CalendarDays size={16} /> Data de nascimento</span>
-            <input
-              type="date"
-              value={form.date}
-              onChange={(event) => updateField("date", event.target.value)}
-              max={maxDate}
-              required
-            />
-          </label>
+          <TemporalPickerField
+            id="birth-date"
+            type="date"
+            label="Data de nascimento"
+            value={form.date}
+            onChange={(event) => updateField("date", event.target.value)}
+            max={maxDate}
+            helper="Clique em qualquer ponto do campo para abrir o calendário."
+            action="Calendário"
+            icon={CalendarDays}
+          />
 
-          <label className="astro-field">
-            <span><Clock3 size={16} /> Horário local</span>
-            <input
-              type="time"
-              value={form.time}
-              onChange={(event) => updateField("time", event.target.value)}
-              required
-            />
-          </label>
+          <TemporalPickerField
+            id="birth-time"
+            type="time"
+            label="Horário de nascimento"
+            value={form.time}
+            onChange={(event) => updateField("time", event.target.value)}
+            helper="Use o horário registrado na certidão, quando souber."
+            action="Relógio"
+            icon={Clock3}
+          />
 
           <div className="astro-field astro-field-wide astro-location-field">
             <label htmlFor="birth-city"><MapPin size={16} /> Cidade de nascimento</label>

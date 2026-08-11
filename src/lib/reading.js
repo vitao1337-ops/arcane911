@@ -77,6 +77,32 @@ export function buildCompleteSpread(seedSource, openingCards, deck = tarotCards)
   ];
 }
 
+export function buildCompleteSpreadFromSelections(openingCards, selectedCards) {
+  const uniqueOpeningCards = openingCards.filter(
+    (card, index, cards) => card && cards.findIndex((item) => item?.slug === card.slug) === index,
+  );
+  const openingSlugs = new Set(uniqueOpeningCards.map((card) => card.slug));
+  const uniqueSelectedCards = selectedCards.filter(
+    (card, index, cards) => card
+      && !openingSlugs.has(card.slug)
+      && cards.findIndex((item) => item?.slug === card.slug) === index,
+  );
+
+  if (uniqueOpeningCards.length !== 3 || uniqueSelectedCards.length !== 4) return [];
+
+  const [hidden, obstacle, external, outcome] = uniqueSelectedCards;
+
+  return [
+    uniqueOpeningCards[0],
+    uniqueOpeningCards[1],
+    hidden,
+    obstacle,
+    external,
+    uniqueOpeningCards[2],
+    outcome,
+  ];
+}
+
 export function cardReading(card, positionId) {
   const positionOpenings = {
     root: `${card.name} mostra a raiz desta história: ${card.archetype.toLowerCase()}.`,

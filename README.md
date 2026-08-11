@@ -1,4 +1,4 @@
-# Arcane911 — V5 · Plataforma Arcana
+# Arcane911 — V7 · Agente 911 Vivo
 
 Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual do Sorriso Marcado e das 22 cartas originais dos Arcanos Maiores.
 
@@ -6,7 +6,7 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 
 - `/`: landing original, com ritual integrado, história e os 22 Arcanos.
 - `/tiragem-gratis`: ritual focado de três cartas.
-- `/tiragem-completa`: Ferradura de sete cartas em página própria, preservando pergunta e cartas da abertura.
+- `/tiragem-completa`: segundo ritual e Ferradura de sete cartas em página própria, preservando pergunta e cartas da abertura.
 - `/mapa-astral`: mapa natal completo com cálculo local.
 - `/leituras/amor`, `/leituras/caminhos`, `/leituras/trabalho` e `/leituras/decisao`: produtos específicos preparados para a próxima fase, ainda sem cobrança.
 
@@ -17,6 +17,7 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - Seleção manual de três cartas, em ordem.
 - Leitura em três posições: A Raiz, O Espelho e O Movimento.
 - Aprofundamento liberado em uma Ferradura clássica de sete cartas.
+- Segundo baralho real: os 19 Arcanos restantes são reorganizados em uma nova mesa e o usuário escolhe manualmente as quatro cartas adicionais.
 - Continuidade real entre as etapas: as três cartas escolhidas ocupam origem, presente e melhor ação; quatro cartas únicas completam influência oculta, nó central, campo externo e direção provável.
 - Mapa visual em Ferradura e leitura organizada em três camadas equilibradas de 2–3–2 cartas.
 - Interpretações autorais com luz, sombra e convite prático.
@@ -37,6 +38,14 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - Resultado astrológico serializável, compartilhável e guardado somente no navegador.
 - Carregamento sob demanda: o motor astral não pesa no JavaScript inicial da landing.
 - Quatro rotas de leituras específicas com estrutura de cinco cartas e produto comercial já modelado, sem ativar preço ou checkout.
+- Os quatro blocos de perguntas específicas também aparecem depois da Ferradura completa.
+- Formulário astral renovado com nome completo e superfícies clicáveis de data e horário.
+- Microtipografia ampliada somente no desktop, preservando fontes, blocos e direção visual.
+- Agente 911 ativo nas leituras de três e sete cartas, com resposta estruturada, relações entre cartas e até três aprofundamentos na Ferradura.
+- Bíblia canônica própria dos 22 Arcanos e das 231 combinações possíveis entre pares; o servidor reconstrói a mesa e não confia em significados enviados pelo navegador.
+- Auditoria automática rejeita cartas inventadas, cartas omitidas, certezas deterministas e afirmações sem sustentação na tiragem.
+- Memória opcional, privada neste dispositivo, com consentimento explícito e exclusão integral em dois passos.
+- Chave da OpenAI mantida exclusivamente na função server-side da Vercel; nenhuma credencial é enviada ao navegador.
 - Checkout permanece desacoplado no código para monetização futura, com eventos comerciais prontos para GTM/dataLayer.
 - Layout responsivo, navegação por teclado e redução de movimento.
 
@@ -69,7 +78,15 @@ npm run preview
 - `src/pages/SpecificReadingPage.jsx`: vitrine das leituras específicas.
 - `src/components/NatalWheel.jsx`: mandala SVG responsiva.
 - `src/config/sales.js`: produto, preço, benefícios e endereço de checkout.
+- `src/config/agent911.js`: ativação, endpoint e oferta futura oculta do Agente 911.
+- `src/components/Agent911Panel.jsx`: experiência de leitura viva, memória e conversa.
+- `src/agent911.css`: camada visual isolada do agente, sem alterar o restante do site.
 - `src/lib/checkout.js`: parâmetros de compra e eventos comerciais.
+- `src/lib/agent911.js`: contexto, guardrails e cliente seguro da rota server-side.
+- `src/lib/agent911Memory.js`: consentimento e memória local opcional.
+- `server/tarot-canon.js`: Bíblia 911 dos 22 Arcanos e relações de pares.
+- `server/agent911-core.js`: validação, prompt, Structured Output e auditoria.
+- `api/agent-911.js`: função serverless que conversa com a OpenAI sem expor a chave.
 - `public/cards/`: 22 imagens WebP otimizadas para o site.
 - `tests/`: contratos do baralho, rotas, Ferradura e cálculo astrológico.
 - `vercel.json`: fallback de SPA para abrir todas as rotas diretamente na Vercel.
@@ -92,9 +109,19 @@ O tarot começou como jogo de triunfos na Europa do século XV, passou a ser usa
 
 Referência curatorial: [A history of tarot cards — Victoria and Albert Museum](https://www.vam.ac.uk/articles/tarot-cards).
 
-## Próxima camada recomendada
+## Agente 911 — publicar na Vercel
 
-Autenticação, diário sincronizado, leitura diária, confirmação server-side de compra e a agente de interpretação podem entrar na Fase 2 sem alterar o ritual central. A versão atual funciona inteira sem IA.
+A rota `POST /api/agent-911` já está pronta. No projeto da Vercel, abra **Settings → Environment Variables**, adicione `OPENAI_API_KEY` com a sua chave e aplique em Production, Preview e Development conforme a necessidade. Em seguida, faça um novo deploy. Opcionalmente, configure `OPENAI_MODEL=gpt-5.6-terra`; esse já é o modelo padrão do código.
+
+```env
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-5.6-terra
+VITE_AGENT911_ENABLED=true
+```
+
+Nunca use o prefixo `VITE_` na chave secreta. Variáveis `VITE_*` entram no JavaScript público. A pergunta, as cartas e a memória consentida são enviadas somente quando a pessoa aperta o botão do 911. As respostas usam `store: false` no provedor. A memória é uma beta local: fica no navegador atual, não acompanha outro aparelho e pode ser apagada na própria interface.
+
+Para desligar o agente sem remover código, defina `VITE_AGENT911_ENABLED=false` e faça novo deploy. O passo a passo completo está em `AGENTE911-SETUP.md`.
 
 ## Preparar a venda futura
 
@@ -110,6 +137,8 @@ Eventos disponíveis em `window.dataLayer` e no evento DOM `arcane911:commercial
 
 - `free_reading_started`
 - `free_reading_completed`
+- `complete_reading_started`
+- `complete_deck_shuffled`
 - `complete_reading_opened`
 - `offer_opened`
 - `begin_checkout`
