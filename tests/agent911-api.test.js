@@ -353,6 +353,84 @@ test("Gemini troca para Flash-Lite quando o principal interrompe o JSON por limi
   }
 });
 
+test("uma paráfrase pessoal não vira 502 quando só a checagem lexical da pergunta falha", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWarn = console.warn;
+  const originalProvider = process.env.AGENT911_PROVIDER;
+  const originalKey = process.env.GEMINI_API_KEY;
+  const originalModel = process.env.GEMINI_MODEL;
+  const originalFallback = process.env.GEMINI_FALLBACK_MODEL;
+  const calls = [];
+  const warnings = [];
+  const paraphrasedReading = {
+    ...modelReading(),
+    title: "A escolha que já amadureceu",
+    opening: "A mesa encontra uma tensão entre impulso, evidência e escolha consciente.",
+    sections: [{
+      ...modelReading().sections[0],
+      title: "O desenho da mesa",
+      text: `${selected.slice(0, 4).map((card) => card.name).join(", ")} formam o eixo; ${selected.slice(4).map((card) => card.name).join(", ")} mostram que desejo e fatos ainda ocupam lugares diferentes.`,
+    }],
+    synthesis: "O caminho ganha consistência quando desejo, medo e fatos deixam de ocupar o mesmo lugar.",
+    groundedAction: "Escreva o que é fato e o que é interpretação antes da próxima conversa.",
+    suggestedQuestions: [],
+  };
+
+  process.env.AGENT911_PROVIDER = "gemini";
+  process.env.GEMINI_API_KEY = "gemini-paraphrase-secret";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash";
+  process.env.GEMINI_FALLBACK_MODEL = "off";
+  console.warn = (...items) => warnings.push(items);
+  globalThis.fetch = async (_url, options) => {
+    calls.push(JSON.parse(options.body));
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{
+          content: { parts: [{ text: JSON.stringify(paraphrasedReading) }] },
+          finishReason: "STOP",
+        }],
+      }),
+    };
+  };
+
+  try {
+    const body = requestBody();
+    body.action = "complete_summary";
+    body.context.reading.question = "Que movimento pede verdade agora?";
+    const response = mockResponse();
+    await handler({
+      method: "POST",
+      body,
+      headers: {
+        origin: "https://arcane911.vercel.app",
+        host: "arcane911.vercel.app",
+        "x-forwarded-for": "198.51.100.81",
+      },
+      socket: {},
+    }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(calls.length, 2);
+    assert.match(calls[1].systemInstruction.parts[0].text, /palavra ou expressão concreta presente na pergunta/);
+    assert.equal(response.payload.meta.grounded, true);
+    assert.ok(warnings.some((items) => items[0] === "agent911_audit_semantic_paraphrase"));
+    assert.equal(JSON.stringify(warnings).includes(body.context.reading.question), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.warn = originalWarn;
+    if (originalProvider === undefined) delete process.env.AGENT911_PROVIDER;
+    else process.env.AGENT911_PROVIDER = originalProvider;
+    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+    if (originalModel === undefined) delete process.env.GEMINI_MODEL;
+    else process.env.GEMINI_MODEL = originalModel;
+    if (originalFallback === undefined) delete process.env.GEMINI_FALLBACK_MODEL;
+    else process.env.GEMINI_FALLBACK_MODEL = originalFallback;
+  }
+});
+
 test("a rota recusa método diferente de POST sem chamar o provedor", async () => {
   const response = mockResponse();
   await handler({ method: "GET", headers: {}, socket: {} }, response);

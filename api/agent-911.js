@@ -156,9 +156,25 @@ function outputTokenLimit(normalized) {
 }
 
 function repairInstruction(repairReasons) {
-  return repairReasons.length
-    ? `\n\nCORREÇÃO OBRIGATÓRIA: a auditoria anterior rejeitou a resposta por: ${repairReasons.join(", ")}. Refaça a leitura corrigindo esses pontos, sem comentar a auditoria.`
-    : "";
+  if (!repairReasons.length) return "";
+
+  const guidance = repairReasons.map((reason) => {
+    if (reason === "question_not_reflected") {
+      return "A leitura respondeu ao tema por paráfrase, mas precisa conter naturalmente ao menos uma palavra ou expressão concreta presente na pergunta do consulente.";
+    }
+    if (reason === "selected_card_names_missing") {
+      return "Nomeie as cartas selecionadas dentro da interpretação, conectando-as entre si em vez de apenas listá-las.";
+    }
+    return `Corrija o requisito técnico ${reason}.`;
+  }).join(" ");
+
+  return `\n\nCORREÇÃO OBRIGATÓRIA: ${guidance} Refaça a leitura sem comentar a auditoria nem soar mecânica.`;
+}
+
+function isSemanticParaphraseOnly(audit) {
+  return audit?.ok === false
+    && audit.reasons?.length === 1
+    && audit.reasons[0] === "question_not_reflected";
 }
 
 function providerFailure(payload, status, provider) {
@@ -349,6 +365,14 @@ export default async function handler(request, response) {
       providerResult = await callProvider(normalized, provider, audit.reasons);
       reading = providerResult.reading;
       audit = auditAgent911Response(reading, normalized);
+    }
+
+    if (isSemanticParaphraseOnly(audit)) {
+      console.warn("agent911_audit_semantic_paraphrase", {
+        requestId: normalized.requestId,
+        reasons: audit.reasons,
+      });
+      audit = { ok: true, reasons: [], warnings: ["question_not_reflected"] };
     }
 
     if (!audit.ok) {
