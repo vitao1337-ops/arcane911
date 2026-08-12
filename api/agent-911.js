@@ -7,6 +7,7 @@ import {
   buildAgent911ModelInput,
   createAgent911ResponseSchema,
   createGeminiResponseSchema,
+  normalizeAgent911InterpretiveLanguage,
   parseGeminiOutput,
   parseOpenAIOutput,
   validateAgent911Request,
@@ -373,12 +374,12 @@ export default async function handler(request, response) {
   try {
     const normalized = validateAgent911Request(parseBody(request));
     let providerResult = await callProvider(normalized, provider);
-    let reading = providerResult.reading;
+    let reading = normalizeAgent911InterpretiveLanguage(providerResult.reading);
     let audit = auditAgent911Response(reading, normalized);
 
     if (!audit.ok) {
       providerResult = await callProvider(normalized, provider, audit.reasons);
-      reading = providerResult.reading;
+      reading = normalizeAgent911InterpretiveLanguage(providerResult.reading);
       audit = auditAgent911Response(reading, normalized);
     }
 

@@ -496,6 +496,64 @@ const unsupportedCertaintyPatterns = [
   /\b(?:inevit[aá]vel|inevitavelmente|[uú]nica certeza)\b/iu,
 ];
 
+function withMatchedCase(match, replacement) {
+  return /^\p{Lu}/u.test(match) ? `${replacement[0].toUpperCase()}${replacement.slice(1)}` : replacement;
+}
+
+function lowerInitial(value) {
+  return value ? `${value[0].toLocaleLowerCase("pt-BR")}${value.slice(1)}` : value;
+}
+
+function softenInterpretiveText(value) {
+  return String(value ?? "")
+    .replace(/\bn[aã]o [eé] (?:o )?amor\b/giu, (match) => withMatchedCase(match, "pode não ser apenas amor"))
+    .replace(
+      /\b((?:esta|essa|a|sua|seu|o)\s+(?:hist[oó]ria|rela[cç][aã]o|relacionamento|ciclo|din[aâ]mica)\s*(?:atual\s+)?)(?:j[aá]\s+)?(?:acabou|terminou|se esgotou|se encerrou|est[aá] encerrad[ao])\b/giu,
+      (match, subject) => withMatchedCase(match, `vale observar se ${lowerInitial(subject.trim())} chegou ao limite`),
+    )
+    .replace(
+      /\b(?:o|seu) conflito (?:central|real) (n[aã]o )?[eé]\b/giu,
+      (match, negative) => withMatchedCase(
+        match,
+        negative
+          ? "uma hipótese a examinar é que o conflito talvez não esteja em"
+          : "uma hipótese central a examinar é",
+      ),
+    )
+    .replace(/\bapego infantil\b/giu, (match) => withMatchedCase(match, "apego que busca segurança"))
+    .replace(/\bdepend[eê]ncia m[uú]tua\b/giu, (match) => withMatchedCase(match, "dinâmica de dependência que vale examinar"))
+    .replace(/\bvoc[eê] (?:j[aá]\s+)?sabe o que quer\b/giu, (match) => withMatchedCase(match, "pode ser que uma parte sua já saiba o que deseja"))
+    .replace(
+      /\b(?:gerar[aá]|causar[aá]|levar[aá])\s+(?:inevitavelmente\s+)?(ressentimento|arrependimento|sofrimento|fracasso)\b/giu,
+      (match, outcome) => withMatchedCase(match, `pode alimentar ${outcome}`),
+    )
+    .replace(/\binevitavelmente\b/giu, (match) => withMatchedCase(match, "se o padrão continuar"))
+    .replace(/\binevit[aá]vel\b/giu, (match) => withMatchedCase(match, "difícil de adiar no caminho atual"))
+    .replace(/\b[uú]nica certeza\b/giu, (match) => withMatchedCase(match, "evidência mais concreta disponível"));
+}
+
+export function normalizeAgent911InterpretiveLanguage(response) {
+  if (!response || typeof response !== "object" || response.responseMode !== "reading") return response;
+  return {
+    ...response,
+    title: softenInterpretiveText(response.title),
+    opening: softenInterpretiveText(response.opening),
+    synthesis: softenInterpretiveText(response.synthesis),
+    groundedAction: softenInterpretiveText(response.groundedAction),
+    closingQuestion: softenInterpretiveText(response.closingQuestion),
+    sections: Array.isArray(response.sections)
+      ? response.sections.map((section) => ({
+        ...section,
+        title: softenInterpretiveText(section?.title),
+        text: softenInterpretiveText(section?.text),
+      }))
+      : response.sections,
+    suggestedQuestions: Array.isArray(response.suggestedQuestions)
+      ? response.suggestedQuestions.map(softenInterpretiveText)
+      : response.suggestedQuestions,
+  };
+}
+
 const genericOpeningPatterns = [
   /^(?:a mesa|as cartas|esta leitura|o tarot)\s+(?:mostra|mostram|revela|revelam|indica|indicam|pede|pedem)\b/iu,
   /^(?:há|existe)\s+(?:uma|um)\s+(?:energia|movimento|tensão|tensao)\b/iu,

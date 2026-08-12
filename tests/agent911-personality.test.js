@@ -7,6 +7,7 @@ import {
   AGENT911_INSTRUCTIONS,
   auditAgent911Response,
   buildAgent911ModelInput,
+  normalizeAgent911InterpretiveLanguage,
   validateAgent911Request,
 } from "../server/agent911-core.js";
 
@@ -137,6 +138,12 @@ test("a auditoria rejeita sentença afetiva e rótulo psicológico disfarçados 
   assert.ok(auditAgent911Response(certainty, normalized).reasons.includes("unsupported_certainty_language"));
   assert.ok(auditAgent911Response(labeled, normalized).reasons.includes("unsupported_certainty_language"));
   assert.ok(auditAgent911Response(foretold, normalized).reasons.includes("unsupported_certainty_language"));
+
+  const softened = normalizeAgent911InterpretiveLanguage(foretold);
+  assert.equal(auditAgent911Response(softened, normalized).ok, true);
+  assert.match(softened.synthesis, /vale observar se o ciclo atual chegou ao limite/i);
+  assert.match(softened.synthesis, /pode ser que uma parte sua já saiba/i);
+  assert.match(softened.synthesis, /pode alimentar ressentimento/i);
 });
 
 test("o modo conectado espera o Gemini e não exibe uma leitura local provisória", () => {

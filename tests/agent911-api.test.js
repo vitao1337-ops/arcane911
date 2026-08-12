@@ -144,6 +144,9 @@ test("Gemini é o provedor principal, recebe schema compatível e mantém a chav
   const originalModel = process.env.GEMINI_MODEL;
   const originalFallback = process.env.GEMINI_FALLBACK_MODEL;
   let providerCall;
+  let providerCallCount = 0;
+  const overconfidentReading = modelReading();
+  overconfidentReading.synthesis = "O ciclo atual se encerrou e permanecer gerará ressentimento.";
 
   delete process.env.AGENT911_PROVIDER;
   process.env.GEMINI_API_KEY = "gemini-secret-never-return";
@@ -151,13 +154,14 @@ test("Gemini é o provedor principal, recebe schema compatível e mantém a chav
   process.env.GEMINI_MODEL = "gemini-3.5-flash";
   process.env.GEMINI_FALLBACK_MODEL = "off";
   globalThis.fetch = async (url, options) => {
+    providerCallCount += 1;
     providerCall = { url, options, body: JSON.parse(options.body) };
     return {
       ok: true,
       status: 200,
       json: async () => ({
         candidates: [{
-          content: { parts: [{ text: JSON.stringify(modelReading()) }] },
+          content: { parts: [{ text: JSON.stringify(overconfidentReading) }] },
           finishReason: "STOP",
         }],
       }),
@@ -201,6 +205,9 @@ test("Gemini é o provedor principal, recebe schema compatível e mantém a chav
     assert.equal(response.payload.meta.provider, "gemini");
     assert.equal(response.payload.meta.model, "gemini-3.5-flash");
     assert.equal(response.payload.meta.usedFallbackModel, false);
+    assert.equal(providerCallCount, 1);
+    assert.match(response.payload.reading.synthesis, /vale observar se o ciclo atual chegou ao limite/i);
+    assert.match(response.payload.reading.synthesis, /pode alimentar ressentimento/i);
     assert.equal(JSON.stringify(response.payload).includes("gemini-secret-never-return"), false);
     assert.equal(JSON.stringify(response.payload).includes("legacy-openai-secret"), false);
   } finally {
