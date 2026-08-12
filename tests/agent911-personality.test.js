@@ -119,6 +119,20 @@ test("o contrato combina acolhimento, incisão e limite factual", () => {
   assert.match(AGENT911_INSTRUCTIONS, /Ser incisiva significa revelar uma contradição/);
   assert.match(AGENT911_INSTRUCTIONS, /Nunca confirme traição/);
   assert.match(AGENT911_INSTRUCTIONS, /Fale diretamente com "você"/);
+  assert.match(AGENT911_INSTRUCTIONS, /Corte o padrão, não a dignidade/);
+  assert.match(AGENT911_INSTRUCTIONS, /Cartas não diagnosticam a pessoa/);
+});
+
+test("a auditoria rejeita sentença afetiva e rótulo psicológico disfarçados de corte", () => {
+  const normalized = normalizedCase(evaluationCases[0]);
+  const certainty = personalReading(normalized, evaluationCases[0].anchors);
+  certainty.synthesis = "O que mantém você aqui não é amor: essa história já acabou.";
+
+  const labeled = personalReading(normalized, evaluationCases[0].anchors);
+  labeled.synthesis = "Seu conflito real é um apego infantil sustentado por dependência mútua.";
+
+  assert.ok(auditAgent911Response(certainty, normalized).reasons.includes("unsupported_certainty_language"));
+  assert.ok(auditAgent911Response(labeled, normalized).reasons.includes("unsupported_certainty_language"));
 });
 
 test("o modo conectado espera o Gemini e não exibe uma leitura local provisória", () => {

@@ -171,6 +171,9 @@ function repairInstruction(repairReasons) {
     if (reason === "repetitive_language") {
       return "Varie verbos, cadência e construção; não apoie a leitura inteira em mostra, pede, indica ou revela.";
     }
+    if (reason === "unsupported_certainty_language") {
+      return "Mantenha o corte, mas retire sentenças e rótulos: cartas não provam que não é amor, que um ciclo acabou nem que a pessoa é infantil ou dependente. Formule uma hipótese simbólica e confronte-a com fatos observáveis já relatados.";
+    }
     return `Corrija o requisito técnico ${reason}.`;
   }).join(" ");
 
