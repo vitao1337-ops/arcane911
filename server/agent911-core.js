@@ -175,6 +175,7 @@ MÉTODO DE LEITURA
 12. Não transforme símbolo em sentença. Nunca declare como fato que "não é amor", que uma história ou ciclo "já acabou", que o vínculo é dependência, que o conflito é infantilidade ou que você conhece a verdade oculta da pessoa.
 13. Não diga que a pessoa "já sabe o que quer", que está escondendo uma verdade ou que uma escolha gerará inevitavelmente determinada emoção. Quando isso não foi relatado, use "vale investigar se" e proponha um critério verificável.
 14. A posição "oculta" autoriza uma pergunta simbólica, não uma alegação sobre segredo, acordo inconsciente, dependência familiar ou motivo que a pessoa não contou.
+15. Não use "infantil" para qualificar medo, apego ou comportamento. E não faça pergunta carregada que já presuma culpa, dependência ou motivo; peça evidências que sustentem ou contradigam a hipótese.
 
 PERSONALIDADE E ESTILO
 - Escreva em português brasileiro natural, sofisticado e compreensível.
@@ -492,8 +493,8 @@ const unsupportedCertaintyPatterns = [
 const interpretiveOverreachPatterns = [
   /\bn[aã]o [eé] (?:o )?amor\b/iu,
   /\b(?:esta|essa|a|sua|seu|o)\s+(?:hist[oó]ria|rela[cç][aã]o|relacionamento|ciclo|din[aâ]mica|estrutura|configura[cç][aã]o|formato|estabilidade)\b.{0,45}\b(?:acabou|terminou|se esgotou|se encerrou|est[aá] encerrad[ao]|est[aá] se encerrando|processo de esgotamento)\b/iu,
-  /\b(?:(?:o|a)\s+)?seu conflito (?:central|real) (?:n[aã]o )?[eé]/iu,
-  /\bapego infantil\b/iu,
+  /\b(?:(?:o|a)\s+)?(?:seu\s+)?conflito (?:central|real) (?:n[aã]o )?(?:[eé]|est[aá])/iu,
+  /\b\p{L}+ infantil\b/iu,
   /\bdepend[eê]ncia m[uú]tua\b/iu,
   /\bvoc[eê] (?:j[aá]\s+)?sabe o que quer\b/iu,
   /\b(?:gera|causa|leva a|gerar[aá]|causar[aá]|levar[aá])\s+(?:inevitavelmente\s+)?(?:um\s+)?(?:ressentimento|arrependimento|sofrimento|fracasso)\b/iu,
@@ -504,6 +505,10 @@ const interpretiveOverreachPatterns = [
   /(?:^|\s)(?:[eé]|seria),?\s+na verdade\b/iu,
   /\bse voc[eê] descobrir que\b/iu,
   /\bn[aã]o precisar[aá] (?:testar|encarar|assumir)\b/iu,
+  /\bpacto de prote[cç][aã]o\b/iu,
+  /\bque voc[eê] mant[eé]m em sil[eê]ncio\b/iu,
+  /\bguarda um sil[eê]ncio que sabe exatamente\b/iu,
+  /\bo que .{0,100} faz voc[eê] acreditar que\b/iu,
 ];
 
 function withMatchedCase(match, replacement) {
@@ -522,11 +527,13 @@ function softenInterpretiveText(value, { frameRemainingOverreach = true } = {}) 
       (match, subject) => withMatchedCase(match, `${lowerInitial(subject.trim())} pode estar chegando ao limite`),
     )
     .replace(
-      /\b(?:(?:o|a)\s+)?seu conflito (?:central|real) (n[aã]o )?[eé]/giu,
-      (match, negative) => withMatchedCase(
+      /\b(?:(?:o|a)\s+)?(?:seu\s+)?conflito (?:central|real) (n[aã]o )?([eé]|est[aá])/giu,
+      (match, negative, verb) => withMatchedCase(
         match,
         negative
-          ? "o conflito talvez não seja apenas"
+          ? normalizeForGrounding(verb) === "esta"
+            ? "o conflito talvez não esteja apenas"
+            : "o conflito talvez não seja apenas"
           : "o conflito pode estar em",
       ),
     )
@@ -534,13 +541,27 @@ function softenInterpretiveText(value, { frameRemainingOverreach = true } = {}) 
       /\b(?:as cartas|a mesa)\s+(?:mostram|mostra|apontam|aponta|revelam|revela) que\b/giu,
       (match) => withMatchedCase(match, "a combinação levanta a hipótese de que"),
     )
-    .replace(/\bapego infantil\b/giu, (match) => withMatchedCase(match, "apego que busca segurança"))
+    .replace(/\b(\p{L}+) infantil\b/giu, (match, label) => withMatchedCase(
+      match,
+      normalizeForGrounding(label) === "medo"
+        ? "medo de provocar uma ruptura"
+        : `${label} que busca segurança`,
+    ))
     .replace(/\bdepend[eê]ncia m[uú]tua\b/giu, (match) => withMatchedCase(match, "dinâmica de dependência que vale examinar"))
     .replace(/\bvoc[eê] (?:j[aá]\s+)?sabe o que quer\b/giu, (match) => withMatchedCase(match, "pode ser que uma parte sua já saiba o que deseja"))
     .replace(/\bvoc[eê] guarda um saber\b/giu, (match) => withMatchedCase(match, "pode haver em você uma percepção"))
     .replace(/\bvoc[eê] (?:tem usado|usa)\b/giu, (match) => withMatchedCase(match, "vale observar se você tem usado"))
     .replace(/\b(?:voc[eê]\s+)?prefere abafar\b/giu, (match) => withMatchedCase(match, "talvez esteja abafando"))
     .replace(/\b(?:acordo|pacto) (?:inconsciente|silencioso|oculto)\b/giu, (match) => withMatchedCase(match, "possível padrão de proteção não nomeado"))
+    .replace(/\bpacto de prote[cç][aã]o\b/giu, (match) => withMatchedCase(match, "necessidade de proteção que vale examinar"))
+    .replace(/\bque voc[eê] mant[eé]m em sil[eê]ncio\b/giu, (match) => withMatchedCase(match, "que talvez ainda não tenha sido nomeada"))
+    .replace(
+      /\b((?:A|O|Os) \p{L}+(?: \p{L}+){0,3}) guarda um sil[eê]ncio que sabe exatamente onde\b/giu,
+      (_match, cardName) => `${cardName} transforma o silêncio em uma pergunta: onde`,
+    )
+    .replace(/\bA Morte anuncia que\b/giu, "A Morte levanta a hipótese de que")
+    .replace(/\bO Diabo exp[oõ]e\b/giu, "O Diabo coloca sob suspeita")
+    .replace(/\bA For[cç]a exige que\b/giu, "A Força convida você a")
     .replace(/\b(?:que\s+)?impede voc[eê] de [^.;!?]+/giu, (match) => withMatchedCase(match, "que pode estar limitando seu movimento"))
     .replace(
       /\b(?:gera|causa|leva a|gerar[aá]|causar[aá]|levar[aá])\s+(?:inevitavelmente\s+)?(?:um\s+)?(ressentimento|arrependimento|sofrimento|fracasso)\b/giu,
@@ -548,6 +569,14 @@ function softenInterpretiveText(value, { frameRemainingOverreach = true } = {}) 
     )
     .replace(/(?:^|\s)(?:[eé]|seria),?\s+na verdade,?/giu, (match) => `${/^\s/u.test(match) ? " " : ""}${withMatchedCase(match.trim(), "também pode ser")}`)
     .replace(/\bse voc[eê] descobrir que\b/giu, (match) => withMatchedCase(match, "se você considerar a hipótese de que"))
+    .replace(
+      /^O que na (.+?) faz voc[eê] acreditar que/iu,
+      (_match, context) => `Que evidências na ${context} sustentam — ou contradizem — a ideia de que`,
+    )
+    .replace(
+      /^O que (.+?) faz voc[eê] acreditar que/iu,
+      (_match, context) => `Que evidências em ${context} sustentam — ou contradizem — a ideia de que`,
+    )
     .replace(/\bn[aã]o precisar[aá] (?:testar|encarar|assumir)\b/giu, (match) => withMatchedCase(match, "pode acabar evitando encarar"))
     .replace(/\binevitavelmente\b/giu, (match) => withMatchedCase(match, "se o padrão continuar"))
     .replace(/\binevit[aá]vel\b/giu, (match) => withMatchedCase(match, "difícil de adiar no caminho atual"))

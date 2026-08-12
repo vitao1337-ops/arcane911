@@ -38,6 +38,7 @@ O prompt pedia uma leitura específica, mas a auditoria aceitava somente um term
 - O corte ficou firme sem virar sentença: o prompt e a auditoria agora barram rótulos psicológicos, futuros garantidos e afirmações factuais como "não é amor", "a história acabou", "isso gerará ressentimento", "você já sabe" ou "apego infantil"; a leitura precisa formular hipótese simbólica e apontar evidência observável.
 - Formulações interpretativas corrigíveis são suavizadas no servidor antes da auditoria. Isso preserva a força da leitura, evita um segundo consumo do provedor e mantém bloqueios duros para previsões factuais perigosas.
 - Alegações de dinâmica familiar oculta também entram nesse filtro: a posição oculta abre uma hipótese, mas não autoriza inventar pacto, dependência ou motivação de terceiros.
+- Rótulos como "medo infantil" são removidos, e perguntas carregadas passam a pedir evidências a favor e contra a hipótese em vez de embutir uma conclusão.
 - Problemas apenas estilísticos não derrubam uma resposta segura depois da tentativa de reparo; violações de cartas, estrutura ou certeza continuam bloqueadas.
 - O baralho visual agora usa Fisher–Yates com `crypto.getRandomValues` nos navegadores modernos.
 - Uma nova embaralhada evita sobreposição excessiva e cartas presas às mesmas posições, respeitando os limites matemáticos do baralho de 22 e do segundo baralho de 19.

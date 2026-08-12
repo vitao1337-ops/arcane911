@@ -138,10 +138,15 @@ test("a auditoria rejeita sentença afetiva e rótulo psicológico disfarçados 
   const familyStory = personalReading(normalized, evaluationCases[0].anchors);
   familyStory.synthesis = "O seu conflito real não é a proposta. As cartas mostram que um acordo inconsciente impede você de seguir.";
 
+  const loadedQuestion = personalReading(normalized, evaluationCases[0].anchors);
+  loadedQuestion.sections[0].text += " A Estrela guarda um silêncio que sabe exatamente onde o medo infantil opera.";
+  loadedQuestion.closingQuestion = "O que na sua relação familiar faz você acreditar que crescer ameaça sua mãe?";
+
   assert.ok(auditAgent911Response(certainty, normalized).reasons.includes("unsupported_certainty_language"));
   assert.ok(auditAgent911Response(labeled, normalized).reasons.includes("unsupported_certainty_language"));
   assert.ok(auditAgent911Response(foretold, normalized).reasons.includes("unsupported_certainty_language"));
   assert.ok(auditAgent911Response(familyStory, normalized).reasons.includes("unsupported_certainty_language"));
+  assert.ok(auditAgent911Response(loadedQuestion, normalized).reasons.includes("unsupported_certainty_language"));
 
   const softened = normalizeAgent911InterpretiveLanguage(foretold);
   assert.equal(auditAgent911Response(softened, normalized).ok, true);
@@ -154,6 +159,11 @@ test("a auditoria rejeita sentença afetiva e rótulo psicológico disfarçados 
   assert.match(softenedFamilyStory.synthesis, /o conflito talvez não seja apenas a proposta/i);
   assert.match(softenedFamilyStory.synthesis, /levanta a hipótese/i);
   assert.doesNotMatch(softenedFamilyStory.synthesis, /acordo inconsciente|impede você/i);
+
+  const softenedLoadedQuestion = normalizeAgent911InterpretiveLanguage(loadedQuestion);
+  assert.equal(auditAgent911Response(softenedLoadedQuestion, normalized).ok, true);
+  assert.doesNotMatch(softenedLoadedQuestion.sections[0].text, /medo infantil|silêncio que sabe/i);
+  assert.match(softenedLoadedQuestion.closingQuestion, /Que evidências.+sustentam — ou contradizem/i);
 });
 
 test("o modo conectado espera o Gemini e não exibe uma leitura local provisória", () => {
