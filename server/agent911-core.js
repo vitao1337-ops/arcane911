@@ -176,6 +176,7 @@ MÉTODO DE LEITURA
 13. Não diga que a pessoa "já sabe o que quer", que está escondendo uma verdade ou que uma escolha gerará inevitavelmente determinada emoção. Quando isso não foi relatado, use "vale investigar se" e proponha um critério verificável.
 14. A posição "oculta" autoriza uma pergunta simbólica, não uma alegação sobre segredo, acordo inconsciente, dependência familiar ou motivo que a pessoa não contou.
 15. Não use "infantil" para qualificar medo, apego ou comportamento. E não faça pergunta carregada que já presuma culpa, dependência ou motivo; peça evidências que sustentem ou contradigam a hipótese.
+16. Não invente prazo para testar uma atitude. Se a pergunta não trouxe data, use a próxima ocorrência observável ou um critério concreto, nunca "em sete dias", "neste mês" ou equivalente.
 
 PERSONALIDADE E ESTILO
 - Escreva em português brasileiro natural, sofisticado e compreensível.
@@ -492,7 +493,7 @@ const unsupportedCertaintyPatterns = [
 
 const interpretiveOverreachPatterns = [
   /\bn[aã]o [eé] (?:o )?amor\b/iu,
-  /\b(?:esta|essa|a|sua|seu|o)\s+(?:hist[oó]ria|rela[cç][aã]o|relacionamento|ciclo|din[aâ]mica|estrutura|configura[cç][aã]o|formato|estabilidade)\b.{0,45}\b(?:acabou|terminou|se esgotou|se encerrou|est[aá] encerrad[ao]|est[aá] se encerrando|processo de esgotamento)\b/iu,
+  /\b(?:esta|essa|a|sua|seu|o)\s+(?:hist[oó]ria|rela[cç][aã]o|relacionamento|ciclo|din[aâ]mica|estrutura|configura[cç][aã]o|formato|estabilidade)\b.{0,45}\b(?:acabou|terminou|se esgotou|se encerrou|est[aá] encerrad[ao]|est[aá] se encerrando|processo de esgotamento|precisa acabar)\b/iu,
   /\b(?:(?:o|a)\s+)?(?:seu\s+)?conflito (?:central|real) (?:n[aã]o )?(?:[eé]|est[aá])/iu,
   /\b\p{L}+ infantil\b/iu,
   /\bdepend[eê]ncia m[uú]tua\b/iu,
@@ -504,7 +505,7 @@ const interpretiveOverreachPatterns = [
   /\b(?:voc[eê]\s+)?(?:esconde|oculta|reprime|abafa|guarda um saber)\b/iu,
   /(?:^|\s)(?:[eé]|seria),?\s+na verdade\b/iu,
   /\bse voc[eê] descobrir que\b/iu,
-  /\bn[aã]o precisar[aá] (?:testar|encarar|assumir)\b/iu,
+  /\bn[aã]o precisa(?:r[aá])? (?:testar|encarar|assumir|enfrentar)\b/iu,
   /\bpacto de prote[cç][aã]o\b/iu,
   /\bque voc[eê] mant[eé]m em sil[eê]ncio\b/iu,
   /\bguarda um sil[eê]ncio que sabe exatamente\b/iu,
@@ -523,7 +524,7 @@ function softenInterpretiveText(value, { frameRemainingOverreach = true } = {}) 
   const softened = String(value ?? "")
     .replace(/\bn[aã]o [eé] (?:o )?amor\b/giu, (match) => withMatchedCase(match, "pode não ser apenas amor"))
     .replace(
-      /\b((?:esta|essa|a|sua|seu|o)\s+(?:hist[oó]ria|rela[cç][aã]o|relacionamento|ciclo|din[aâ]mica|estrutura|configura[cç][aã]o|formato|estabilidade)\s*(?:atual\s+)?)(?:j[aá]\s+)?(?:acabou|terminou|se esgotou|se encerrou|est[aá] encerrad[ao]|est[aá] se encerrando|est[aá] em processo de esgotamento)\b/giu,
+      /\b((?:esta|essa|a|sua|seu|o)\s+(?:hist[oó]ria|rela[cç][aã]o|relacionamento|ciclo|din[aâ]mica|estrutura|configura[cç][aã]o|formato|estabilidade)\s*(?:atual\s+)?)(?:j[aá]\s+)?(?:acabou|terminou|se esgotou|se encerrou|est[aá] encerrad[ao]|est[aá] se encerrando|est[aá] em processo de esgotamento|precisa acabar)\b/giu,
       (match, subject) => withMatchedCase(match, `${lowerInitial(subject.trim())} pode estar chegando ao limite`),
     )
     .replace(
@@ -552,6 +553,10 @@ function softenInterpretiveText(value, { frameRemainingOverreach = true } = {}) 
     .replace(/\bvoc[eê] guarda um saber\b/giu, (match) => withMatchedCase(match, "pode haver em você uma percepção"))
     .replace(/\bvoc[eê] (?:tem usado|usa)\b/giu, (match) => withMatchedCase(match, "vale observar se você tem usado"))
     .replace(/\b(?:voc[eê]\s+)?prefere abafar\b/giu, (match) => withMatchedCase(match, "talvez esteja abafando"))
+    .replace(
+      /\b(?:acordo|pacto) (?:inconsciente|silencioso|oculto) que voc[eê] faz\b/giu,
+      (match) => withMatchedCase(match, "movimento que vale examinar e que você faz"),
+    )
     .replace(/\b(?:acordo|pacto) (?:inconsciente|silencioso|oculto)\b/giu, (match) => withMatchedCase(match, "possível padrão de proteção não nomeado"))
     .replace(/\bpacto de prote[cç][aã]o\b/giu, (match) => withMatchedCase(match, "necessidade de proteção que vale examinar"))
     .replace(/\bque voc[eê] mant[eé]m em sil[eê]ncio\b/giu, (match) => withMatchedCase(match, "que talvez ainda não tenha sido nomeada"))
@@ -577,7 +582,15 @@ function softenInterpretiveText(value, { frameRemainingOverreach = true } = {}) 
       /^O que (.+?) faz voc[eê] acreditar que/iu,
       (_match, context) => `Que evidências em ${context} sustentam — ou contradizem — a ideia de que`,
     )
-    .replace(/\bn[aã]o precisar[aá] (?:testar|encarar|assumir)\b/giu, (match) => withMatchedCase(match, "pode acabar evitando encarar"))
+    .replace(/\bn[aã]o precisa(?:r[aá])? (?:testar|encarar|assumir|enfrentar)\b/giu, (match) => withMatchedCase(match, "pode acabar evitando encarar"))
+    .replace(
+      /\bmostrando como o medo da solid[aã]o projeta\b/giu,
+      "e abre a pergunta: o medo da solidão está projetando",
+    )
+    .replace(
+      /\bnos pr[oó]ximos \d{1,3} dias\b/giu,
+      "na próxima oportunidade concreta de observar isso",
+    )
     .replace(/\binevitavelmente\b/giu, (match) => withMatchedCase(match, "se o padrão continuar"))
     .replace(/\binevit[aá]vel\b/giu, (match) => withMatchedCase(match, "difícil de adiar no caminho atual"))
     .replace(/\b[uú]nica certeza\b/giu, (match) => withMatchedCase(match, "evidência mais concreta disponível"));

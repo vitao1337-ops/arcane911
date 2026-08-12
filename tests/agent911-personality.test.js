@@ -141,6 +141,7 @@ test("a auditoria rejeita sentença afetiva e rótulo psicológico disfarçados 
   const loadedQuestion = personalReading(normalized, evaluationCases[0].anchors);
   loadedQuestion.sections[0].text += " A Estrela guarda um silêncio que sabe exatamente onde o medo infantil opera.";
   loadedQuestion.closingQuestion = "O que na sua relação familiar faz você acreditar que crescer ameaça sua mãe?";
+  loadedQuestion.groundedAction = "Se nenhuma condição estiver presente nos próximos 7 dias, encerre a espera.";
 
   assert.ok(auditAgent911Response(certainty, normalized).reasons.includes("unsupported_certainty_language"));
   assert.ok(auditAgent911Response(labeled, normalized).reasons.includes("unsupported_certainty_language"));
@@ -164,6 +165,8 @@ test("a auditoria rejeita sentença afetiva e rótulo psicológico disfarçados 
   assert.equal(auditAgent911Response(softenedLoadedQuestion, normalized).ok, true);
   assert.doesNotMatch(softenedLoadedQuestion.sections[0].text, /medo infantil|silêncio que sabe/i);
   assert.match(softenedLoadedQuestion.closingQuestion, /Que evidências.+sustentam — ou contradizem/i);
+  assert.doesNotMatch(softenedLoadedQuestion.groundedAction, /próximos 7 dias/i);
+  assert.match(softenedLoadedQuestion.groundedAction, /próxima oportunidade concreta/i);
 });
 
 test("o modo conectado espera o Gemini e não exibe uma leitura local provisória", () => {
