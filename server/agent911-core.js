@@ -585,11 +585,12 @@ const unsupportedCertaintyPatterns = [
 
 const interpretiveOverreachPatterns = [
   /\bn[aã]o [eé] (?:o )?amor\b/iu,
-  /\b(?:esta|essa|a|sua|seu|o)\s+(?:hist[oó]ria|rela[cç][aã]o|relacionamento|ciclo|din[aâ]mica|estrutura|configura[cç][aã]o|formato|estabilidade)\b.{0,45}\b(?:acabou|terminou|se esgotou|se encerrou|est[aá] encerrad[ao]|est[aá] se encerrando|processo de esgotamento|precisa acabar)\b/iu,
+  /\b(?:esta|essa|a|sua|seu|o)\s+(?:hist[oó]ria|rela[cç][aã]o|relacionamento|ciclo|din[aâ]mica|estrutura|configura[cç][aã]o|formato|estabilidade)\b.{0,45}\b(?:acabou|terminou|saturou|se esgotou|se encerrou|est[aá] saturad[ao]|est[aá] esgotad[ao]|est[aá] encerrad[ao]|est[aá] se encerrando|processo de esgotamento|precisa acabar)\b/iu,
   /\b(?:(?:o|a)\s+)?(?:seu\s+)?conflito (?:central|real) (?:n[aã]o )?(?:[eé]|est[aá])/iu,
   /\b\p{L}+ infantil\b/iu,
   /\bdepend[eê]ncia m[uú]tua\b/iu,
   /\bvoc[eê] (?:j[aá]\s+)?sabe o que quer\b/iu,
+  /\bvoc[eê] (?:j[aá]\s+)?sabe que\b/iu,
   /\b(?:gera|causa|leva a|gerar[aá]|causar[aá]|levar[aá])\s+(?:inevitavelmente\s+)?(?:um\s+)?(?:ressentimento|arrependimento|sofrimento|fracasso)\b/iu,
   /\b(?:inevit[aá]vel|inevitavelmente|[uú]nica certeza)\b/iu,
   /\b(?:acordo|pacto) (?:inconsciente|silencioso|oculto)\b/iu,
@@ -616,7 +617,7 @@ function softenInterpretiveText(value, { frameRemainingOverreach = true } = {}) 
   const softened = String(value ?? "")
     .replace(/\bn[aã]o [eé] (?:o )?amor\b/giu, (match) => withMatchedCase(match, "pode não ser apenas amor"))
     .replace(
-      /\b((?:esta|essa|a|sua|seu|o)\s+(?:hist[oó]ria|rela[cç][aã]o|relacionamento|ciclo|din[aâ]mica|estrutura|configura[cç][aã]o|formato|estabilidade)\s*(?:atual\s+)?)(?:j[aá]\s+)?(?:acabou|terminou|se esgotou|se encerrou|est[aá] encerrad[ao]|est[aá] se encerrando|est[aá] em processo de esgotamento|precisa acabar)\b/giu,
+      /\b((?:esta|essa|a|sua|seu|o)\s+(?:hist[oó]ria|rela[cç][aã]o|relacionamento|ciclo|din[aâ]mica|estrutura|configura[cç][aã]o|formato|estabilidade)\s*(?:atual\s+)?)(?:j[aá]\s+)?(?:acabou|terminou|saturou|se esgotou|se encerrou|est[aá] saturad[ao]|est[aá] esgotad[ao]|est[aá] encerrad[ao]|est[aá] se encerrando|est[aá] em processo de esgotamento|precisa acabar)\b/giu,
       (match, subject) => withMatchedCase(match, `${lowerInitial(subject.trim())} pode estar chegando ao limite`),
     )
     .replace(
@@ -642,6 +643,8 @@ function softenInterpretiveText(value, { frameRemainingOverreach = true } = {}) 
     ))
     .replace(/\bdepend[eê]ncia m[uú]tua\b/giu, (match) => withMatchedCase(match, "dinâmica de dependência que vale examinar"))
     .replace(/\bvoc[eê] (?:j[aá]\s+)?sabe o que quer\b/giu, (match) => withMatchedCase(match, "pode ser que uma parte sua já saiba o que deseja"))
+    .replace(/\bque voc[eê] (?:j[aá]\s+)?sabe que acabou\b/giu, "que talvez já esteja chegando ao limite")
+    .replace(/\bvoc[eê] (?:j[aá]\s+)?sabe que\b/giu, (match) => withMatchedCase(match, "vale investigar se você percebe que"))
     .replace(/\bvoc[eê] guarda um saber\b/giu, (match) => withMatchedCase(match, "pode haver em você uma percepção"))
     .replace(/\bvoc[eê] (?:tem usado|usa)\b/giu, (match) => withMatchedCase(match, "vale observar se você tem usado"))
     .replace(/\b(?:voc[eê]\s+)?prefere abafar\b/giu, (match) => withMatchedCase(match, "talvez esteja abafando"))
@@ -657,6 +660,7 @@ function softenInterpretiveText(value, { frameRemainingOverreach = true } = {}) 
       (_match, cardName) => `${cardName} transforma o silêncio em uma pergunta: onde`,
     )
     .replace(/\bA Morte anuncia que\b/giu, "A Morte levanta a hipótese de que")
+    .replace(/\bA Morte executa o corte necess[aá]rio\b/giu, "A Morte coloca em cena um corte que pode ser necessário")
     .replace(/\bO Diabo exp[oõ]e\b/giu, "O Diabo coloca sob suspeita")
     .replace(/\bA For[cç]a exige que\b/giu, "A Força convida você a")
     .replace(/\b(?:que\s+)?impede voc[eê] de [^.;!?]+/giu, (match) => withMatchedCase(match, "que pode estar limitando seu movimento"))

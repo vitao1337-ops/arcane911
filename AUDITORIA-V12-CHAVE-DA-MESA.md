@@ -47,7 +47,7 @@ A interface explica que fatos e contexto ajudam o 911 a interpretar a situação
 
 ## Validação
 
-- 63 testes automatizados aprovados nesta etapa.
+- 64 testes automatizados aprovados nesta etapa.
 - Build Vite de produção aprovado.
 - Testes novos cobrem as três posturas, classificação binária, fatos protegidos, normalização de saída, cache por modo, transmissão cliente-servidor e regras estruturais de centralização.
 - Versão do pacote: `0.13.0`.

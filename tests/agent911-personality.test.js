@@ -169,6 +169,39 @@ test("a auditoria rejeita sentença afetiva e rótulo psicológico disfarçados 
   assert.match(softenedLoadedQuestion.groundedAction, /próxima oportunidade concreta/i);
 });
 
+test("a lapidação preserva o corte sem declarar ciclo saturado ou verdade já conhecida", () => {
+  const normalized = validateAgent911Request({
+    agent: "agent-911",
+    requestId: "eval-lapidacao",
+    action: "opening_summary",
+    memoryConsent: false,
+    context: {
+      reading: {
+        id: "reading-lapidacao",
+        createdAt: "2026-08-12T19:20:00.000Z",
+        intentId: "trabalho",
+        intentLabel: "Trabalho",
+        question: evaluationCases[1].question,
+        cards: [tarotCards[1], tarotCards[11], tarotCards[13]].map((card, index) => ({
+          slug: card.slug,
+          position: { id: positions[index].id },
+        })),
+      },
+    },
+  });
+  const response = personalReading(normalized, evaluationCases[1].anchors);
+  response.sections[0].text += " A Morte executa o corte necessário: o ciclo da sua estabilidade atual está saturado.";
+  response.closingQuestion = "Você está adiando o fim de um ciclo que você já sabe que acabou?";
+
+  const softened = normalizeAgent911InterpretiveLanguage(response);
+  assert.doesNotMatch(softened.sections[0].text, /executa o corte necessário|está saturado/iu);
+  assert.match(softened.sections[0].text, /pode ser necessário/iu);
+  assert.match(softened.sections[0].text, /pode estar chegando ao limite/iu);
+  assert.doesNotMatch(softened.closingQuestion, /você já sabe que acabou/iu);
+  assert.match(softened.closingQuestion, /talvez já esteja chegando ao limite/iu);
+  assert.equal(auditAgent911Response(softened, normalized).ok, true);
+});
+
 test("o modo conectado espera o Gemini e não exibe uma leitura local provisória", () => {
   const summary = readFileSync(
     fileURLToPath(new URL("../src/components/Agent911Summary.jsx", import.meta.url)),
