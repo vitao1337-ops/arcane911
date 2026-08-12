@@ -151,8 +151,8 @@ function resolveProvider() {
 function outputTokenLimit(normalized) {
   const isSummary = normalized.action === "opening_summary" || normalized.action === "complete_summary";
   return isSummary
-    ? normalized.reading.cardSlugs.length === 7 ? 1_500 : 1_000
-    : normalized.reading.cardSlugs.length === 7 ? 3_200 : 2_200;
+    ? normalized.reading.cardSlugs.length === 7 ? 6_144 : 4_096
+    : normalized.reading.cardSlugs.length === 7 ? 8_192 : 6_144;
 }
 
 function repairInstruction(repairReasons) {
@@ -267,6 +267,10 @@ async function callGemini(normalized, provider, repairReasons = []) {
                 maxOutputTokens: outputTokenLimit(normalized),
                 responseMimeType: "application/json",
                 responseJsonSchema: createGeminiResponseSchema(normalized.reading.cardSlugs),
+                thinkingConfig: {
+                  includeThoughts: false,
+                  thinkingLevel: "MINIMAL",
+                },
                 temperature: normalized.action === "complete_summary" ? 1.05 : 0.95,
                 topP: 0.95,
               },

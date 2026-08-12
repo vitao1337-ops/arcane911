@@ -547,6 +547,17 @@ export function parseOpenAIOutput(payload) {
 }
 
 export function parseGeminiOutput(payload) {
+  const finishReason = String(payload?.candidates?.[0]?.finishReason ?? "").trim();
+  if (finishReason === "MAX_TOKENS") {
+    const error = new Error("gemini_output_truncated");
+    error.status = 502;
+    error.provider = "gemini";
+    error.providerCode = "MAX_TOKENS";
+    error.providerType = "output_truncated";
+    error.providerMessage = "Gemini encerrou a resposta antes de completar o JSON.";
+    throw error;
+  }
+
   const text = Array.isArray(payload?.candidates)
     ? payload.candidates
       .flatMap((candidate) => Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [])

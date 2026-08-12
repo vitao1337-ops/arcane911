@@ -183,6 +183,11 @@ test("Gemini é o provedor principal, recebe schema compatível e mantém a chav
     assert.equal(providerCall.options.headers.Authorization, undefined);
     assert.equal(providerCall.body.store, false);
     assert.equal(providerCall.body.generationConfig.responseMimeType, "application/json");
+    assert.ok(providerCall.body.generationConfig.maxOutputTokens >= 4_096);
+    assert.deepEqual(providerCall.body.generationConfig.thinkingConfig, {
+      includeThoughts: false,
+      thinkingLevel: "MINIMAL",
+    });
     assert.equal(providerCall.body.generationConfig.responseJsonSchema.type, "object");
     assert.equal(JSON.stringify(providerCall.body.generationConfig.responseJsonSchema).includes("maxLength"), false);
     assert.equal(
@@ -261,6 +266,77 @@ test("Gemini troca para Flash-Lite quando o modelo principal esgota a faixa disp
     assert.equal(calls.length, 2);
     assert.match(calls[0], /gemini-3\.5-flash:generateContent$/);
     assert.match(calls[1], /gemini-3\.5-flash-lite:generateContent$/);
+    assert.equal(response.payload.meta.model, "gemini-3.5-flash-lite");
+    assert.equal(response.payload.meta.usedFallbackModel, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.warn = originalWarn;
+    if (originalProvider === undefined) delete process.env.AGENT911_PROVIDER;
+    else process.env.AGENT911_PROVIDER = originalProvider;
+    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+    if (originalModel === undefined) delete process.env.GEMINI_MODEL;
+    else process.env.GEMINI_MODEL = originalModel;
+    if (originalFallback === undefined) delete process.env.GEMINI_FALLBACK_MODEL;
+    else process.env.GEMINI_FALLBACK_MODEL = originalFallback;
+  }
+});
+
+test("Gemini troca para Flash-Lite quando o principal interrompe o JSON por limite de tokens", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWarn = console.warn;
+  const originalProvider = process.env.AGENT911_PROVIDER;
+  const originalKey = process.env.GEMINI_API_KEY;
+  const originalModel = process.env.GEMINI_MODEL;
+  const originalFallback = process.env.GEMINI_FALLBACK_MODEL;
+  const calls = [];
+
+  process.env.AGENT911_PROVIDER = "gemini";
+  process.env.GEMINI_API_KEY = "gemini-truncation-secret";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash";
+  process.env.GEMINI_FALLBACK_MODEL = "gemini-3.5-flash-lite";
+  console.warn = () => {};
+  globalThis.fetch = async (url) => {
+    calls.push(url);
+    if (calls.length === 1) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          candidates: [{
+            content: { parts: [{ text: '{"responseMode":"reading","title":"cortado' }] },
+            finishReason: "MAX_TOKENS",
+          }],
+        }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{
+          content: { parts: [{ text: JSON.stringify(modelReading()) }] },
+          finishReason: "STOP",
+        }],
+      }),
+    };
+  };
+
+  try {
+    const response = mockResponse();
+    await handler({
+      method: "POST",
+      body: requestBody(),
+      headers: {
+        origin: "https://arcane911.vercel.app",
+        host: "arcane911.vercel.app",
+        "x-forwarded-for": "198.51.100.80",
+      },
+      socket: {},
+    }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(calls.length, 2);
     assert.equal(response.payload.meta.model, "gemini-3.5-flash-lite");
     assert.equal(response.payload.meta.usedFallbackModel, true);
   } finally {
