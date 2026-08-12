@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RotateCcw, Sparkles } from "lucide-react";
 import { agent911Config } from "../config/agent911";
+import { normalizeAgent911ReadingMode } from "../config/agent911ReadingModes";
 import { createTarotAgentContext, requestAgent911 } from "../lib/agent911";
 import { buildAgent911Fallback } from "../lib/agent911Fallback";
 import { trackCommercialEvent } from "../lib/checkout";
@@ -31,18 +32,32 @@ function canUseCachedSummary(cached) {
     : cached.source === "live" && ["gemini", "openai"].includes(cached.meta?.provider);
 }
 
+function splitTableVerdict(synthesis, readingMode) {
+  const text = String(synthesis ?? "").trim();
+  if (readingMode !== "sem_rodeios") return { text, verdict: "" };
+
+  const match = text.match(/^Resposta da mesa:\s*(SIM|NÃO|INCONCLUSIVA)\.\s*/iu);
+  if (!match) return { text, verdict: "" };
+  return {
+    text: text.slice(match[0].length).trim(),
+    verdict: match[1].toLocaleUpperCase("pt-BR"),
+  };
+}
+
 export default function Agent911Summary({
   cards,
   intentId,
   intentLabel,
   question,
+  readingMode = "acolhedora",
   createdAt,
   variant = "opening",
   onResult,
 }) {
+  const normalizedReadingMode = normalizeAgent911ReadingMode(readingMode);
   const cacheKey = useMemo(
-    () => `${summaryCacheKey(createdAt, variant, cards)}:${agent911Config.mode}`,
-    [cards, createdAt, variant],
+    () => `${summaryCacheKey(createdAt, variant, cards, normalizedReadingMode)}:${agent911Config.mode}`,
+    [cards, createdAt, normalizedReadingMode, variant],
   );
   const localResult = useMemo(
     () => !agent911Config.remoteEnabled
@@ -91,6 +106,7 @@ export default function Agent911Summary({
         variant,
         card_count: cards.length,
         source: "local",
+        reading_mode: normalizedReadingMode,
       });
       setLoading(false);
       return () => { active = false; };
@@ -106,6 +122,7 @@ export default function Agent911Summary({
       pendingKey,
       requestAgent911(context, {
         action: variant === "complete" ? "complete_summary" : "opening_summary",
+        readingMode: normalizedReadingMode,
         memoryConsent: false,
       }),
     );
@@ -120,6 +137,7 @@ export default function Agent911Summary({
           card_count: cards.length,
           source: "live",
           provider: liveResult.meta?.provider ?? "unknown",
+          reading_mode: normalizedReadingMode,
         });
         setResult(normalized);
         setLoading(false);
@@ -131,6 +149,7 @@ export default function Agent911Summary({
           variant,
           card_count: cards.length,
           reason: requestError?.code ?? "unknown",
+          reading_mode: normalizedReadingMode,
         });
         setResult(null);
         setLoading(false);
@@ -139,7 +158,7 @@ export default function Agent911Summary({
       });
 
     return () => { active = false; };
-  }, [attempt, cacheKey, cards.length, context, localResult, variant]);
+  }, [attempt, cacheKey, cards.length, context, localResult, normalizedReadingMode, variant]);
 
   const isComplete = variant === "complete";
 
@@ -150,6 +169,7 @@ export default function Agent911Summary({
         aria-labelledby={`agent911-summary-title-${variant}`}
         data-agent911-source={loading ? "pending" : "unavailable"}
         data-agent911-provider={loading ? "pending" : "none"}
+        data-agent911-reading-mode={normalizedReadingMode}
       >
         <div className="synthesis-orb agent911-summary-orb" aria-hidden="true">
           <span>✦</span><strong>911</strong>
@@ -191,6 +211,11 @@ export default function Agent911Summary({
   }
 
   const reading = result.reading;
+  const tableVerdict = splitTableVerdict(reading.synthesis, normalizedReadingMode);
+  const verdictClass = tableVerdict.verdict
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 
   return (
     <article
@@ -199,6 +224,7 @@ export default function Agent911Summary({
       data-agent911-source={result.source ?? "live"}
       data-agent911-provider={result.meta?.provider
         ?? (result.source === "local" ? "local" : result.source === "fallback" ? "fallback" : "unknown")}
+      data-agent911-reading-mode={normalizedReadingMode}
     >
       <div className="synthesis-orb agent911-summary-orb" aria-hidden="true">
         <span>✦</span><strong>911</strong>
@@ -218,7 +244,13 @@ export default function Agent911Summary({
         {reading.sections?.map((section) => (
           <p className="agent911-summary-reading" key={section.id}>{section.text}</p>
         ))}
-        <p>{reading.synthesis}</p>
+        {tableVerdict.verdict ? (
+          <div className={`agent911-table-verdict is-${verdictClass}`}>
+            <span>Resposta da mesa</span>
+            <strong>{tableVerdict.verdict}</strong>
+          </div>
+        ) : null}
+        <p>{tableVerdict.text}</p>
         <div className="agent911-summary-action">
           <Sparkles size={16} />
           <div><span>Seu próximo gesto</span><p>{reading.groundedAction}</p></div>

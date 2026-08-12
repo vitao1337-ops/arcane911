@@ -23,6 +23,11 @@ import {
 import { completePositions, intents, positions, tarotBySlug, tarotCards } from "./data/tarot";
 import { getReadingForIntent, specificReadings } from "./data/products";
 import { agent911Config } from "./config/agent911";
+import {
+  agent911ReadingModes,
+  getAgent911ReadingMode,
+  normalizeAgent911ReadingMode,
+} from "./config/agent911ReadingModes";
 import { salesConfig } from "./config/sales";
 import Agent911Consultation from "./components/Agent911Consultation";
 import Agent911Summary from "./components/Agent911Summary";
@@ -164,6 +169,11 @@ function saveStoredJournal(records) {
 }
 
 function TarotCardVisual({ card, className = "", eager = false, onClick }) {
+  const compactNameLength = Math.max(5, card.name.replace(/\s+/g, "").length);
+  const visualStyle = {
+    "--tarot-name-length": compactNameLength,
+    "--tarot-name-scale": `${Math.min(14.5, Math.max(5.2, 90 / compactNameLength))}cqw`,
+  };
   const content = (
     <>
       <img
@@ -190,13 +200,19 @@ function TarotCardVisual({ card, className = "", eager = false, onClick }) {
         type="button"
         onClick={onClick}
         aria-label={`Abrir detalhes de ${card.name}`}
+        data-tarot-card={card.slug}
+        style={visualStyle}
       >
         {content}
       </button>
     );
   }
 
-  return <div className={`tarot-card ${className}`}>{content}</div>;
+  return (
+    <div className={`tarot-card ${className}`} data-tarot-card={card.slug} style={visualStyle}>
+      {content}
+    </div>
+  );
 }
 
 function CardBack({ selectedOrder, isDisabled, onClick, style }) {
@@ -305,6 +321,9 @@ function App() {
   });
   const [intentId, setIntentId] = useState(initialSession?.intentId ?? "caminhos");
   const [question, setQuestion] = useState(initialSession?.question ?? "");
+  const [readingMode, setReadingMode] = useState(() => (
+    normalizeAgent911ReadingMode(initialSession?.readingMode)
+  ));
   const [drawPool, setDrawPool] = useState([]);
   const [selectedCards, setSelectedCards] = useState([]);
   const [spread, setSpread] = useState(initialOpening);
@@ -333,6 +352,10 @@ function App() {
   const selectedIntent = useMemo(
     () => intents.find((intent) => intent.id === intentId) ?? intents[0],
     [intentId],
+  );
+  const selectedReadingMode = useMemo(
+    () => getAgent911ReadingMode(readingMode),
+    [readingMode],
   );
 
   const resolvedQuestion = question.trim() || selectedIntent.prompt;
@@ -447,6 +470,7 @@ function App() {
     setPhase("deck");
     trackCommercialEvent("free_reading_started", {
       intent: intentId,
+      reading_mode: readingMode,
     });
     moveToRitual();
   }
@@ -484,12 +508,14 @@ function App() {
     saveReadingSession({
       intentId,
       question: resolvedQuestion,
+      readingMode,
       openingCards: selectedCards.map((card) => card.slug),
       completeCards: [],
       createdAt: timestamp,
     });
     trackCommercialEvent("free_reading_completed", {
       intent: intentId,
+      reading_mode: readingMode,
       cards: selectedCards.map((card) => card.slug).join(","),
     });
     moveToRitual();
@@ -581,12 +607,14 @@ function App() {
     saveReadingSession({
       intentId,
       question: resolvedQuestion,
+      readingMode,
       openingCards: spread.map((card) => card.slug),
       completeCards: [],
       createdAt,
     });
     trackCommercialEvent("complete_reading_started", {
       intent: intentId,
+      reading_mode: readingMode,
       reading_id: createdAt,
       opening_cards: spread.map((card) => card.slug).join(","),
     });
@@ -641,12 +669,14 @@ function App() {
     saveReadingSession({
       intentId,
       question: resolvedQuestion,
+      readingMode,
       openingCards: spread.map((card) => card.slug),
       completeCards: nextSpread.map((card) => card.slug),
       createdAt,
     });
     trackCommercialEvent("complete_reading_opened", {
       intent: intentId,
+      reading_mode: readingMode,
       reading_id: createdAt,
       cards: nextSpread.map((card) => card.slug).join(","),
     });
@@ -732,7 +762,36 @@ function App() {
                 ? "ao revelar, esta pergunta e as cartas seguem ao 911 conectado, sem cadastro"
                 : "ao revelar, esta pergunta e as cartas ficam neste dispositivo, sem cadastro"}
             </small>
+            <p className="question-context-note">
+              Conte fatos e contexto com clareza. Eles ajudam o 911 a falar com a sua situação,
+              mas não interferem no embaralhamento nem escolhem as cartas.
+            </p>
           </label>
+
+          <fieldset className="reading-mode-fieldset">
+            <legend>Como o 911 deve falar?</legend>
+            <div className="reading-mode-options" role="radiogroup" aria-label="Postura da leitura do 911">
+              {agent911ReadingModes.map((mode) => (
+                <button
+                  className={`reading-mode-option ${mode.id === readingMode ? "is-active" : ""}`}
+                  type="button"
+                  role="radio"
+                  aria-checked={mode.id === readingMode}
+                  key={mode.id}
+                  onClick={() => setReadingMode(mode.id)}
+                >
+                  <span className="reading-mode-indicator" aria-hidden="true">
+                    {mode.id === readingMode ? <Check size={13} strokeWidth={2.6} /> : null}
+                  </span>
+                  <span>
+                    <strong>{mode.label}</strong>
+                    <small>{mode.description}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p>Esta chave muda a postura da resposta, nunca as cartas nem os limites do 911.</p>
+          </fieldset>
 
           <button className="button button-primary button-large" type="button" onClick={beginRitual}>
             Selar a pergunta
@@ -828,7 +887,7 @@ function App() {
             <h2>Três imagens. Uma direção.</h2>
           </div>
           <div className="reading-question">
-            <span>{selectedIntent.label}</span>
+            <span>{selectedIntent.label} · {selectedReadingMode.label}</span>
             <q>{resolvedQuestion}</q>
           </div>
         </div>
@@ -984,11 +1043,12 @@ function App() {
 
     return (
       <Agent911Summary
-        key={`${createdAt}-${variant}`}
+        key={`${createdAt}-${variant}-${readingMode}`}
         cards={agentCards}
         intentId={intentId}
         intentLabel={selectedIntent.label}
         question={resolvedQuestion}
+        readingMode={readingMode}
         createdAt={createdAt}
         variant={variant}
         onResult={(result) => setAgentSummaries((current) => (
@@ -1003,11 +1063,12 @@ function App() {
 
     return (
       <Agent911Consultation
-        key={`${createdAt}-consultation`}
+        key={`${createdAt}-consultation-${readingMode}`}
         cards={completeSpread}
         intentId={intentId}
         intentLabel={selectedIntent.label}
         question={resolvedQuestion}
+        readingMode={readingMode}
         createdAt={createdAt}
         initialResult={agentSummaries.complete}
       />
@@ -1025,7 +1086,7 @@ function App() {
             <h2>Três cartas seladas.<br />Quatro encontros novos.</h2>
           </div>
           <div className="reading-question">
-            <span>{selectedIntent.label}</span>
+            <span>{selectedIntent.label} · {selectedReadingMode.label}</span>
             <q>{resolvedQuestion}</q>
           </div>
         </div>
@@ -1168,7 +1229,7 @@ function App() {
             <h2>Sete posições. O movimento inteiro.</h2>
           </div>
           <div className="reading-question">
-            <span>{selectedIntent.label}</span>
+            <span>{selectedIntent.label} · {selectedReadingMode.label}</span>
             <q>{resolvedQuestion}</q>
           </div>
         </div>

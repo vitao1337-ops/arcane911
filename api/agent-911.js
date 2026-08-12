@@ -8,6 +8,7 @@ import {
   createAgent911ResponseSchema,
   createGeminiResponseSchema,
   normalizeAgent911InterpretiveLanguage,
+  normalizeAgent911ReadingModeOutput,
   parseGeminiOutput,
   parseOpenAIOutput,
   validateAgent911Request,
@@ -174,6 +175,12 @@ function repairInstruction(repairReasons) {
     }
     if (reason === "unsupported_certainty_language") {
       return "Mantenha o corte, mas retire sentenças, futuros garantidos e rótulos: cartas não provam que não é amor, que um ciclo acabou, que algo gerará ressentimento, que a pessoa já sabe o que quer nem que ela é infantil ou dependente. Formule uma hipótese simbólica nítida e confronte-a com fatos observáveis já relatados.";
+    }
+    if (reason === "reading_mode_format_invalid") {
+      return "Obedeça exatamente ao requiredSynthesisOpening definido em readingStyleContract.";
+    }
+    if (reason === "protected_fact_verdict_invalid") {
+      return "Tarot não prova fatos ocultos: use exatamente 'Resposta da mesa: INCONCLUSIVA.' e direcione a leitura para evidências observáveis.";
     }
     return `Corrija o requisito técnico ${reason}.`;
   }).join(" ");
@@ -374,12 +381,18 @@ export default async function handler(request, response) {
   try {
     const normalized = validateAgent911Request(parseBody(request));
     let providerResult = await callProvider(normalized, provider);
-    let reading = normalizeAgent911InterpretiveLanguage(providerResult.reading);
+    let reading = normalizeAgent911ReadingModeOutput(
+      normalizeAgent911InterpretiveLanguage(providerResult.reading),
+      normalized,
+    );
     let audit = auditAgent911Response(reading, normalized);
 
     if (!audit.ok) {
       providerResult = await callProvider(normalized, provider, audit.reasons);
-      reading = normalizeAgent911InterpretiveLanguage(providerResult.reading);
+      reading = normalizeAgent911ReadingModeOutput(
+        normalizeAgent911InterpretiveLanguage(providerResult.reading),
+        normalized,
+      );
       audit = auditAgent911Response(reading, normalized);
     }
 

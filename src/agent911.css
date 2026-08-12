@@ -183,6 +183,47 @@
   color: rgba(255, 250, 242, 0.9);
 }
 
+.agent911-table-verdict {
+  display: inline-grid;
+  min-width: 218px;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 14px;
+  margin: 3px 0 13px;
+  border: 1px solid rgba(229, 201, 146, 0.3);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.2), rgba(229, 201, 146, 0.06));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  padding: 10px 13px;
+}
+
+.agent911-table-verdict span {
+  color: rgba(239, 213, 162, 0.64);
+  font-family: var(--font-ui);
+  font-size: 0.48rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.agent911-table-verdict strong {
+  color: #fffaf2;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.035em;
+  line-height: 1;
+}
+
+.agent911-table-verdict.is-nao {
+  border-color: rgba(215, 167, 190, 0.28);
+  background: linear-gradient(135deg, rgba(105, 42, 91, 0.24), rgba(229, 201, 146, 0.045));
+}
+
+.agent911-table-verdict.is-inconclusiva {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.045);
+}
+
 .agent911-summary-action {
   display: flex;
   max-width: 930px;
@@ -516,6 +557,7 @@
   .agent911-consultation-content > .button,
   .agent911-consultation-composer .button,
   .agent911-reading-retry .button { width: 100%; }
+  .agent911-table-verdict { width: 100%; grid-template-columns: 1fr auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {

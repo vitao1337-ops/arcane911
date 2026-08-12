@@ -1,4 +1,6 @@
-const SUMMARY_PREFIX = "arcane911.agent-summary.v5:";
+import { normalizeAgent911ReadingMode } from "../config/agent911ReadingModes.js";
+
+const SUMMARY_PREFIX = "arcane911.agent-summary.v6:";
 const PROFILE_KEY = "arcane911.consultation-profile.v1";
 const CONSULTATION_PREFIX = "arcane911.consultation.v1:";
 const pendingSummaries = new Map();
@@ -7,9 +9,9 @@ function safeSession() {
   return typeof window === "object" ? window.sessionStorage : null;
 }
 
-export function summaryCacheKey(createdAt, variant, cards) {
+export function summaryCacheKey(createdAt, variant, cards, readingMode = "acolhedora") {
   const slugs = Array.isArray(cards) ? cards.map((card) => card?.slug).filter(Boolean).join(".") : "";
-  return `${createdAt ?? "reading"}:${variant}:${slugs}`;
+  return `${createdAt ?? "reading"}:${variant}:${normalizeAgent911ReadingMode(readingMode)}:${slugs}`;
 }
 
 export function loadAgent911Summary(key) {

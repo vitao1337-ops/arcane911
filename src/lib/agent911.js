@@ -1,4 +1,5 @@
 import { agent911Config } from "../config/agent911.js";
+import { normalizeAgent911ReadingMode } from "../config/agent911ReadingModes.js";
 import { completePositions, positions } from "../data/tarot.js";
 
 export class Agent911Error extends Error {
@@ -173,6 +174,7 @@ export async function requestAgent911(context, options = {}) {
         requestId: createRequestId(),
         schemaVersion: agent911Config.contextSchemaVersion,
         action: options.action ?? "initial_reading",
+        readingMode: normalizeAgent911ReadingMode(options.readingMode),
         message: cleanText(options.message, 1_200),
         history: Array.isArray(options.history) ? options.history.slice(-8) : [],
         memoryConsent: options.memoryConsent === true,

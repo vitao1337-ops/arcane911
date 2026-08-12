@@ -1,4 +1,4 @@
-# Arcane911 — V11 · Leitura viva
+# Arcane911 — V12 · Chave da mesa
 
 Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual do Sorriso Marcado e das 22 cartas originais dos Arcanos Maiores.
 
@@ -28,6 +28,7 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - Galeria completa dos 22 Arcanos, com modal de significado e simbologia.
 - Galeria ampliada em composição ritual 7–8–7 no desktop, quatro por fileira no tablet com fechamento centralizado e pares completos no celular.
 - Nomes e algarismos calibrados pelo centro real das placas e medalhões das cartas.
+- Eixo único de 50% para nome, algarismo, carta e legenda, com escala própria por comprimento do nome no desktop e no mobile.
 - Molduras de vidro renovadas nas cartas principais e na coleção completa.
 - Painéis noturnos lapidados, com constelações, traços e sigilos em rosé/champagne; somente estrelas pequenas respiram em baixa frequência.
 - Campo místico refeito sem rotação de áreas grandes, blur animado, feixe atravessando o painel ou sombra pulsante.
@@ -48,6 +49,9 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - No modo conectado, a interface espera a leitura real do Gemini e nunca exibe um texto local provisório para substituí-lo depois.
 - Falha conectada preserva cartas e pergunta e oferece nova tentativa sem inventar uma leitura; o motor local existe apenas quando `VITE_AGENT911_MODE=local` é escolhido deliberadamente.
 - Dez direções de voz escolhidas pelo contexto, contrato de personalização e auditoria anti-fórmula reduzem aberturas e cadências repetidas.
+- Chave de postura antes da tiragem: **Acolhedora**, **Direta** ou **Sem rodeios**, preservada na sessão e nas três perguntas da Consulta 911.
+- No modo **Sem rodeios**, perguntas binárias recebem uma direção da mesa em **SIM**, **NÃO** ou **INCONCLUSIVA**; perguntas abertas começam por **Na mesa:**.
+- A direção binária continua simbólica e condicional. Alegações de traição, doença, crime, gravidez ou intenção secreta são marcadas como **INCONCLUSIVA**, nunca apresentadas como prova.
 - A abertura conectada precisa usar as três cartas pelo nome; a Ferradura precisa articular pelo menos cinco cartas e o aprofundamento conecta ao menos duas.
 - OpenAI preservada como provedor opcional e reversível, sem ser chamada quando o Gemini está selecionado.
 - Falha do modo conectado não consome uma das três perguntas da Consulta 911.
@@ -93,6 +97,7 @@ npm run preview
 - `src/components/NatalWheel.jsx`: mandala SVG responsiva.
 - `src/config/sales.js`: produto, preço, benefícios e endereço de checkout.
 - `src/config/agent911.js`: ativação, endpoint e oferta futura oculta do Agente 911.
+- `src/config/agent911ReadingModes.js`: posturas disponíveis, modo padrão e normalização compartilhada entre navegador e servidor.
 - `src/components/Agent911Summary.jsx`: síntese automática, espera ritual, cache conectado e nova tentativa sem texto provisório.
 - `src/components/Agent911Consultation.jsx`: cadastro progressivo e conversa de três perguntas.
 - `src/lib/agent911Fallback.js`: leitura essencial ancorada para indisponibilidade da API.
@@ -141,7 +146,7 @@ VITE_AGENT911_MODE=live
 
 `GEMINI_API_KEY` é a única variável obrigatória do Gemini. `AGENT911_PROVIDER=gemini` apenas trava a escolha; sem ela, o modo `auto` já prefere Gemini quando encontra a chave. `GEMINI_MODEL` e `GEMINI_FALLBACK_MODEL` são opcionais porque os valores acima já são padrão no código.
 
-Nunca use `VITE_GEMINI_API_KEY`: tudo com prefixo `VITE_` entra no JavaScript público. A V11 envia `store: false`, não registra perguntas em logs ou analytics e envia somente o contexto necessário à leitura. No nível gratuito da Gemini Developer API, o Google informa que o conteúdo pode ser usado para melhorar seus produtos; esse ponto precisa entrar na política de privacidade antes de monetização. O motor local continua disponível somente com `VITE_AGENT911_MODE=local` e, nesse modo, a pergunta não sai do dispositivo.
+Nunca use `VITE_GEMINI_API_KEY`: tudo com prefixo `VITE_` entra no JavaScript público. A V12 envia `store: false`, não registra perguntas em logs ou analytics e envia somente o contexto necessário à leitura. No nível gratuito da Gemini Developer API, o Google informa que o conteúdo pode ser usado para melhorar seus produtos; esse ponto precisa entrar na política de privacidade antes de monetização. O motor local continua disponível somente com `VITE_AGENT911_MODE=local` e, nesse modo, a pergunta não sai do dispositivo.
 
 Para desligar o agente sem remover código, defina `VITE_AGENT911_ENABLED=false` e faça novo deploy. O passo a passo completo está em `AGENTE911-SETUP.md`.
 

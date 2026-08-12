@@ -64,6 +64,7 @@ test("a futura chamada usa endpoint próprio sem chave de provedor no navegador"
     enabled: true,
     remoteEnabled: true,
     endpoint: "/api/agent-911",
+    readingMode: "sem_rodeios",
     fetchImplementation: async (url, options) => {
       captured = { url, options };
       return {
@@ -112,6 +113,7 @@ test("a futura chamada usa endpoint próprio sem chave de provedor no navegador"
   const requestBody = JSON.parse(captured.options.body);
   assert.equal(requestBody.context.reading.cards.length, 7);
   assert.equal(requestBody.action, "initial_reading");
+  assert.equal(requestBody.readingMode, "sem_rodeios");
   assert.equal(requestBody.memoryConsent, false);
   assert.match(response.answer, /Ferradura/);
   assert.equal(response.followUps.length, 1);

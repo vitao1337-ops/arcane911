@@ -262,6 +262,23 @@ test("a landing mantém a composição completa e a centralização óptica das 
   assert.match(styles, /\.deck-gallery > \.gallery-item:nth-child\(16\)/);
   assert.match(styles, /top: 7\.2%/);
   assert.match(styles, /top: 91\.15%/);
+  assert.match(styles, /\.tarot-name[\s\S]*left: 50%/);
+  assert.match(styles, /\.tarot-name[\s\S]*transform: translate\(-50%, -50%\)/);
+  assert.match(styles, /container-type: inline-size/);
+  assert.doesNotMatch(styles, /text-indent/);
+  assert.match(app, /--tarot-name-scale/);
+  assert.match(styles, /\.complete-horseshoe-item[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
+});
+
+test("a pergunta inicial expõe a chave de postura sem interferir nas cartas", () => {
+  const appPath = fileURLToPath(new URL("../src/App.jsx", import.meta.url));
+  const app = readFileSync(appPath, "utf8");
+
+  assert.match(app, /Como o 911 deve falar\?/);
+  assert.match(app, /role="radiogroup"/);
+  assert.match(app, /não interferem no embaralhamento nem escolhem as cartas/);
+  assert.match(app, /Esta chave muda a postura da resposta, nunca as cartas/);
+  assert.match(app, /readingMode=\{readingMode\}/);
 });
 
 test("os campos místicos preservam o desenho sem reintroduzir efeitos pesados", () => {

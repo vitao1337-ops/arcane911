@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { ArrowRight, Check, LockKeyhole, Send, ShieldCheck, Sparkles } from "lucide-react";
 import { agent911Config } from "../config/agent911";
+import { normalizeAgent911ReadingMode } from "../config/agent911ReadingModes";
 import {
   createTarotAgentContext,
   requestAgent911,
@@ -32,10 +33,12 @@ export default function Agent911Consultation({
   intentId,
   intentLabel,
   question,
+  readingMode = "acolhedora",
   createdAt,
   initialResult,
 }) {
-  const readingId = `${createdAt ?? "reading"}:complete`;
+  const normalizedReadingMode = normalizeAgent911ReadingMode(readingMode);
+  const readingId = `${createdAt ?? "reading"}:complete:${normalizedReadingMode}`;
   const persistedConversation = useMemo(() => loadConsultationState(readingId), [readingId]);
   const [stage, setStage] = useState("offer");
   const [profile, setProfile] = useState(loadConsultationProfile);
@@ -65,6 +68,7 @@ export default function Agent911Consultation({
       intent: intentId,
       reading_id: createdAt,
       returning_profile: Boolean(profile),
+      reading_mode: normalizedReadingMode,
     });
     setStage(profile ? "conversation" : "register");
   }
@@ -80,6 +84,7 @@ export default function Agent911Consultation({
     trackCommercialEvent("agent911_consultation_registered", {
       intent: intentId,
       reading_id: createdAt,
+      reading_mode: normalizedReadingMode,
     });
     setProfile(saved);
     setErrors({});
@@ -113,6 +118,7 @@ export default function Agent911Consultation({
       intent: intentId,
       reading_id: createdAt,
       question_number: responses.length + 1,
+      reading_mode: normalizedReadingMode,
     });
     requestInFlight.current = true;
     setLoading(true);
@@ -135,6 +141,7 @@ export default function Agent911Consultation({
           reading_id: createdAt,
           question_number: responses.length + 1,
           source: "local",
+          reading_mode: normalizedReadingMode,
         });
         return;
       }
@@ -144,6 +151,7 @@ export default function Agent911Consultation({
         message: currentMessage,
         history: baseHistory,
         questionsUsed: responses.length,
+        readingMode: normalizedReadingMode,
         memoryConsent: false,
       });
       commitResponse({ ...result, source: "live" }, baseHistory, currentMessage);
@@ -154,6 +162,7 @@ export default function Agent911Consultation({
         question_number: responses.length + 1,
         source: "live",
         provider: result.meta?.provider ?? "unknown",
+        reading_mode: normalizedReadingMode,
       });
     } catch (requestError) {
       setConnectionError(requestError?.code ?? "unknown");
@@ -162,6 +171,7 @@ export default function Agent911Consultation({
         reading_id: createdAt,
         reason: requestError?.code ?? "unknown",
         question_consumed: false,
+        reading_mode: normalizedReadingMode,
       });
     } finally {
       if (answerWasCommitted) setMessage("");
@@ -171,7 +181,11 @@ export default function Agent911Consultation({
   }
 
   return (
-    <section className={`agent911-consultation is-${stage}`} aria-labelledby="agent911-consultation-title">
+    <section
+      className={`agent911-consultation is-${stage}`}
+      aria-labelledby="agent911-consultation-title"
+      data-agent911-reading-mode={normalizedReadingMode}
+    >
       <div className="agent911-consultation-mark" aria-hidden="true"><span>✦</span><strong>911</strong></div>
       <div className="agent911-consultation-content">
         <span className="section-kicker">Consulta 911</span>

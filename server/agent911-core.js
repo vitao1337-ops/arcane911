@@ -1,11 +1,15 @@
 import { completePositions, intents, positions } from "../src/data/tarot.js";
 import {
+  getAgent911ReadingMode,
+  normalizeAgent911ReadingMode,
+} from "../src/config/agent911ReadingModes.js";
+import {
   buildCanonicalReading,
   findUnselectedCardNames,
   isCanonicalSlug,
 } from "./tarot-canon.js";
 
-export const AGENT911_SCHEMA_VERSION = "2026-08-12.5";
+export const AGENT911_SCHEMA_VERSION = "2026-08-12.6";
 export const AGENT911_MAX_FOLLOW_UPS = 3;
 
 const actionIds = new Set(["opening_summary", "complete_summary", "initial_reading", "follow_up"]);
@@ -123,10 +127,12 @@ export function validateAgent911Request(body) {
   const experience = slugs.length === 7 ? "tarot.horseshoe.v1" : "tarot.opening.v1";
   const memoryConsent = body.memoryConsent === true;
   const canonical = buildCanonicalReading(slugs, intentId, experience);
+  const question = cleanText(reading.question, 800, { required: true });
 
   return {
     requestId: cleanText(body.requestId, 100),
     action,
+    readingMode: normalizeAgent911ReadingMode(body.readingMode),
     questionsUsed,
     memoryConsent,
     message: userMessage,
@@ -137,7 +143,7 @@ export function validateAgent911Request(body) {
       createdAt: cleanText(reading.createdAt, 100),
       intentId,
       intentLabel: cleanText(reading.intentLabel, 80) || intent.label,
-      question: cleanText(reading.question, 800, { required: true }),
+      question,
       cardSlugs: slugs,
       experience,
       canonical,
@@ -150,10 +156,18 @@ Você é 911, uma taróloga brasileira experiente, feminina, madura, intuitiva e
 
 OBJETIVO DA EXPERIÊNCIA
 - A pessoa deve reconhecer a própria situação na leitura porque você usou detalhes reais da pergunta e relações específicas desta mesa — nunca porque usou frases vagas que serviriam para qualquer um.
-- Acolha primeiro o custo emocional do conflito, sem anestesiar nem concordar automaticamente. Depois nomeie o ponto difícil com precisão.
-- Ser incisiva significa revelar uma contradição, um preço ou um limite sustentado pelas cartas. Não significa dar veredito, humilhar ou afirmar segredos.
+- Acolha primeiro o custo emocional do conflito na medida definida por readingStyleContract, sem anestesiar nem concordar automaticamente. Depois nomeie o ponto difícil com precisão.
+- Ser incisiva significa revelar uma contradição, um preço ou um limite sustentado pelas cartas. No modo sem rodeios, você pode dar uma direção simbólica SIM ou NÃO; isso nunca autoriza humilhar, afirmar segredos ou transformar tarot em prova factual.
 - Fale diretamente com "você". Evite observar de longe com expressões como "a pessoa", "o consulente" ou "quem pergunta".
 - Organize a leitura em três movimentos naturais: reconhecimento do nó, conversa entre as cartas e frase de corte com gesto concreto. Não anuncie essa estrutura.
+
+CHAVE DE POSTURA
+- O bloco readingStyleContract é obrigatório e define o grau de acolhimento, concisão e confronto. Obedeça ao mode e ao requiredSynthesisOpening sem citar a chave.
+- acolhedora: preserve a voz atual — íntima, firme e cuidadosa — e faça o corte somente depois de reconhecer o que a pessoa está tentando proteger.
+- direta: responda o centro da pergunta já na primeira frase, reduza preparação e termine com conselho claro, eficaz e verificável.
+- sem_rodeios: fale como uma taróloga segura diante da mesa. Se a pergunta comportar direção binária, comece synthesis exatamente com “Resposta da mesa: SIM.”, “Resposta da mesa: NÃO.” ou “Resposta da mesa: INCONCLUSIVA.” e sustente o corte com cartas e condições observáveis. Se não for binária, comece synthesis exatamente com “Na mesa:”.
+- SIM e NÃO são direção simbólica do caminho atual, não previsão garantida. Se a pergunta pedir prova de traição, mentira, gravidez, doença, crime, feitiço, intenção secreta ou outro fato inacessível às cartas, use INCONCLUSIVA e diga com clareza o que a mesa permite observar sem fingir conhecimento.
+- A chave muda a postura da resposta; nunca muda as cartas, o cânone, a segurança nem os limites factuais.
 
 AUTORIDADE DO CONTEXTO
 - O bloco CANON_911 fornecido pelo servidor é a única verdade sobre cartas, posições e método.
@@ -284,10 +298,87 @@ function stableVoiceIndex(value) {
 export function selectAgent911VoiceDirection(normalized) {
   const seed = [
     normalized.action,
+    normalized.readingMode,
     normalized.message || normalized.reading.question,
     ...normalized.reading.cardSlugs,
   ].join("|");
   return voiceDirections[stableVoiceIndex(seed)];
+}
+
+const nonBinaryQuestionLead = /^(?:o que|como|por que|porque|qual|quais|quando|onde|quem|que caminho|que limite|que atitude|que movimento)\b/u;
+const binaryQuestionLead = /^(?:(?:eu|nos|a gente)\s+)?(?:ainda\s+)?(?:devo|devemos|posso|podemos|consigo|conseguimos|continuo|continuamos|fico|ficamos|saio|saimos|aceito|aceitamos|recuso|recusamos|mudo|mudamos|invisto|investimos|espero|esperamos|insisto|insistimos|termino|terminamos|volto|voltamos|falo|falamos|conto|contamos|estou|estamos|sou|somos|esta|foi|sera|vai|vale|tem|ha|existe)\b/u;
+const thirdPartyBinaryLead = /^(?:ele|ela|essa pessoa|essa mulher|esse homem|meu parceiro|minha parceira|meu ex|minha ex)\b.{0,100}\b(?:ama|gosta|quer|pretende|pensa|sente|esconde|mente|trai|vai|volta|esta|tem)\b/u;
+const protectedFactPatterns = [
+  /\b(?:traicao|trai|traindo|amante|ficou com outra|ficou com outro|esta com outra|esta com outro)\b/u,
+  /\b(?:mentira|mente|mentindo|esconde|escondendo|segredo|intencao secreta)\b/u,
+  /\b(?:gravida|gravidez|doenca|cancer|diagnostico|morte fisica)\b/u,
+  /\b(?:crime|roubou|furtou|golpe|culpado|culpada)\b/u,
+  /\b(?:feitico|macumba|obsessao espiritual|perseguicao espiritual)\b/u,
+  /^(?:ele|ela|essa pessoa|essa mulher|esse homem|meu parceiro|minha parceira|meu ex|minha ex)\b.{0,100}\b(?:ama|gosta|quer|pretende|pensa|sente)\b/u,
+];
+
+export function classifyAgent911Question(value) {
+  const originalQuestion = String(value ?? "").replace(/\s+/g, " ").trim();
+  const question = normalizeForGrounding(value).replace(/\s+/g, " ").trim();
+  const binary = Boolean(question)
+    && !nonBinaryQuestionLead.test(question)
+    && (
+      binaryQuestionLead.test(question)
+      || thirdPartyBinaryLead.test(question)
+      || /^é\b/iu.test(originalQuestion)
+      || /\b(?:sim ou nao|ou nao)\b/u.test(question)
+    );
+  return {
+    binary,
+    protectedFact: protectedFactPatterns.some((pattern) => pattern.test(question)),
+  };
+}
+
+export function buildAgent911ReadingStyleContract(normalized) {
+  const mode = getAgent911ReadingMode(normalized.readingMode);
+  const sourceQuestion = normalized.action === "follow_up"
+    ? normalized.message
+    : normalized.reading.question;
+  const questionShape = classifyAgent911Question(sourceQuestion);
+
+  if (mode.id === "direta") {
+    return {
+      mode: mode.id,
+      label: mode.label,
+      questionShape,
+      requiredSynthesisOpening: "Sem fórmula fixa; responda o centro da pergunta já na primeira frase.",
+      instruction: "Corte a preparação. Dê uma resposta nítida, diferencie fato de hipótese e termine com um conselho curto, eficaz e observável. Firmeza sem crueldade nem certeza inventada.",
+    };
+  }
+
+  if (mode.id === "sem_rodeios") {
+    const requiredSynthesisOpening = questionShape.binary
+      ? questionShape.protectedFact
+        ? "Resposta da mesa: INCONCLUSIVA."
+        : [
+          "Resposta da mesa: SIM.",
+          "Resposta da mesa: NÃO.",
+          "Resposta da mesa: INCONCLUSIVA.",
+        ]
+      : "Na mesa:";
+    return {
+      mode: mode.id,
+      label: mode.label,
+      questionShape,
+      requiredSynthesisOpening,
+      instruction: questionShape.binary
+        ? "Dê o corte no primeiro período e sustente-o pela combinação real das cartas. SIM ou NÃO descreve a direção simbólica do caminho atual; INCONCLUSIVA protege fatos que tarot não pode provar. Não esconda a resposta atrás de ressalvas."
+        : "Abra a síntese com 'Na mesa:' e nomeie a conclusão mais incisiva sustentada pelas cartas. Vá direto à contradição, ao preço e ao gesto eficaz, sem inventar fatos.",
+    };
+  }
+
+  return {
+    mode: mode.id,
+    label: mode.label,
+    questionShape,
+    requiredSynthesisOpening: "Sem fórmula fixa; reconheça o custo humano antes do corte.",
+    instruction: "Seja íntima, profunda, firme e cuidadosa. Acolha o que a pessoa tenta proteger, depois faça um corte claro e termine com um movimento possível.",
+  };
 }
 
 export function buildAgent911ModelInput(normalized) {
@@ -314,6 +405,7 @@ export function buildAgent911ModelInput(normalized) {
     questionsRemainingAfterThisResponse: normalized.action === "follow_up"
       ? Math.max(0, AGENT911_MAX_FOLLOW_UPS - normalized.questionsUsed - 1)
       : AGENT911_MAX_FOLLOW_UPS,
+    readingStyleContract: buildAgent911ReadingStyleContract(normalized),
     voiceDirection: selectAgent911VoiceDirection(normalized),
     personalizationContract: {
       concreteAnchors: personalizationAnchors,
@@ -625,6 +717,40 @@ export function normalizeAgent911InterpretiveLanguage(response) {
   };
 }
 
+const tableVerdictPrefix = /^Resposta da mesa:\s*(SIM|NÃO|INCONCLUSIVA)\.\s*/iu;
+const tableStatementPrefix = /^Na mesa:\s*/iu;
+
+export function normalizeAgent911ReadingModeOutput(response, normalized) {
+  if (!response || typeof response !== "object" || response.responseMode !== "reading") return response;
+  if (normalizeAgent911ReadingMode(normalized?.readingMode) !== "sem_rodeios") return response;
+
+  const sourceQuestion = normalized.action === "follow_up"
+    ? normalized.message
+    : normalized.reading.question;
+  const questionShape = classifyAgent911Question(sourceQuestion);
+  const synthesis = String(response.synthesis ?? "").trim();
+  const withoutModeOpening = synthesis
+    .replace(tableVerdictPrefix, "")
+    .replace(tableStatementPrefix, "")
+    .trim();
+
+  if (!questionShape.binary) {
+    return {
+      ...response,
+      synthesis: `Na mesa: ${withoutModeOpening}`.trim(),
+    };
+  }
+
+  const modelVerdict = synthesis.match(tableVerdictPrefix)?.[1]?.toLocaleUpperCase("pt-BR");
+  const verdict = questionShape.protectedFact
+    ? "INCONCLUSIVA"
+    : ["SIM", "NÃO", "INCONCLUSIVA"].includes(modelVerdict) ? modelVerdict : "INCONCLUSIVA";
+  return {
+    ...response,
+    synthesis: `Resposta da mesa: ${verdict}. ${withoutModeOpening}`.trim(),
+  };
+}
+
 const genericOpeningPatterns = [
   /^(?:a mesa|as cartas|esta leitura|o tarot)\s+(?:mostra|mostram|revela|revelam|indica|indicam|pede|pedem)\b/iu,
   /^(?:há|existe)\s+(?:uma|um)\s+(?:energia|movimento|tensão|tensao)\b/iu,
@@ -686,6 +812,25 @@ export function auditAgent911Response(response, normalized) {
   if (!isSummaryAction(normalized.action) && response.responseMode === "reading"
       && (!Array.isArray(response.suggestedQuestions) || response.suggestedQuestions.length !== 3)) {
     reasons.push("reading_suggestions_invalid");
+  }
+
+  if (response.responseMode === "reading"
+      && normalizeAgent911ReadingMode(normalized.readingMode) === "sem_rodeios") {
+    const sourceQuestion = normalized.action === "follow_up"
+      ? normalized.message
+      : normalized.reading.question;
+    const questionShape = classifyAgent911Question(sourceQuestion);
+    const synthesis = String(response.synthesis ?? "").trim();
+    if (questionShape.binary && !tableVerdictPrefix.test(synthesis)) {
+      reasons.push("reading_mode_format_invalid");
+    }
+    if (!questionShape.binary && !tableStatementPrefix.test(synthesis)) {
+      reasons.push("reading_mode_format_invalid");
+    }
+    if (questionShape.binary && questionShape.protectedFact
+        && !/^Resposta da mesa:\s*INCONCLUSIVA\./iu.test(synthesis)) {
+      reasons.push("protected_fact_verdict_invalid");
+    }
   }
 
   const text = responseText(response);
