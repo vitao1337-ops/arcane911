@@ -1,4 +1,4 @@
-# Arcane911 — V12 · Chave da mesa
+# Arcane911 — V13 · Documento Astral 911
 
 Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual do Sorriso Marcado e das 22 cartas originais dos Arcanos Maiores.
 
@@ -7,7 +7,7 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - `/`: landing original, com ritual integrado, história e os 22 Arcanos.
 - `/tiragem-gratis`: ritual focado de três cartas.
 - `/tiragem-completa`: segundo ritual e Ferradura de sete cartas em página própria, preservando pergunta e cartas da abertura.
-- `/mapa-astral`: mapa natal completo com cálculo local.
+- `/mapa-astral`: mapa natal completo com cálculo local e Documento Astral Gemini.
 - `/leituras/amor`, `/leituras/caminhos`, `/leituras/trabalho` e `/leituras/decisao`: produtos específicos preparados para a próxima fase, ainda sem cobrança.
 
 ## O que já funciona
@@ -38,6 +38,11 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - Página de Mapa Astral com busca de cidade, fuso histórico, Sol, Lua, Ascendente, Meio do Céu, dez planetas, doze casas e aspectos maiores.
 - Cálculo tropical em Casas Iguais com verificação independente das longitudes planetárias pelo Astronomy Engine.
 - Resultado astrológico serializável, compartilhável e guardado somente no navegador.
+- Documento Astral longo e pessoal: essência, afetos, vocação, tensões, integração, cinco práticas e cinco perguntas de reflexão.
+- O Gemini recebe apenas primeiro nome e fatos calculados do mapa; data, horário e cidade não saem do navegador nessa chamada.
+- Structured Output e auditoria recusam posições inventadas, texto raso, âncoras desconhecidas e determinismo.
+- Documento guardado por mapa no aparelho, chamadas simultâneas deduplicadas e botão para imprimir ou salvar como PDF.
+- Produto premium sinalizado como em validação e liberado sem cobrança durante os testes; nenhum preço ou checkout foi ativado.
 - Carregamento sob demanda: o motor astral não pesa no JavaScript inicial da landing.
 - Quatro rotas de leituras específicas com estrutura de cinco cartas e produto comercial já modelado, sem ativar preço ou checkout.
 - Os quatro blocos de perguntas específicas também aparecem depois da Ferradura completa.
@@ -49,7 +54,8 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - No modo conectado, a interface espera a leitura real do Gemini e nunca exibe um texto local provisório para substituí-lo depois.
 - Falha conectada preserva cartas e pergunta e oferece nova tentativa sem inventar uma leitura; o motor local existe apenas quando `VITE_AGENT911_MODE=local` é escolhido deliberadamente.
 - Dez direções de voz escolhidas pelo contexto, contrato de personalização e auditoria anti-fórmula reduzem aberturas e cadências repetidas.
-- Chave de postura antes da tiragem: **Acolhedora**, **Direta** ou **Sem rodeios**, preservada na sessão e nas três perguntas da Consulta 911.
+- Chave simples **Sem rodeios OFF/ON** antes da tiragem. Desligada, a voz é acolhedora; ligada, usa o contrato incisivo. A chave acompanha a sessão e a Consulta 911.
+- A interface declara que essa chave muda apenas o tom e nunca interfere no embaralhamento, nas cartas escolhidas ou na tiragem.
 - No modo **Sem rodeios**, perguntas binárias recebem uma direção da mesa em **SIM**, **NÃO** ou **INCONCLUSIVA**; perguntas abertas começam por **Na mesa:**.
 - A direção binária continua simbólica e condicional. Alegações de traição, doença, crime, gravidez ou intenção secreta são marcadas como **INCONCLUSIVA**, nunca apresentadas como prova.
 - A abertura conectada precisa usar as três cartas pelo nome; a Ferradura precisa articular pelo menos cinco cartas e o aprofundamento conecta ao menos duas.
@@ -64,13 +70,14 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - Chaves de Gemini ou OpenAI mantidas exclusivamente na função server-side da Vercel; nenhuma credencial é enviada ao navegador.
 - Checkout permanece desacoplado no código para monetização futura, com eventos comerciais prontos para GTM/dataLayer.
 - Layout responsivo, navegação por teclado e redução de movimento.
+- Zoom de interface bloqueado no mobile, campos com 16 px para evitar aproximação automática no iPhone e regras globais contra quebra de palavras.
 
 ## Rodar localmente
 
 Requer Node.js 20.19+.
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -92,7 +99,10 @@ npm run preview
 - `src/data/products.js`: estrutura dos produtos específicos futuros.
 - `src/lib/reading.js`: embaralhamento, Ferradura determinística, leituras e textos compartilháveis.
 - `src/lib/astrology.js`: cálculo natal, dupla verificação, interpretações e busca de cidades.
-- `src/pages/AstralMapPage.jsx`: formulário, mandala e leitura do mapa.
+- `src/pages/AstralMapPage.jsx`: formulário, mandala, leitura calculada e entrada do documento.
+- `src/components/Astral911Document.jsx`: estados, capítulos, práticas, cópia e impressão do documento premium.
+- `src/lib/astro911.js`: contexto mínimo, cache, deduplicação e cliente seguro do documento.
+- `src/config/astro911.js`: ativação e endpoint público sem segredo.
 - `src/pages/SpecificReadingPage.jsx`: vitrine das leituras específicas.
 - `src/components/NatalWheel.jsx`: mandala SVG responsiva.
 - `src/config/sales.js`: produto, preço, benefícios e endereço de checkout.
@@ -109,6 +119,8 @@ npm run preview
 - `server/tarot-canon.js`: Bíblia 911 dos 22 Arcanos e relações de pares.
 - `server/agent911-core.js`: validação, prompt, Structured Output e auditoria.
 - `api/agent-911.js`: função serverless híbrida que escolhe Gemini ou OpenAI sem expor chaves.
+- `server/astro911-core.js`: validação dos fatos natais, contrato editorial e auditoria do documento.
+- `api/astro-911.js`: função Gemini isolada, com rate limit, fallback de modelo e `store: false`.
 - `public/cards/`: 22 imagens WebP otimizadas para o site.
 - `tests/`: contratos do baralho, rotas, Ferradura e cálculo astrológico.
 - `vercel.json`: fallback de SPA para abrir todas as rotas diretamente na Vercel.
@@ -117,7 +129,11 @@ npm run preview
 
 O cálculo usa `circular-natal-horoscope-js` para casas, ângulos e aspectos, e confere as longitudes dos dez planetas com `astronomy-engine`. O local é convertido em coordenadas e fuso pela busca do Open-Meteo; se a rede falhar, as principais capitais brasileiras continuam disponíveis localmente.
 
-Somente o texto digitado na busca de cidade é enviado ao serviço de geocodificação. Nome, data, horário, mapa e síntese permanecem no navegador. Astrologia é apresentada como linguagem simbólica de autoconhecimento, não como determinação ou orientação profissional.
+O texto digitado na busca de cidade é enviado ao serviço de geocodificação. O cálculo e os dados brutos de nascimento ficam no navegador. Para escrever o Documento Astral, `/api/astro-911` envia ao Gemini somente o primeiro nome e um conjunto validado de posições, casas, ângulos, aspectos e equilíbrio elemental — nunca data, horário ou cidade. O resultado fica em cache local por mapa durante 30 dias.
+
+A estrutura planeta–signo–casa–aspecto pertence à astrologia horoscópica desenvolvida no mundo helenístico a partir de tradições mesopotâmicas e egípcias anteriores. O Arcane911 separa essa base histórica da interpretação contemporânea e declara que astrologia é uma linguagem simbólica de autoconhecimento, sem validação científica e sem poder de determinar acontecimentos ou substituir orientação profissional.
+
+Referências: [Hellenistic Astrology — Internet Encyclopedia of Philosophy](https://iep.utm.edu/hellenistic-astrology/) e [tablet zodiacal — British Museum](https://www.britishmuseum.org/collection/object/W_1885-0430-15).
 
 ## Direção de produto
 
@@ -142,11 +158,12 @@ GEMINI_MODEL=gemini-3.5-flash
 GEMINI_FALLBACK_MODEL=gemini-3.5-flash-lite
 VITE_AGENT911_ENABLED=true
 VITE_AGENT911_MODE=live
+VITE_ASTRO911_ENABLED=true
 ```
 
 `GEMINI_API_KEY` é a única variável obrigatória do Gemini. `AGENT911_PROVIDER=gemini` apenas trava a escolha; sem ela, o modo `auto` já prefere Gemini quando encontra a chave. `GEMINI_MODEL` e `GEMINI_FALLBACK_MODEL` são opcionais porque os valores acima já são padrão no código.
 
-Nunca use `VITE_GEMINI_API_KEY`: tudo com prefixo `VITE_` entra no JavaScript público. A V12 envia `store: false`, não registra perguntas em logs ou analytics e envia somente o contexto necessário à leitura. No nível gratuito da Gemini Developer API, o Google informa que o conteúdo pode ser usado para melhorar seus produtos; esse ponto precisa entrar na política de privacidade antes de monetização. O motor local continua disponível somente com `VITE_AGENT911_MODE=local` e, nesse modo, a pergunta não sai do dispositivo.
+Nunca use `VITE_GEMINI_API_KEY`: tudo com prefixo `VITE_` entra no JavaScript público. A V13 envia `store: false`, não registra perguntas nem dados natais nos logs ou analytics e envia somente o contexto necessário. No nível gratuito da Gemini Developer API, o Google informa que conteúdo pode ser usado para melhorar produtos; esse ponto precisa entrar na política de privacidade antes de monetização. O motor local do tarot continua disponível somente com `VITE_AGENT911_MODE=local`.
 
 Para desligar o agente sem remover código, defina `VITE_AGENT911_ENABLED=false` e faça novo deploy. O passo a passo completo está em `AGENTE911-SETUP.md`.
 

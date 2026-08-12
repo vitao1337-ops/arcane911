@@ -2,6 +2,9 @@
   "functions": {
     "api/agent-911.js": {
       "maxDuration": 60
+    },
+    "api/astro-911.js": {
+      "maxDuration": 60
     }
   },
   "rewrites": [

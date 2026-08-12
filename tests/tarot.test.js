@@ -275,9 +275,12 @@ test("a pergunta inicial expõe a chave de postura sem interferir nas cartas", (
   const app = readFileSync(appPath, "utf8");
 
   assert.match(app, /Como o 911 deve falar\?/);
-  assert.match(app, /role="radiogroup"/);
+  assert.match(app, /role="switch"/);
+  assert.match(app, /Sem rodeios/);
+  assert.match(app, /Ligado/);
+  assert.match(app, /Desligado/);
   assert.match(app, /não interferem no embaralhamento nem escolhem as cartas/);
-  assert.match(app, /Esta chave muda a postura da resposta, nunca as cartas/);
+  assert.match(app, /Não interfere no embaralhamento/);
   assert.match(app, /readingMode=\{readingMode\}/);
 });
 

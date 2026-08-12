@@ -5,6 +5,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  FileText,
   MapPin,
   RotateCcw,
   Search,
@@ -13,6 +14,7 @@ import {
   Sparkles,
   UserRound,
 } from "lucide-react";
+import Astral911Document from "../components/Astral911Document";
 import NatalWheel from "../components/NatalWheel";
 import {
   buildAstroShareText,
@@ -106,6 +108,7 @@ export default function AstralMapPage() {
   const [error, setError] = useState("");
   const controllerRef = useRef(null);
   const resultRef = useRef(null);
+  const updateStatus = useMemo(() => (message) => setStatus(message), []);
 
   const maxDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const featuredCities = fallbackLocations.slice(0, 5);
@@ -202,8 +205,15 @@ export default function AstralMapPage() {
           <h1>O céu do instante em que <em>você chegou.</em></h1>
           <p>
             Data, horário e cidade transformados em um mapa completo: Sol, Lua, Ascendente,
-            planetas, casas e aspectos — com uma leitura clara para começar a se enxergar.
+            planetas, casas e aspectos — e um documento pessoal escrito a partir do seu céu real.
           </p>
+          <div className="astro-test-access">
+            <FileText size={17} />
+            <span>
+              <strong>Documento premium em validação.</strong>
+              Acesso aberto e sem cobrança durante esta fase de testes.
+            </span>
+          </div>
           <div className="astro-hero-notes">
             <span><CheckCircle2 size={16} /> 10 planetas</span>
             <span><CheckCircle2 size={16} /> 12 casas</span>
@@ -231,8 +241,11 @@ export default function AstralMapPage() {
           <div className="astro-privacy-card">
             <ShieldCheck size={20} />
             <div>
-              <strong>Seus dados ficam no seu navegador.</strong>
-              <span>A busca externa recebe somente o nome da cidade. Nome, data e horário não são enviados.</span>
+              <strong>Privacidade por minimização.</strong>
+              <span>
+                O cálculo fica no navegador. Para escrever o documento, o Gemini recebe somente
+                seu primeiro nome e as posições calculadas — nunca data, horário ou cidade.
+              </span>
             </div>
           </div>
         </div>
@@ -329,7 +342,8 @@ export default function AstralMapPage() {
             <Sparkles size={18} />
           </button>
           <p className="astro-form-source astro-field-wide">
-            Coordenadas por Open-Meteo · efemérides verificadas em dois motores independentes.
+            Coordenadas por Open-Meteo · efemérides verificadas em dois motores independentes ·
+            texto conectado pelo Gemini.
           </p>
         </form>
       </section>
@@ -367,6 +381,8 @@ export default function AstralMapPage() {
               <small>Elemento dominante: <strong>{chart.dominantElement}</strong>. Predominância indica disponibilidade, não superioridade.</small>
             </article>
           </div>
+
+          <Astral911Document chart={chart} onStatus={updateStatus} />
 
           <section className="big-three-section" aria-labelledby="big-three-title">
             <div className="astro-section-heading">

@@ -23,11 +23,7 @@ import {
 import { completePositions, intents, positions, tarotBySlug, tarotCards } from "./data/tarot";
 import { getReadingForIntent, specificReadings } from "./data/products";
 import { agent911Config } from "./config/agent911";
-import {
-  agent911ReadingModes,
-  getAgent911ReadingMode,
-  normalizeAgent911ReadingMode,
-} from "./config/agent911ReadingModes";
+import { getAgent911ReadingMode } from "./config/agent911ReadingModes";
 import { salesConfig } from "./config/sales";
 import Agent911Consultation from "./components/Agent911Consultation";
 import Agent911Summary from "./components/Agent911Summary";
@@ -322,7 +318,7 @@ function App() {
   const [intentId, setIntentId] = useState(initialSession?.intentId ?? "caminhos");
   const [question, setQuestion] = useState(initialSession?.question ?? "");
   const [readingMode, setReadingMode] = useState(() => (
-    normalizeAgent911ReadingMode(initialSession?.readingMode)
+    initialSession?.readingMode === "sem_rodeios" ? "sem_rodeios" : "acolhedora"
   ));
   const [drawPool, setDrawPool] = useState([]);
   const [selectedCards, setSelectedCards] = useState([]);
@@ -770,27 +766,36 @@ function App() {
 
           <fieldset className="reading-mode-fieldset">
             <legend>Como o 911 deve falar?</legend>
-            <div className="reading-mode-options" role="radiogroup" aria-label="Postura da leitura do 911">
-              {agent911ReadingModes.map((mode) => (
-                <button
-                  className={`reading-mode-option ${mode.id === readingMode ? "is-active" : ""}`}
-                  type="button"
-                  role="radio"
-                  aria-checked={mode.id === readingMode}
-                  key={mode.id}
-                  onClick={() => setReadingMode(mode.id)}
-                >
-                  <span className="reading-mode-indicator" aria-hidden="true">
-                    {mode.id === readingMode ? <Check size={13} strokeWidth={2.6} /> : null}
-                  </span>
-                  <span>
-                    <strong>{mode.label}</strong>
-                    <small>{mode.description}</small>
-                  </span>
-                </button>
-              ))}
+            <div className={`reading-mode-switch-card ${readingMode === "sem_rodeios" ? "is-active" : ""}`}>
+              <div className="reading-mode-switch-copy" id="reading-mode-switch-label">
+                <span>
+                  <strong>Sem rodeios</strong>
+                  <b>{readingMode === "sem_rodeios" ? "Ligado" : "Desligado"}</b>
+                </span>
+                <small>
+                  {readingMode === "sem_rodeios"
+                    ? "O 911 vai direto ao ponto e usa SIM, NÃO ou INCONCLUSIVA quando couber."
+                    : "O 911 fala de forma profunda, firme e acolhedora."}
+                </small>
+              </div>
+              <button
+                className="reading-mode-switch"
+                type="button"
+                role="switch"
+                aria-checked={readingMode === "sem_rodeios"}
+                aria-labelledby="reading-mode-switch-label"
+                onClick={() => setReadingMode((current) => (
+                  current === "sem_rodeios" ? "acolhedora" : "sem_rodeios"
+                ))}
+              >
+                <span aria-hidden="true" />
+                <b aria-hidden="true">{readingMode === "sem_rodeios" ? "ON" : "OFF"}</b>
+              </button>
             </div>
-            <p>Esta chave muda a postura da resposta, nunca as cartas nem os limites do 911.</p>
+            <p>
+              Esta chave muda somente o tom da resposta. Não interfere no embaralhamento,
+              nas cartas escolhidas nem na tiragem.
+            </p>
           </fieldset>
 
           <button className="button button-primary button-large" type="button" onClick={beginRitual}>
@@ -1638,12 +1643,13 @@ function App() {
             <span className="section-kicker">Novo espaço · Mapa Astral</span>
             <h2>As cartas capturam o agora.<br /><em>O mapa guarda o instante de chegada.</em></h2>
             <p>
-              Descubra Sol, Lua, Ascendente, planetas, casas e aspectos em uma experiência separada — calculada com data, horário e cidade reais.
+              Descubra Sol, Lua, Ascendente, planetas, casas e aspectos — e receba um documento
+              pessoal escrito pelo Gemini somente depois que o céu real for calculado e auditado.
             </p>
             <div className="astro-entry-proof">
-              <span><Check size={15} /> Cálculo real</span>
-              <span><ShieldCheck size={15} /> Dados no navegador</span>
-              <span><Sparkles size={15} /> Leitura inicial gratuita</span>
+              <span><Check size={15} /> Cálculo local real</span>
+              <span><ShieldCheck size={15} /> Gemini sem data, hora ou cidade</span>
+              <span><Sparkles size={15} /> Documento premium aberto em teste</span>
             </div>
             <Link className="button button-primary button-large" to="/mapa-astral">
               Criar meu mapa astral

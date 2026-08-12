@@ -50,7 +50,9 @@ test("a interface astrológica expõe cálculo, privacidade e atribuição", () 
   const page = readFileSync(pagePath, "utf8");
 
   assert.match(page, /calculateNatalChart/);
-  assert.match(page, /Seus dados ficam no seu navegador/);
+  assert.match(page, /Privacidade por minimização/);
+  assert.match(page, /nunca data, horário ou cidade/);
+  assert.match(page, /Astral911Document/);
   assert.match(page, /Open-Meteo/);
   assert.match(page, /10 planetas/);
   assert.match(page, /12 casas/);
