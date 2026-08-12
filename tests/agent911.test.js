@@ -34,6 +34,8 @@ test("o contexto seguro do Agente 911 preserva pergunta, posições e guardrails
   assert.equal(agent911Config.offer.isCheckoutEnabled, false);
   assert.equal(agent911Config.offer.questionLimit, 3);
   assert.equal(agent911Config.enabled, true);
+  assert.equal(agent911Config.mode, "local");
+  assert.equal(agent911Config.remoteEnabled, false);
 });
 
 test("o cliente do Agente 911 fica desligado até ativação explícita", async () => {
@@ -43,10 +45,24 @@ test("o cliente do Agente 911 fica desligado até ativação explícita", async 
   );
 });
 
+test("o modo local não chama a API nem cria custo por leitura", async () => {
+  let fetchWasCalled = false;
+  await assert.rejects(
+    requestAgent911(context, {
+      enabled: true,
+      remoteEnabled: false,
+      fetchImplementation: async () => { fetchWasCalled = true; },
+    }),
+    (error) => error instanceof Agent911Error && error.code === "remote_disabled",
+  );
+  assert.equal(fetchWasCalled, false);
+});
+
 test("a futura chamada usa endpoint próprio sem chave de provedor no navegador", async () => {
   let captured;
   const response = await requestAgent911(context, {
     enabled: true,
+    remoteEnabled: true,
     endpoint: "/api/agent-911",
     fetchImplementation: async (url, options) => {
       captured = { url, options };

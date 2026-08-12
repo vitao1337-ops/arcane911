@@ -5,9 +5,15 @@ function parsePositiveInteger(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function parseMode(value) {
+  return String(value ?? "local").trim().toLowerCase() === "live" ? "live" : "local";
+}
+
 export const agent911Config = Object.freeze({
   id: "agent-911",
   enabled: String(viteEnv.VITE_AGENT911_ENABLED ?? "true").toLowerCase() !== "false",
+  mode: parseMode(viteEnv.VITE_AGENT911_MODE),
+  remoteEnabled: parseMode(viteEnv.VITE_AGENT911_MODE) === "live",
   endpoint: String(viteEnv.VITE_AGENT911_ENDPOINT ?? "/api/agent-911").trim(),
   contextSchemaVersion: "2026-08-11.3",
   timeoutMs: 55_000,

@@ -146,7 +146,7 @@ export function validateAgent911Request(body) {
 }
 
 export const AGENT911_INSTRUCTIONS = `
-Você é 911, uma taróloga brasileira experiente, feminina, madura, íntima e precisa. Sua voz é elegante, humana e direta. Você não é um chatbot de suporte e não interpreta cartas como verbetes isolados.
+Você é 911, uma taróloga brasileira experiente, feminina, madura, intuitiva e incisiva. Sua leitura precisa provocar reconhecimento: a pessoa deve sentir que você enxergou o nó humano escondido na pergunta. Sua voz é íntima, elegante e direta — nunca burocrática, terapêutica genérica ou parecida com atendimento de suporte.
 
 AUTORIDADE DO CONTEXTO
 - O bloco CANON_911 fornecido pelo servidor é a única verdade sobre cartas, posições e método.
@@ -161,11 +161,16 @@ MÉTODO DE LEITURA
 5. Diferencie claramente fato contado, hipótese interpretativa e tendência simbólica.
 6. A direção provável é condicional ao caminho atual. Preserve agência e indique um gesto observável.
 7. Em pergunta de aprofundamento, responda ao texto atual sem repetir toda a tiragem, mas mantenha continuidade com a conversa.
+8. Reutilize naturalmente pelo menos um elemento concreto da pergunta — vínculo, proposta, carreira, limite, retorno, medo ou outro substantivo realmente trazido. Apenas repetir a pergunta entre aspas não conta como personalização.
+9. Encontre uma frase de corte: curta, específica e desconfortavelmente clara, mas totalmente sustentada pela mesa.
 
 PERSONALIDADE E ESTILO
 - Escreva em português brasileiro natural, sofisticado e compreensível.
 - Seja específica sem fingir conhecer detalhes que não foram dados.
 - Pode apontar algo desconfortável, mas nunca humilhe, manipule ou crie dependência.
+- Prefira verbos concretos e contrastes humanos: saudade versus reciprocidade, ganho versus custo, intuição versus evidência, espera versus paralisia.
+- Varie abertura, ritmo e construção das frases. Não use uma fórmula fixa de “carta A mostra, carta B revela, carta C pede”.
+- Título é interpretação, não rótulo genérico: deve poder pertencer àquela pergunta e àquela mesa.
 - Evite clichês como “o universo está dizendo”, “confie no processo”, “tudo acontece por uma razão” e “as cartas nunca mentem”.
 - Não chame a pessoa de querida, filha, meu amor ou consulente.
 - Não use teatralidade, excesso de exclamações ou linguagem genérica de horóscopo.
@@ -188,8 +193,8 @@ AUDITORIA
 - O texto final precisa permanecer inteiramente sustentado pela pergunta, posições, CANON_911 e histórico fornecido.
 
 FORMATO POR TAREFA
-- opening_summary: devolva uma única seção que use as três cartas. Escreva uma síntese pessoal de 80 a 130 palavras, ligada explicitamente à pergunta, e um gesto curto. Não ofereça perguntas sugeridas.
-- complete_summary: devolva uma única seção que use as sete cartas como narrativa. Escreva uma síntese pessoal de 140 a 220 palavras e um gesto observável. Não repita sete verbetes e não ofereça perguntas sugeridas.
+- opening_summary: devolva uma única seção que use as três cartas. O texto da seção deve conter a leitura relacional; a síntese deve responder ao conflito concreto em 80 a 130 palavras. Termine com um gesto curto. Não ofereça perguntas sugeridas.
+- complete_summary: devolva uma única seção que use as sete cartas como narrativa. O texto da seção deve condensar as relações mais importantes; a síntese deve responder ao conflito concreto em 140 a 220 palavras. Não repita sete verbetes e não ofereça perguntas sugeridas.
 - initial_reading: faça a leitura estruturada e devolva três perguntas sugeridas.
 - follow_up: responda somente ao aprofundamento atual, mantendo o contexto, e devolva três possíveis continuidades.
 - Em opening_summary e complete_summary, title, opening, synthesis e groundedAction formam uma única entrega concisa; não anuncie recursos, cadastro, preço ou funcionamento da IA.
@@ -324,6 +329,37 @@ function responseText(response) {
   ].join("\n");
 }
 
+function interpretationText(response) {
+  return [
+    response.title,
+    ...(response.sections ?? []).flatMap((section) => [section.title, section.text]),
+    response.synthesis,
+    response.groundedAction,
+  ].join("\n");
+}
+
+const groundingStopWords = new Set([
+  "agora", "ainda", "alguma", "algum", "como", "coisa", "devo", "essa", "esse",
+  "esta", "este", "fazer", "isso", "mais", "mesmo", "minha", "onde", "para",
+  "pela", "pelo", "porque", "preciso", "qual", "quando", "quero", "saber", "sobre",
+  "tenho", "toda", "todo", "vale", "voce",
+]);
+
+function normalizeForGrounding(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function questionGroundingTerms(value) {
+  return normalizeForGrounding(value)
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length >= 4 && !groundingStopWords.has(word))
+    .slice(0, 8);
+}
+
 const unsupportedCertaintyPatterns = [
   /(?:com|tenho) certeza (?:de )?que/iu,
   /vai acontecer(?: com certeza)?/iu,
@@ -385,6 +421,16 @@ export function auditAgent911Response(response, normalized) {
   }
 
   const text = responseText(response);
+  const groundingSource = normalized.action === "follow_up"
+    ? normalized.message
+    : normalized.reading.question;
+  const groundingTerms = questionGroundingTerms(groundingSource);
+  const normalizedResponseText = normalizeForGrounding(interpretationText(response));
+  if (response.responseMode === "reading" && (isSummaryAction(normalized.action) || normalized.action === "follow_up")
+      && groundingTerms.length > 0
+      && !groundingTerms.some((term) => normalizedResponseText.includes(term))) {
+    reasons.push("question_not_reflected");
+  }
   if (findUnselectedCardNames(text, normalized.reading.cardSlugs).length > 0) {
     reasons.push("unselected_card_name");
   }

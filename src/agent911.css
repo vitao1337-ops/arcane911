@@ -123,6 +123,11 @@
   line-height: 1.78;
 }
 
+.synthesis-card.agent911-summary .agent911-summary-copy > p.agent911-summary-reading {
+  margin-bottom: 12px;
+  color: rgba(255, 250, 242, 0.9);
+}
+
 .agent911-summary-action {
   display: flex;
   max-width: 930px;
@@ -370,6 +375,13 @@
   color: rgba(255, 250, 242, 0.67);
   font-size: 0.69rem;
   line-height: 1.68;
+}
+
+.agent911-consultation-responses > article > p + p { margin-top: 9px; }
+
+.agent911-consultation-responses.is-temporary > article {
+  border-style: dashed;
+  border-color: rgba(229, 201, 141, 0.22);
 }
 
 .agent911-consultation-responses article > div {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
+import { agent911Config } from "../config/agent911";
 import { createTarotAgentContext, requestAgent911 } from "../lib/agent911";
 import { buildAgent911Fallback } from "../lib/agent911Fallback";
 import { trackCommercialEvent } from "../lib/checkout";
@@ -12,14 +13,14 @@ import {
 } from "../lib/agent911Session";
 import "../agent911.css";
 
-function wrapFallback(reading, key) {
+function wrapFallback(reading, key, source = "local") {
   return {
     answer: reading.synthesis,
     reading,
     followUps: [],
     conversationId: `essential-${key}`,
     questionsRemaining: 3,
-    source: "essential",
+    source,
   };
 }
 
@@ -33,7 +34,7 @@ export default function Agent911Summary({
   onResult,
 }) {
   const cacheKey = useMemo(
-    () => summaryCacheKey(createdAt, variant, cards),
+    () => `${summaryCacheKey(createdAt, variant, cards)}:${agent911Config.mode}`,
     [cards, createdAt, variant],
   );
   const fallback = useMemo(
@@ -42,7 +43,7 @@ export default function Agent911Summary({
   );
   const cached = useMemo(() => loadAgent911Summary(cacheKey), [cacheKey]);
   const [result, setResult] = useState(cached ?? fallback);
-  const [loading, setLoading] = useState(!cached);
+  const [loading, setLoading] = useState(!cached && agent911Config.remoteEnabled);
   const onResultRef = useRef(onResult);
   onResultRef.current = onResult;
 
@@ -65,8 +66,19 @@ export default function Agent911Summary({
     }
 
     setResult(fallback);
-    setLoading(true);
+    setLoading(agent911Config.remoteEnabled);
     onResultRef.current?.(fallback);
+
+    if (!agent911Config.remoteEnabled) {
+      saveAgent911Summary(cacheKey, fallback);
+      trackCommercialEvent("agent911_summary_ready", {
+        variant,
+        card_count: cards.length,
+        source: "local",
+      });
+      setLoading(false);
+      return () => { active = false; };
+    }
 
     const currentRequest = getPendingAgent911Summary(cacheKey) ?? setPendingAgent911Summary(
       cacheKey,
@@ -97,9 +109,10 @@ export default function Agent911Summary({
           card_count: cards.length,
           reason: requestError?.code ?? "unknown",
         });
-        setResult(fallback);
+        const resilientResult = { ...fallback, source: "fallback" };
+        setResult(resilientResult);
         setLoading(false);
-        onResultRef.current?.(fallback);
+        onResultRef.current?.(resilientResult);
       });
 
     return () => { active = false; };
@@ -129,6 +142,9 @@ export default function Agent911Summary({
         </div>
         <h3 id={`agent911-summary-title-${variant}`}>{reading.title}</h3>
         <q>{reading.opening.replace(/^Você perguntou:\s*[“\"]?/i, "").replace(/[”\"]$/, "")}</q>
+        {reading.sections?.map((section) => (
+          <p className="agent911-summary-reading" key={section.id}>{section.text}</p>
+        ))}
         <p>{reading.synthesis}</p>
         <div className="agent911-summary-action">
           <Sparkles size={16} />

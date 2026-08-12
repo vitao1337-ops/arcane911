@@ -1,4 +1,4 @@
-# Arcane911 — V8 · Funil 911 Resiliente
+# Arcane911 — V9 · Motor local contextual
 
 Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual do Sorriso Marcado e das 22 cartas originais dos Arcanos Maiores.
 
@@ -42,7 +42,9 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - Formulário astral renovado com nome completo e superfícies clicáveis de data e horário.
 - Microtipografia ampliada somente no desktop, preservando fontes, blocos e direção visual.
 - Síntese 911 automática nas leituras de três e sete cartas, pessoal e ancorada na pergunta, sem clique extra nem cadastro.
-- Fallback essencial instantâneo: a leitura nunca some nem vira um erro vermelho se a rota ou o provedor estiver indisponível.
+- Motor local contextual instantâneo, sem custo por leitura: interpreta o conflito concreto da pergunta, as posições, as cartas e suas relações.
+- Modo conectado opcional: quando houver crédito, a OpenAI pode substituir a leitura local sem quebrar o funil.
+- Falha do modo conectado mantém a leitura essencial e não consome uma das três perguntas da Consulta 911.
 - Uma única síntese por tiragem; o antigo bloco genérico duplicado foi removido.
 - Consulta 911 separada da leitura, com cadastro solicitado somente ao entrar e até três aprofundamentos conectados à Ferradura.
 - Leituras específicas removidas da abertura gratuita e reposicionadas depois da consulta como alternativa direta de menor escopo.
@@ -124,9 +126,10 @@ A rota `POST /api/agent-911` já está pronta. No projeto da Vercel, abra **Sett
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-5.6-terra
 VITE_AGENT911_ENABLED=true
+VITE_AGENT911_MODE=local
 ```
 
-Nunca use o prefixo `VITE_` na chave secreta. Variáveis `VITE_*` entram no JavaScript público. A pergunta, as cartas e a memória consentida são enviadas somente quando a pessoa aperta o botão do 911. As respostas usam `store: false` no provedor. A memória é uma beta local: fica no navegador atual, não acompanha outro aparelho e pode ser apagada na própria interface.
+Nunca use o prefixo `VITE_` na chave secreta. Variáveis `VITE_*` entram no JavaScript público. No modo `local`, pergunta e cartas não são enviadas à OpenAI. Para reativar o modo conectado, defina `VITE_AGENT911_MODE=live` e faça novo deploy; as respostas continuam usando `store: false`. A memória é uma beta local: fica no navegador atual, não acompanha outro aparelho e pode ser apagada na própria interface.
 
 Para desligar o agente sem remover código, defina `VITE_AGENT911_ENABLED=false` e faça novo deploy. O passo a passo completo está em `AGENTE911-SETUP.md`.
 

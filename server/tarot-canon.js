@@ -348,6 +348,23 @@ function relationKind(first, second) {
   return "tensão criativa";
 }
 
+function withoutTerminal(value) {
+  return String(value ?? "").trim().replace(/[.!?…]+$/u, "");
+}
+
+function generatedRelationNote(first, second, kind) {
+  if (kind === "reforço") {
+    return `${first.name} e ${second.name} intensificam o mesmo vetor: ${withoutTerminal(first.intentLens)}; ${withoutTerminal(second.intentLens)}.`;
+  }
+  if (kind === "passagem") {
+    return `${first.name} abre uma passagem para ${second.name}: ${withoutTerminal(first.movement)}; em seguida, ${withoutTerminal(second.movement)}.`;
+  }
+  if (kind === "integração") {
+    return `${first.name} e ${second.name} pedem uma terceira medida entre dois movimentos: ${withoutTerminal(first.intentLens)}; ${withoutTerminal(second.intentLens)}.`;
+  }
+  return `${first.name} e ${second.name} criam uma tensão fértil: ${withoutTerminal(first.movement)}, enquanto ${withoutTerminal(second.movement)}.`;
+}
+
 export function getCanonicalCard(slug, intentId = "caminhos") {
   const card = tarotBySlug[slug];
   const depth = depthBySlug[slug];
@@ -381,16 +398,40 @@ export function buildRelationshipMap(slugs, intentId = "caminhos") {
       const first = cards[firstIndex];
       const second = cards[secondIndex];
       const curated = curatedPairs[pairKey(first.slug, second.slug)];
+      const kind = relationKind(first, second);
       relations.push({
         cards: [first.slug, second.slug],
-        kind: relationKind(first, second),
+        curated: Boolean(curated),
+        kind,
         note: curated
-          ?? `${first.name} ${first.relationalVerb} o campo; ${second.name} ${second.relationalVerb} a resposta. Observe onde esses movimentos cooperam e onde exigem escolha.`,
+          ?? generatedRelationNote(first, second, kind),
       });
     }
   }
 
   return relations;
+}
+
+function selectReadingRelationships(slugs, intentId, maximum) {
+  const indexBySlug = new Map(slugs.map((slug, index) => [slug, index]));
+  return buildRelationshipMap(slugs, intentId)
+    .map((relation) => {
+      const [firstIndex, secondIndex] = relation.cards.map((slug) => indexBySlug.get(slug));
+      const touchesDecision = [firstIndex, secondIndex].some((index) => [3, 5, 6].includes(index));
+      const bridgesActionAndOutcome = [firstIndex, secondIndex].includes(5)
+        && [firstIndex, secondIndex].includes(6);
+      const adjacent = Math.abs(firstIndex - secondIndex) === 1;
+      return {
+        relation,
+        score: (relation.curated ? 100 : 0)
+          + (bridgesActionAndOutcome ? 30 : 0)
+          + (touchesDecision ? 12 : 0)
+          + (adjacent ? 6 : 0),
+      };
+    })
+    .sort((first, second) => second.score - first.score)
+    .slice(0, maximum)
+    .map(({ relation }) => relation);
 }
 
 export function buildCanonicalReading(slugs, intentId, experience) {
@@ -408,7 +449,7 @@ export function buildCanonicalReading(slugs, intentId, experience) {
     tradition: "Arcanos Maiores na estrutura Rider–Waite–Smith, leitura simbólica, relacional e orientada à autonomia.",
     experience,
     cards,
-    relationships: buildRelationshipMap(slugs, intentId),
+    relationships: selectReadingRelationships(slugs, intentId, isComplete ? 6 : 3),
     layoutRule: isComplete
       ? "Leia a Ferradura como narrativa: origem → presente → influência oculta → nó → campo externo → ação → direção provável. A direção é condicional, nunca destino."
       : "Leia as três cartas como narrativa: raiz → espelho → movimento. Nenhuma carta deve ser interpretada isoladamente.",

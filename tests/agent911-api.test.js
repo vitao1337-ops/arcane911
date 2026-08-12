@@ -138,3 +138,47 @@ test("a rota recusa método diferente de POST sem chamar o provedor", async () =
   assert.equal(response.payload.error, "method_not_allowed");
   assert.equal(response.headers.get("allow"), "POST");
 });
+
+test("a rota distingue falta de crédito sem registrar a pergunta pessoal", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.OPENAI_API_KEY;
+  const originalError = console.error;
+  const logs = [];
+  process.env.OPENAI_API_KEY = "test-secret-never-return";
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 429,
+    json: async () => ({
+      error: {
+        code: "insufficient_quota",
+        type: "insufficient_quota",
+        message: "You exceeded your current quota; check billing details.",
+      },
+    }),
+  });
+  console.error = (...items) => logs.push(items);
+
+  try {
+    const response = mockResponse();
+    await handler({
+      method: "POST",
+      body: requestBody(),
+      headers: {
+        origin: "https://arcane911.vercel.app",
+        host: "arcane911.vercel.app",
+        "x-forwarded-for": "198.51.100.91",
+      },
+      socket: {},
+    }, response);
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.payload.error, "provider_quota");
+    assert.match(JSON.stringify(logs), /insufficient_quota/);
+    assert.doesNotMatch(JSON.stringify(logs), /Que movimento pede verdade agora/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalError;
+    if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalKey;
+  }
+});

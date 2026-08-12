@@ -145,6 +145,10 @@ export function createAstrologyAgentContext(chart) {
 export async function requestAgent911(context, options = {}) {
   const enabled = options.enabled ?? agent911Config.enabled;
   if (!enabled) throw new Agent911Error("O Agente 911 ainda não está ativo.", "agent_disabled");
+  const remoteEnabled = options.remoteEnabled ?? agent911Config.remoteEnabled;
+  if (!remoteEnabled) {
+    throw new Agent911Error("O Agente 911 está usando o motor local.", "remote_disabled");
+  }
 
   const endpoint = assertSecureEndpoint(options.endpoint ?? agent911Config.endpoint);
   const fetchImplementation = options.fetchImplementation ?? globalThis.fetch;
@@ -186,6 +190,9 @@ export async function requestAgent911(context, options = {}) {
         agent_not_configured: "O Agente 911 ainda precisa da chave segura no servidor.",
         provider_auth: "A conexão segura do Agente 911 precisa ser revisada.",
         provider_timeout: "A leitura levou mais tempo do que o esperado. Tente novamente.",
+        provider_quota: "O modo conectado está temporariamente sem créditos.",
+        provider_request: "A configuração do modo conectado precisa ser revisada.",
+        provider_model: "O modelo configurado para o 911 não está disponível nesta conta.",
         rate_limit: "Muitas leituras foram pedidas em sequência. Respire um pouco e tente novamente.",
         question_limit: "O ciclo de três aprofundamentos desta leitura foi concluído.",
         reading_not_grounded: "A auditoria do 911 recusou uma leitura imprecisa. Peça novamente.",

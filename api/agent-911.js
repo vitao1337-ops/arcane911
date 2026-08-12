@@ -106,7 +106,11 @@ async function callOpenAI(normalized, repairReasons = []) {
       body: JSON.stringify({
         model,
         store: false,
-        reasoning: { effort: isSummary ? "low" : normalized.reading.cardSlugs.length === 7 ? "medium" : "low" },
+        reasoning: {
+          effort: normalized.action === "complete_summary"
+            ? "medium"
+            : isSummary ? "low" : normalized.reading.cardSlugs.length === 7 ? "medium" : "low",
+        },
         instructions: AGENT911_INSTRUCTIONS + repairInstruction,
         input: buildAgent911ModelInput(normalized),
         max_output_tokens: isSummary
@@ -129,6 +133,9 @@ async function callOpenAI(normalized, repairReasons = []) {
       const providerCode = payload?.error?.code || `openai_${providerResponse.status}`;
       const error = new Error(providerCode);
       error.status = providerResponse.status;
+      error.providerCode = String(providerCode).slice(0, 80);
+      error.providerType = String(payload?.error?.type ?? "unknown").slice(0, 80);
+      error.providerMessage = String(payload?.error?.message ?? "").slice(0, 240);
       throw error;
     }
 
@@ -201,14 +208,35 @@ export default async function handler(request, response) {
     }
 
     const providerAuthError = error?.status === 401 || error?.status === 403;
+    const providerQuotaError = error?.status === 429
+      && /quota|credit|billing|insufficient/iu.test(`${error?.providerCode} ${error?.providerMessage}`);
+    const providerModelError = error?.status === 404
+      || /model.*(?:not|access|exist)|does not exist/iu.test(`${error?.providerCode} ${error?.providerMessage}`);
+    const providerRequestError = error?.status === 400;
     const timedOut = error?.name === "AbortError" || error?.message === "provider_timeout";
     console.error("agent911_request_failed", {
-      type: providerAuthError ? "provider_auth" : timedOut ? "timeout" : "provider_error",
+      type: providerAuthError ? "provider_auth"
+        : providerQuotaError ? "provider_quota"
+          : providerModelError ? "provider_model"
+            : providerRequestError ? "provider_request"
+              : timedOut ? "timeout" : "provider_error",
+      status: Number(error?.status) || null,
+      providerCode: String(error?.providerCode ?? "unknown").slice(0, 80),
+      providerType: String(error?.providerType ?? "unknown").slice(0, 80),
       message: String(error?.message ?? "unknown").slice(0, 160),
     });
 
     if (providerAuthError) {
       return sendJson(response, 503, { error: "provider_auth" }, rateHeaders);
+    }
+    if (providerQuotaError) {
+      return sendJson(response, 503, { error: "provider_quota" }, rateHeaders);
+    }
+    if (providerModelError) {
+      return sendJson(response, 503, { error: "provider_model" }, rateHeaders);
+    }
+    if (providerRequestError) {
+      return sendJson(response, 502, { error: "provider_request" }, rateHeaders);
     }
     if (timedOut) {
       return sendJson(response, 504, { error: "provider_timeout" }, rateHeaders);

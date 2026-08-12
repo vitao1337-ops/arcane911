@@ -16,14 +16,14 @@ import {
 } from "../lib/agent911Session";
 import { trackCommercialEvent } from "../lib/checkout";
 
-function resultFromFallback(reading, index) {
+function resultFromFallback(reading, index, source = "local") {
   return {
     answer: reading.synthesis,
     reading,
     followUps: [],
     conversationId: `essential-follow-up-${index}`,
     questionsRemaining: Math.max(0, agent911Config.offer.questionLimit - index),
-    source: "essential",
+    source,
   };
 }
 
@@ -47,6 +47,7 @@ export default function Agent911Consultation({
   const [message, setMessage] = useState("");
   const [responses, setResponses] = useState(persistedConversation.responses);
   const [history, setHistory] = useState(persistedConversation.history);
+  const [temporaryResult, setTemporaryResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const requestInFlight = useRef(false);
   const questionsRemaining = agent911Config.offer.questionLimit - responses.length;
@@ -85,6 +86,19 @@ export default function Agent911Consultation({
     setStage("conversation");
   }
 
+  function commitResponse(result, baseHistory, currentMessage) {
+    const nextResponses = [...responses, result];
+    const nextHistory = [
+      ...baseHistory,
+      { role: "user", content: currentMessage },
+      { role: "assistant", content: serializeAgent911Reading(result.reading) },
+    ].slice(-8);
+    setResponses(nextResponses);
+    setHistory(nextHistory);
+    setTemporaryResult(null);
+    saveConsultationState(readingId, { responses: nextResponses, history: nextHistory });
+  }
+
   async function submitQuestion(event) {
     event.preventDefault();
     const currentMessage = message.trim();
@@ -102,8 +116,29 @@ export default function Agent911Consultation({
     });
     requestInFlight.current = true;
     setLoading(true);
+    setTemporaryResult(null);
+    let answerWasCommitted = false;
 
     try {
+      if (!agent911Config.remoteEnabled) {
+        const reading = buildAgent911FollowUpFallback({
+          cards,
+          message: currentMessage,
+          question,
+          intentId,
+        });
+        const result = resultFromFallback(reading, responses.length + 1, "local");
+        commitResponse(result, baseHistory, currentMessage);
+        answerWasCommitted = true;
+        trackCommercialEvent("agent911_consultation_question_answered", {
+          intent: intentId,
+          reading_id: createdAt,
+          question_number: responses.length + 1,
+          source: "local",
+        });
+        return;
+      }
+
       const result = await requestAgent911(context, {
         action: "follow_up",
         message: currentMessage,
@@ -111,29 +146,30 @@ export default function Agent911Consultation({
         questionsUsed: responses.length,
         memoryConsent: false,
       });
-      const nextResponses = [...responses, result];
-      const nextHistory = [
-        ...baseHistory,
-        { role: "user", content: currentMessage },
-        { role: "assistant", content: serializeAgent911Reading(result.reading) },
-      ].slice(-8);
-      setResponses(nextResponses);
-      setHistory(nextHistory);
-      saveConsultationState(readingId, { responses: nextResponses, history: nextHistory });
-    } catch {
-      const reading = buildAgent911FollowUpFallback({ cards, message: currentMessage });
-      const result = resultFromFallback(reading, responses.length + 1);
-      const nextResponses = [...responses, result];
-      const nextHistory = [
-        ...baseHistory,
-        { role: "user", content: currentMessage },
-        { role: "assistant", content: serializeAgent911Reading(reading) },
-      ].slice(-8);
-      setResponses(nextResponses);
-      setHistory(nextHistory);
-      saveConsultationState(readingId, { responses: nextResponses, history: nextHistory });
+      commitResponse({ ...result, source: "live" }, baseHistory, currentMessage);
+      answerWasCommitted = true;
+      trackCommercialEvent("agent911_consultation_question_answered", {
+        intent: intentId,
+        reading_id: createdAt,
+        question_number: responses.length + 1,
+        source: "live",
+      });
+    } catch (requestError) {
+      const reading = buildAgent911FollowUpFallback({
+        cards,
+        message: currentMessage,
+        question,
+        intentId,
+      });
+      setTemporaryResult(resultFromFallback(reading, responses.length, "fallback"));
+      trackCommercialEvent("agent911_consultation_question_fallback", {
+        intent: intentId,
+        reading_id: createdAt,
+        reason: requestError?.code ?? "unknown",
+        question_consumed: false,
+      });
     } finally {
-      setMessage("");
+      if (answerWasCommitted) setMessage("");
       setLoading(false);
       requestInFlight.current = false;
     }
@@ -154,7 +190,7 @@ export default function Agent911Consultation({
             <div className="agent911-consultation-benefits">
               <span><Check size={14} /> 3 perguntas na mesma mesa</span>
               <span><Check size={14} /> contexto preservado</span>
-              <span><Check size={14} /> respostas pessoais e auditadas</span>
+              <span><Check size={14} /> respostas pessoais e ancoradas</span>
             </div>
             <button className="button button-primary button-large" type="button" onClick={openConsultation}>
               Fazer uma consulta com o 911 <ArrowRight size={18} />
@@ -203,13 +239,26 @@ export default function Agent911Consultation({
             {responses.length ? (
               <div className="agent911-consultation-responses" aria-live="polite">
                 {responses.map((result, index) => (
-                  <article key={`${result.conversationId}-${index}`}>
+                  <article data-agent911-source={result.source ?? "live"} key={`${result.conversationId}-${index}`}>
                     <span>Resposta {index + 1}</span>
                     <h4>{result.reading.title}</h4>
+                    {result.reading.sections?.map((section) => <p key={section.id}>{section.text}</p>)}
                     <p>{result.reading.synthesis}</p>
                     <div><Sparkles size={15} /><p><strong>Movimento possível</strong>{result.reading.groundedAction}</p></div>
                   </article>
                 ))}
+              </div>
+            ) : null}
+
+            {temporaryResult ? (
+              <div className="agent911-consultation-responses is-temporary" aria-live="polite">
+                <article data-agent911-source="fallback">
+                  <span>Leitura essencial · tentativa não consumida</span>
+                  <h4>{temporaryResult.reading.title}</h4>
+                  {temporaryResult.reading.sections?.map((section) => <p key={section.id}>{section.text}</p>)}
+                  <p>{temporaryResult.reading.synthesis}</p>
+                  <div><Sparkles size={15} /><p><strong>Movimento possível</strong>{temporaryResult.reading.groundedAction}</p></div>
+                </article>
               </div>
             ) : null}
 
