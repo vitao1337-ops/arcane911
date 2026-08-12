@@ -12,6 +12,7 @@ import {
   buildSynthesis,
   cardReading,
   completeCardReading,
+  createRandomDrawPool,
   formatCompleteReading,
   formatReading,
   pickSpread,
@@ -42,6 +43,14 @@ const expectedOrder = [
   "O Mundo",
 ];
 
+function seededRandom(seed = 1) {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
 test("o baralho mantém os 22 Arcanos Maiores na ordem definida", () => {
   assert.equal(tarotCards.length, 22);
   assert.deepEqual(tarotCards.map((card) => card.name), expectedOrder);
@@ -65,6 +74,40 @@ test("um embaralhamento sempre entrega três cartas distintas e é reproduzível
   assert.equal(first.length, 3);
   assert.equal(new Set(first.map((card) => card.slug)).size, 3);
   assert.deepEqual(first.map((card) => card.slug), second.map((card) => card.slug));
+});
+
+test("a mesa manual usa Fisher–Yates e muda de verdade entre embaralhadas", () => {
+  const random = seededRandom(911);
+  const first = createRandomDrawPool(tarotCards, 9, [], random);
+  const second = createRandomDrawPool(tarotCards, 9, first, random);
+  const firstSlugs = new Set(first.map((card) => card.slug));
+  const overlap = second.filter((card) => firstSlugs.has(card.slug)).length;
+  const samePositions = second.filter((card, index) => card.slug === first[index]?.slug).length;
+
+  assert.equal(first.length, 9);
+  assert.equal(second.length, 9);
+  assert.equal(new Set(first.map((card) => card.slug)).size, 9);
+  assert.equal(new Set(second.map((card) => card.slug)).size, 9);
+  assert.ok(overlap <= 4, `sobreposição excessiva: ${overlap}`);
+  assert.ok(samePositions <= 1, `cartas presas à mesma posição: ${samePositions}`);
+  assert.deepEqual(tarotCards.map((card) => card.name), expectedOrder);
+});
+
+test("o segundo baralho preserva os três Arcanos e evita uma mesa quase idêntica", () => {
+  const opening = [tarotCards[0], tarotCards[11], tarotCards[21]];
+  const openingSlugs = new Set(opening.map((card) => card.slug));
+  const remaining = tarotCards.filter((card) => !openingSlugs.has(card.slug));
+  const random = seededRandom(1911);
+  const first = createRandomDrawPool(remaining, 12, [], random);
+  const second = createRandomDrawPool(remaining, 12, first, random);
+  const firstSlugs = new Set(first.map((card) => card.slug));
+  const overlap = second.filter((card) => firstSlugs.has(card.slug)).length;
+  const samePositions = second.filter((card, index) => card.slug === first[index]?.slug).length;
+
+  assert.equal(new Set(second.map((card) => card.slug)).size, 12);
+  assert.equal(second.some((card) => openingSlugs.has(card.slug)), false);
+  assert.ok(overlap <= 8, `sobreposição excessiva: ${overlap}`);
+  assert.ok(samePositions <= 1, `cartas presas à mesma posição: ${samePositions}`);
 });
 
 test("a Ferradura completa sete posições sem perder as três cartas escolhidas", () => {

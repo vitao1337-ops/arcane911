@@ -1,4 +1,4 @@
-# Arcane911 — V10 · Gemini híbrido
+# Arcane911 — V11 · Leitura viva
 
 Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual do Sorriso Marcado e das 22 cartas originais dos Arcanos Maiores.
 
@@ -13,7 +13,8 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 ## O que já funciona
 
 - Escolha de intenção e pergunta livre.
-- Embaralhamento visual dos 22 Arcanos.
+- Embaralhamento Fisher–Yates dos 22 Arcanos com aleatoriedade criptográfica do navegador.
+- Proteção contra mesas consecutivas quase idênticas, sem prender cartas a posições recorrentes.
 - Seleção manual de três cartas, em ordem.
 - Leitura em três posições: A Raiz, O Espelho e O Movimento.
 - Aprofundamento liberado em uma Ferradura clássica de sete cartas.
@@ -44,10 +45,12 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - Síntese 911 automática nas leituras de três e sete cartas, pessoal e ancorada na pergunta, sem clique extra nem cadastro.
 - Gemini conectado por padrão no mesmo endpoint seguro, usando `gemini-3.5-flash` e Structured Output.
 - Segunda rota gratuita automática em `gemini-3.5-flash-lite` quando o modelo principal atinge limite ou fica indisponível.
-- Motor local contextual instantâneo como última camada de resiliência: interpreta pergunta, posições, cartas e relações sem custo por leitura.
-- Seis direções de voz escolhidas pelo contexto e instruções anti-fórmula reduzem aberturas e cadências repetidas.
+- No modo conectado, a interface espera a leitura real do Gemini e nunca exibe um texto local provisório para substituí-lo depois.
+- Falha conectada preserva cartas e pergunta e oferece nova tentativa sem inventar uma leitura; o motor local existe apenas quando `VITE_AGENT911_MODE=local` é escolhido deliberadamente.
+- Dez direções de voz escolhidas pelo contexto, contrato de personalização e auditoria anti-fórmula reduzem aberturas e cadências repetidas.
+- A abertura conectada precisa usar as três cartas pelo nome; a Ferradura precisa articular pelo menos cinco cartas e o aprofundamento conecta ao menos duas.
 - OpenAI preservada como provedor opcional e reversível, sem ser chamada quando o Gemini está selecionado.
-- Falha do modo conectado mantém a leitura essencial e não consome uma das três perguntas da Consulta 911.
+- Falha do modo conectado não consome uma das três perguntas da Consulta 911.
 - Uma única síntese por tiragem; o antigo bloco genérico duplicado foi removido.
 - Consulta 911 separada da leitura, com cadastro solicitado somente ao entrar e até três aprofundamentos conectados à Ferradura.
 - Leituras específicas removidas da abertura gratuita e reposicionadas depois da consulta como alternativa direta de menor escopo.
@@ -90,7 +93,7 @@ npm run preview
 - `src/components/NatalWheel.jsx`: mandala SVG responsiva.
 - `src/config/sales.js`: produto, preço, benefícios e endereço de checkout.
 - `src/config/agent911.js`: ativação, endpoint e oferta futura oculta do Agente 911.
-- `src/components/Agent911Summary.jsx`: síntese automática, cache de sessão e fallback resiliente.
+- `src/components/Agent911Summary.jsx`: síntese automática, espera ritual, cache conectado e nova tentativa sem texto provisório.
 - `src/components/Agent911Consultation.jsx`: cadastro progressivo e conversa de três perguntas.
 - `src/lib/agent911Fallback.js`: leitura essencial ancorada para indisponibilidade da API.
 - `src/lib/agent911Session.js`: deduplicação de chamadas, cache e cadastro beta local.
@@ -138,7 +141,7 @@ VITE_AGENT911_MODE=live
 
 `GEMINI_API_KEY` é a única variável obrigatória do Gemini. `AGENT911_PROVIDER=gemini` apenas trava a escolha; sem ela, o modo `auto` já prefere Gemini quando encontra a chave. `GEMINI_MODEL` e `GEMINI_FALLBACK_MODEL` são opcionais porque os valores acima já são padrão no código.
 
-Nunca use `VITE_GEMINI_API_KEY`: tudo com prefixo `VITE_` entra no JavaScript público. A V10 envia `store: false`, não registra perguntas em logs ou analytics e envia somente o contexto necessário à leitura. No nível gratuito da Gemini Developer API, o Google informa que o conteúdo pode ser usado para melhorar seus produtos; esse ponto precisa entrar na política de privacidade antes de monetização. O motor local continua disponível com `VITE_AGENT911_MODE=local` e, nesse modo, a pergunta não sai do dispositivo.
+Nunca use `VITE_GEMINI_API_KEY`: tudo com prefixo `VITE_` entra no JavaScript público. A V11 envia `store: false`, não registra perguntas em logs ou analytics e envia somente o contexto necessário à leitura. No nível gratuito da Gemini Developer API, o Google informa que o conteúdo pode ser usado para melhorar seus produtos; esse ponto precisa entrar na política de privacidade antes de monetização. O motor local continua disponível somente com `VITE_AGENT911_MODE=local` e, nesse modo, a pergunta não sai do dispositivo.
 
 Para desligar o agente sem remover código, defina `VITE_AGENT911_ENABLED=false` e faça novo deploy. O passo a passo completo está em `AGENTE911-SETUP.md`.
 

@@ -47,7 +47,7 @@ export default function Agent911Consultation({
   const [message, setMessage] = useState("");
   const [responses, setResponses] = useState(persistedConversation.responses);
   const [history, setHistory] = useState(persistedConversation.history);
-  const [temporaryResult, setTemporaryResult] = useState(null);
+  const [connectionError, setConnectionError] = useState("");
   const [loading, setLoading] = useState(false);
   const requestInFlight = useRef(false);
   const questionsRemaining = agent911Config.offer.questionLimit - responses.length;
@@ -95,7 +95,7 @@ export default function Agent911Consultation({
     ].slice(-8);
     setResponses(nextResponses);
     setHistory(nextHistory);
-    setTemporaryResult(null);
+    setConnectionError("");
     saveConsultationState(readingId, { responses: nextResponses, history: nextHistory });
   }
 
@@ -116,7 +116,7 @@ export default function Agent911Consultation({
     });
     requestInFlight.current = true;
     setLoading(true);
-    setTemporaryResult(null);
+    setConnectionError("");
     let answerWasCommitted = false;
 
     try {
@@ -156,14 +156,8 @@ export default function Agent911Consultation({
         provider: result.meta?.provider ?? "unknown",
       });
     } catch (requestError) {
-      const reading = buildAgent911FollowUpFallback({
-        cards,
-        message: currentMessage,
-        question,
-        intentId,
-      });
-      setTemporaryResult(resultFromFallback(reading, responses.length, "fallback"));
-      trackCommercialEvent("agent911_consultation_question_fallback", {
+      setConnectionError(requestError?.code ?? "unknown");
+      trackCommercialEvent("agent911_consultation_question_unavailable", {
         intent: intentId,
         reading_id: createdAt,
         reason: requestError?.code ?? "unknown",
@@ -256,15 +250,10 @@ export default function Agent911Consultation({
               </div>
             ) : null}
 
-            {temporaryResult ? (
-              <div className="agent911-consultation-responses is-temporary" aria-live="polite">
-                <article data-agent911-source="fallback">
-                  <span>Leitura essencial · tentativa não consumida</span>
-                  <h4>{temporaryResult.reading.title}</h4>
-                  {temporaryResult.reading.sections?.map((section) => <p key={section.id}>{section.text}</p>)}
-                  <p>{temporaryResult.reading.synthesis}</p>
-                  <div><Sparkles size={15} /><p><strong>Movimento possível</strong>{temporaryResult.reading.groundedAction}</p></div>
-                </article>
+            {connectionError ? (
+              <div className="agent911-consultation-retry" aria-live="polite" data-agent911-error={connectionError}>
+                <Sparkles size={15} />
+                <p><strong>O 911 não concluiu esta resposta.</strong> Nenhum texto automático entrou no lugar e sua pergunta não foi consumida. Tente novamente quando quiser.</p>
               </div>
             ) : null}
 

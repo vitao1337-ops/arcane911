@@ -36,9 +36,9 @@ import {
   buildCompleteSpreadFromSelections,
   cardReading,
   completeCardReading,
+  createRandomDrawPool,
   formatCompleteReading,
   formatReading,
-  hashString,
 } from "./lib/reading";
 
 const AstralMapPage = lazy(() => import("./pages/AstralMapPage"));
@@ -455,15 +455,8 @@ function App() {
     setIsShuffling(true);
     setSelectedCards([]);
     setStatus("As imagens estão encontrando uma ordem.");
-    const seed = `${resolvedQuestion}-${intentId}-${Date.now()}`;
-
     timerRef.current = window.setTimeout(() => {
-      const orderedDeck = [...tarotCards]
-        .sort(
-          (cardA, cardB) =>
-            hashString(`${seed}-${cardA.slug}`) - hashString(`${seed}-${cardB.slug}`),
-        )
-        .slice(0, 9);
+      const orderedDeck = createRandomDrawPool(tarotCards, 9, drawPool);
       setDrawPool(orderedDeck);
       setIsShuffling(false);
       setStatus("Escolha três cartas na ordem em que chamarem você.");
@@ -609,16 +602,9 @@ function App() {
     setStatus("Os dezenove Arcanos restantes estão encontrando uma nova ordem.");
 
     const openingSlugs = new Set(spread.map((card) => card.slug));
-    const seed = ["segundo-baralho", resolvedQuestion, intentId, Date.now()].join("-");
-
     timerRef.current = window.setTimeout(() => {
-      const orderedDeck = tarotCards
-        .filter((card) => !openingSlugs.has(card.slug))
-        .sort(
-          (cardA, cardB) =>
-            hashString(seed + "-" + cardA.slug) - hashString(seed + "-" + cardB.slug),
-        )
-        .slice(0, 12);
+      const remainingDeck = tarotCards.filter((card) => !openingSlugs.has(card.slug));
+      const orderedDeck = createRandomDrawPool(remainingDeck, 12, completeDrawPool);
 
       setCompleteDrawPool(orderedDeck);
       setIsCompleteShuffling(false);

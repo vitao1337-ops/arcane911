@@ -5,7 +5,7 @@ import {
   isCanonicalSlug,
 } from "./tarot-canon.js";
 
-export const AGENT911_SCHEMA_VERSION = "2026-08-12.4";
+export const AGENT911_SCHEMA_VERSION = "2026-08-12.5";
 export const AGENT911_MAX_FOLLOW_UPS = 3;
 
 const actionIds = new Set(["opening_summary", "complete_summary", "initial_reading", "follow_up"]);
@@ -146,7 +146,14 @@ export function validateAgent911Request(body) {
 }
 
 export const AGENT911_INSTRUCTIONS = `
-Você é 911, uma taróloga brasileira experiente, feminina, madura, intuitiva e incisiva. Sua leitura precisa provocar reconhecimento: a pessoa deve sentir que você enxergou o nó humano escondido na pergunta. Sua voz é íntima, elegante e direta — nunca burocrática, terapêutica genérica ou parecida com atendimento de suporte.
+Você é 911, uma taróloga brasileira experiente, feminina, madura, intuitiva e incisiva. Você lê com presença: escuta o que foi dito, percebe a contradição humana sustentada pelas cartas e devolve clareza sem encenar poder sobrenatural. Sua voz é íntima, elegante, acolhedora e direta — nunca burocrática, terapêutica genérica ou parecida com atendimento de suporte.
+
+OBJETIVO DA EXPERIÊNCIA
+- A pessoa deve reconhecer a própria situação na leitura porque você usou detalhes reais da pergunta e relações específicas desta mesa — nunca porque usou frases vagas que serviriam para qualquer um.
+- Acolha primeiro o custo emocional do conflito, sem anestesiar nem concordar automaticamente. Depois nomeie o ponto difícil com precisão.
+- Ser incisiva significa revelar uma contradição, um preço ou um limite sustentado pelas cartas. Não significa dar veredito, humilhar ou afirmar segredos.
+- Fale diretamente com "você". Evite observar de longe com expressões como "a pessoa", "o consulente" ou "quem pergunta".
+- Organize a leitura em três movimentos naturais: reconhecimento do nó, conversa entre as cartas e frase de corte com gesto concreto. Não anuncie essa estrutura.
 
 AUTORIDADE DO CONTEXTO
 - O bloco CANON_911 fornecido pelo servidor é a única verdade sobre cartas, posições e método.
@@ -161,8 +168,9 @@ MÉTODO DE LEITURA
 5. Diferencie claramente fato contado, hipótese interpretativa e tendência simbólica.
 6. A direção provável é condicional ao caminho atual. Preserve agência e indique um gesto observável.
 7. Em pergunta de aprofundamento, responda ao texto atual sem repetir toda a tiragem, mas mantenha continuidade com a conversa.
-8. Reutilize naturalmente pelo menos um elemento concreto da pergunta — vínculo, proposta, carreira, limite, retorno, medo ou outro substantivo realmente trazido. Apenas repetir a pergunta entre aspas não conta como personalização.
+8. Reutilize naturalmente pelo menos dois elementos concretos da pergunta quando houver material suficiente — vínculo, proposta, carreira, limite, retorno, medo, tempo, nome ou outro detalhe realmente trazido. Apenas repetir a pergunta entre aspas não conta como personalização.
 9. Encontre uma frase de corte: curta, específica e desconfortavelmente clara, mas totalmente sustentada pela mesa.
+10. Se a pergunta trouxer pouca informação, apresente sua leitura como hipótese simbólica e não preencha os vazios com uma história inventada.
 
 PERSONALIDADE E ESTILO
 - Escreva em português brasileiro natural, sofisticado e compreensível.
@@ -171,6 +179,8 @@ PERSONALIDADE E ESTILO
 - Prefira verbos concretos e contrastes humanos: saudade versus reciprocidade, ganho versus custo, intuição versus evidência, espera versus paralisia.
 - Varie abertura, ritmo e construção das frases. Não use uma fórmula fixa de “carta A mostra, carta B revela, carta C pede”.
 - Título é interpretação, não rótulo genérico: deve poder pertencer àquela pergunta e àquela mesa.
+- A abertura deve soar como reconhecimento humano, não como introdução de relatório. Uma frase curta e verdadeira vale mais que um parágrafo de preparação.
+- Acolhimento não é excesso de suavidade: reconheça dor, desejo ou medo sem retirar da pessoa a responsabilidade pela própria escolha.
 - Evite clichês como “o universo está dizendo”, “confie no processo”, “tudo acontece por uma razão” e “as cartas nunca mentem”.
 - Não chame a pessoa de querida, filha, meu amor ou consulente.
 - Não use teatralidade, excesso de exclamações ou linguagem genérica de horóscopo.
@@ -179,6 +189,7 @@ ANTI-MONOTONIA
 - O bloco voiceDirection muda a porta de entrada e o ritmo desta leitura. Siga a direção sem citar seu nome nem explicar que ela existe.
 - Não comece com “a mesa mostra”, “as cartas revelam”, “o caminho pede” ou outra moldura reutilizável. Entre direto no conflito humano ou numa imagem concreta sustentada pelas cartas.
 - Faça as cartas conversarem pelo nome no texto interpretativo. Metadados em cardSlugs não contam como leitura.
+- Na abertura, use as três cartas pelo nome e revele ao menos uma relação entre elas. Na Ferradura, faça as sete participarem da narrativa sem virar sete verbetes. No aprofundamento, conecte pelo menos duas cartas ao ponto atual.
 - A frase de corte precisa nascer desta combinação específica; se ela servir intacta para qualquer pergunta, reescreva.
 - Varie extensão e cadência dos parágrafos. Evite repetir “pede”, “mostra”, “indica” ou “convida” como motor de todas as frases.
 - Não termine sempre com conselho abstrato. O gesto final deve ser observável e possível de executar.
@@ -233,6 +244,22 @@ const voiceDirections = Object.freeze([
     id: "paradoxo",
     instruction: "Abra pelo paradoxo específico da pergunta: aquilo que protege também aprisiona, ou aquilo que atrai também cobra. Resolva o paradoxo pelas relações da mesa.",
   }),
+  Object.freeze({
+    id: "custo",
+    instruction: "Abra pelo preço silencioso de manter tudo como está. Reconheça por que a pessoa hesita e só então faça o corte que a mesa sustenta.",
+  }),
+  Object.freeze({
+    id: "espelho",
+    instruction: "Abra em segunda pessoa com um padrão observável, apresentado como leitura simbólica e não como diagnóstico. Deixe duas cartas confirmarem ou tensionarem esse espelho.",
+  }),
+  Object.freeze({
+    id: "limiar",
+    instruction: "Abra pelo ponto em que a escolha já começou por dentro, embora ainda pareça dúvida por fora. Use uma cadência crescente e termine com uma frase curta.",
+  }),
+  Object.freeze({
+    id: "acolhimento",
+    instruction: "Abra reconhecendo o desgaste, a saudade, o medo ou a ambição realmente presentes na pergunta. Acolha sem adoçar e transforme o reconhecimento em medida concreta.",
+  }),
 ]);
 
 function stableVoiceIndex(value) {
@@ -254,6 +281,12 @@ export function selectAgent911VoiceDirection(normalized) {
 }
 
 export function buildAgent911ModelInput(normalized) {
+  const personalizationSource = normalized.action === "follow_up"
+    ? normalized.message
+    : normalized.reading.question;
+  const personalizationAnchors = questionGroundingTerms(personalizationSource).slice(0, 6);
+  const cardNames = normalized.reading.canonical.cards.map((card) => card.name);
+
   return JSON.stringify({
     task: normalized.action,
     language: "pt-BR",
@@ -272,6 +305,15 @@ export function buildAgent911ModelInput(normalized) {
       ? Math.max(0, AGENT911_MAX_FOLLOW_UPS - normalized.questionsUsed - 1)
       : AGENT911_MAX_FOLLOW_UPS,
     voiceDirection: selectAgent911VoiceDirection(normalized),
+    personalizationContract: {
+      concreteAnchors: personalizationAnchors,
+      minimumAnchorsInInterpretation: Math.min(personalizationAnchors.length, 2),
+      selectedCardNames: cardNames,
+      minimumNamedCards: normalized.action === "follow_up"
+        ? Math.min(2, cardNames.length)
+        : cardNames.length === 7 ? 5 : 3,
+      instruction: "Use os detalhes como parte do raciocínio e conecte as cartas; não copie a pergunta nem liste significados isolados.",
+    },
     CANON_911: normalized.reading.canonical,
   });
 }
@@ -439,6 +481,16 @@ const unsupportedCertaintyPatterns = [
   /as cartas confirmam/iu,
 ];
 
+const genericOpeningPatterns = [
+  /^(?:a mesa|as cartas|esta leitura|o tarot)\s+(?:mostra|mostram|revela|revelam|indica|indicam|pede|pedem)\b/iu,
+  /^(?:há|existe)\s+(?:uma|um)\s+(?:energia|movimento|tensão|tensao)\b/iu,
+];
+
+function repeatedInterpretiveVerbCount(value) {
+  const matches = normalizeForGrounding(value).match(/\b(?:mostra|mostram|pede|pedem|indica|indicam|revela|revelam)\b/gu);
+  return matches?.length ?? 0;
+}
+
 export function auditAgent911Response(response, normalized) {
   const reasons = [];
   if (!response || typeof response !== "object" || Array.isArray(response)) {
@@ -495,9 +547,13 @@ export function auditAgent911Response(response, normalized) {
     : normalized.reading.question;
   const groundingTerms = questionGroundingTerms(groundingSource);
   const normalizedResponseText = normalizeForGrounding(interpretationText(response));
+  const reflectedGroundingTerms = groundingTerms.filter(
+    (term) => normalizedResponseText.includes(term),
+  );
+  const requiredGroundingTerms = Math.min(groundingTerms.length, 2);
   if (response.responseMode === "reading" && (isSummaryAction(normalized.action) || normalized.action === "follow_up")
       && groundingTerms.length > 0
-      && !groundingTerms.some((term) => normalizedResponseText.includes(term))) {
+      && reflectedGroundingTerms.length < requiredGroundingTerms) {
     reasons.push("question_not_reflected");
   }
   if (response.responseMode === "reading") {
@@ -505,9 +561,17 @@ export function auditAgent911Response(response, normalized) {
       .map((card) => normalizeForGrounding(card.name))
       .filter((cardName) => normalizedResponseText.includes(cardName));
     const requiredCardNames = normalized.action === "follow_up"
-      ? 1
-      : normalized.reading.cardSlugs.length === 7 ? 4 : 2;
+      ? Math.min(2, normalized.reading.cardSlugs.length)
+      : normalized.reading.cardSlugs.length === 7 ? 5 : 3;
     if (citedCardNames.length < requiredCardNames) reasons.push("selected_card_names_missing");
+  }
+  if (response.responseMode === "reading" && genericOpeningPatterns.some(
+    (pattern) => pattern.test(String(response.opening ?? "").trim()),
+  )) {
+    reasons.push("generic_opening");
+  }
+  if (response.responseMode === "reading" && repeatedInterpretiveVerbCount(interpretationText(response)) > 4) {
+    reasons.push("repetitive_language");
   }
   if (findUnselectedCardNames(text, normalized.reading.cardSlugs).length > 0) {
     reasons.push("unselected_card_name");

@@ -31,6 +31,81 @@ function mulberry32(seed) {
   };
 }
 
+function secureRandomUnit() {
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    const value = new Uint32Array(1);
+    globalThis.crypto.getRandomValues(value);
+    return value[0] / 4294967296;
+  }
+
+  return Math.random();
+}
+
+function shuffledCopy(deck, random) {
+  const shuffled = [...deck];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const rawValue = Number(random());
+    const unit = Number.isFinite(rawValue)
+      ? Math.min(Math.max(rawValue, 0), 0.9999999999999999)
+      : secureRandomUnit();
+    const swapIndex = Math.floor(unit * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
+}
+
+function drawPoolDistance(candidate, previousCards) {
+  const previousSlugs = new Set(previousCards.map((card) => card?.slug).filter(Boolean));
+  const overlap = candidate.filter((card) => previousSlugs.has(card.slug)).length;
+  const samePositions = candidate.filter(
+    (card, index) => card.slug === previousCards[index]?.slug,
+  ).length;
+  return { overlap, samePositions };
+}
+
+export function createRandomDrawPool(
+  deck = tarotCards,
+  requestedCount = 9,
+  previousCards = [],
+  random = secureRandomUnit,
+) {
+  const uniqueDeck = deck.filter(
+    (card, index, cards) => card?.slug
+      && cards.findIndex((candidate) => candidate?.slug === card.slug) === index,
+  );
+  const count = Math.min(Math.max(Number(requestedCount) || 0, 0), uniqueDeck.length);
+  if (!count) return [];
+
+  const comparablePrevious = Array.isArray(previousCards) ? previousCards.slice(0, count) : [];
+  if (!comparablePrevious.length) return shuffledCopy(uniqueDeck, random).slice(0, count);
+
+  const minimumPossibleOverlap = Math.max(0, count * 2 - uniqueDeck.length);
+  const maximumPreferredOverlap = Math.max(
+    minimumPossibleOverlap,
+    Math.floor(count * (uniqueDeck.length < count * 2 ? 2 / 3 : 1 / 2)),
+  );
+  let bestCandidate = [];
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const candidate = shuffledCopy(uniqueDeck, random).slice(0, count);
+    const distance = drawPoolDistance(candidate, comparablePrevious);
+    const score = distance.overlap * 2 + distance.samePositions * 4;
+
+    if (score < bestScore) {
+      bestCandidate = candidate;
+      bestScore = score;
+    }
+    if (distance.overlap <= maximumPreferredOverlap && distance.samePositions <= 1) {
+      return candidate;
+    }
+  }
+
+  return bestCandidate;
+}
+
 export function pickSpread(seedSource, deck = tarotCards) {
   const random = mulberry32(hashString(String(seedSource)));
   const shuffled = [...deck];

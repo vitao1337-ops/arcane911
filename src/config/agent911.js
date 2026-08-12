@@ -15,7 +15,7 @@ export const agent911Config = Object.freeze({
   mode: parseMode(viteEnv.VITE_AGENT911_MODE),
   remoteEnabled: parseMode(viteEnv.VITE_AGENT911_MODE) === "live",
   endpoint: String(viteEnv.VITE_AGENT911_ENDPOINT ?? "/api/agent-911").trim(),
-  contextSchemaVersion: "2026-08-12.4",
+  contextSchemaVersion: "2026-08-12.5",
   timeoutMs: 55_000,
   offer: Object.freeze({
     isVisible: false,

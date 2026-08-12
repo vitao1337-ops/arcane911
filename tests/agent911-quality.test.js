@@ -115,9 +115,11 @@ test("o cânone envia somente as relações decisivas para o modelo", () => {
   assert.ok(completeCanon.relationships.some((relation) => relation.cards.includes(complete[5].slug)));
 });
 
-test("falha do modo conectado não consome uma das três perguntas", () => {
+test("falha do modo conectado não injeta fallback nem consome uma pergunta", () => {
   const component = readFileSync(fileURLToPath(new URL("../src/components/Agent911Consultation.jsx", import.meta.url)), "utf8");
-  assert.match(component, /setTemporaryResult\(resultFromFallback/);
+  assert.match(component, /setConnectionError\(requestError\?\.code/);
   assert.match(component, /question_consumed:\s*false/);
+  assert.match(component, /Nenhum texto automático entrou no lugar/);
+  assert.doesNotMatch(component, /setTemporaryResult\(resultFromFallback/);
   assert.doesNotMatch(component, /catch[^}]+setResponses\(nextResponses\)/s);
 });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { RotateCcw, Sparkles } from "lucide-react";
 import { agent911Config } from "../config/agent911";
 import { createTarotAgentContext, requestAgent911 } from "../lib/agent911";
 import { buildAgent911Fallback } from "../lib/agent911Fallback";
@@ -13,15 +13,22 @@ import {
 } from "../lib/agent911Session";
 import "../agent911.css";
 
-function wrapFallback(reading, key, source = "local") {
+function wrapLocalReading(reading, key) {
   return {
     answer: reading.synthesis,
     reading,
     followUps: [],
     conversationId: `essential-${key}`,
     questionsRemaining: 3,
-    source,
+    source: "local",
   };
+}
+
+function canUseCachedSummary(cached) {
+  if (!cached) return false;
+  return !agent911Config.remoteEnabled
+    ? cached.source === "local"
+    : cached.source === "live" && ["gemini", "openai"].includes(cached.meta?.provider);
 }
 
 export default function Agent911Summary({
@@ -37,13 +44,21 @@ export default function Agent911Summary({
     () => `${summaryCacheKey(createdAt, variant, cards)}:${agent911Config.mode}`,
     [cards, createdAt, variant],
   );
-  const fallback = useMemo(
-    () => wrapFallback(buildAgent911Fallback({ cards, intentId, question, variant }), cacheKey),
+  const localResult = useMemo(
+    () => !agent911Config.remoteEnabled
+      ? wrapLocalReading(buildAgent911Fallback({ cards, intentId, question, variant }), cacheKey)
+      : null,
     [cacheKey, cards, intentId, question, variant],
   );
   const cached = useMemo(() => loadAgent911Summary(cacheKey), [cacheKey]);
-  const [result, setResult] = useState(cached ?? fallback);
-  const [loading, setLoading] = useState(!cached && agent911Config.remoteEnabled);
+  const [result, setResult] = useState(() => (
+    canUseCachedSummary(cached) ? cached : localResult
+  ));
+  const [loading, setLoading] = useState(
+    agent911Config.remoteEnabled && !canUseCachedSummary(cached),
+  );
+  const [errorCode, setErrorCode] = useState("");
+  const [attempt, setAttempt] = useState(0);
   const onResultRef = useRef(onResult);
   onResultRef.current = onResult;
 
@@ -58,19 +73,20 @@ export default function Agent911Summary({
   useEffect(() => {
     let active = true;
     const stored = loadAgent911Summary(cacheKey);
-    if (stored) {
+    if (canUseCachedSummary(stored)) {
       setResult(stored);
       setLoading(false);
+      setErrorCode("");
       onResultRef.current?.(stored);
       return () => { active = false; };
     }
 
-    setResult(fallback);
-    setLoading(agent911Config.remoteEnabled);
-    onResultRef.current?.(fallback);
-
     if (!agent911Config.remoteEnabled) {
-      saveAgent911Summary(cacheKey, fallback);
+      setResult(localResult);
+      setLoading(false);
+      setErrorCode("");
+      saveAgent911Summary(cacheKey, localResult);
+      onResultRef.current?.(localResult);
       trackCommercialEvent("agent911_summary_ready", {
         variant,
         card_count: cards.length,
@@ -80,8 +96,14 @@ export default function Agent911Summary({
       return () => { active = false; };
     }
 
-    const currentRequest = getPendingAgent911Summary(cacheKey) ?? setPendingAgent911Summary(
-      cacheKey,
+    setResult(null);
+    setLoading(true);
+    setErrorCode("");
+    onResultRef.current?.(null);
+
+    const pendingKey = `${cacheKey}:connected:${attempt}`;
+    const currentRequest = getPendingAgent911Summary(pendingKey) ?? setPendingAgent911Summary(
+      pendingKey,
       requestAgent911(context, {
         action: variant === "complete" ? "complete_summary" : "opening_summary",
         memoryConsent: false,
@@ -105,22 +127,70 @@ export default function Agent911Summary({
       })
       .catch((requestError) => {
         if (!active) return;
-        trackCommercialEvent("agent911_summary_fallback", {
+        trackCommercialEvent("agent911_summary_unavailable", {
           variant,
           card_count: cards.length,
           reason: requestError?.code ?? "unknown",
         });
-        const resilientResult = { ...fallback, source: "fallback" };
-        setResult(resilientResult);
+        setResult(null);
         setLoading(false);
-        onResultRef.current?.(resilientResult);
+        setErrorCode(requestError?.code ?? "unknown");
+        onResultRef.current?.(null);
       });
 
     return () => { active = false; };
-  }, [cacheKey, context, fallback, variant]);
+  }, [attempt, cacheKey, cards.length, context, localResult, variant]);
+
+  const isComplete = variant === "complete";
+
+  if (!result) {
+    return (
+      <article
+        className={`synthesis-card agent911-summary is-${variant} ${loading ? "is-loading" : "is-unavailable"}`}
+        aria-labelledby={`agent911-summary-title-${variant}`}
+        data-agent911-source={loading ? "pending" : "unavailable"}
+        data-agent911-provider={loading ? "pending" : "none"}
+      >
+        <div className="synthesis-orb agent911-summary-orb" aria-hidden="true">
+          <span>✦</span><strong>911</strong>
+        </div>
+        <div className="agent911-summary-copy">
+          <div className="agent911-summary-meta">
+            <span className="section-kicker">{isComplete ? "Síntese pessoal da Ferradura" : "Leitura pessoal do 911"}</span>
+            <span className={loading ? "is-reading" : ""} role="status">
+              <Sparkles size={13} /> {loading ? "lendo sua mesa…" : "leitura interrompida"}
+            </span>
+          </div>
+          <div className="agent911-card-anchors" aria-label="Cartas desta leitura">
+            {cards.map((card) => <span key={card.slug}>{card.name}</span>)}
+          </div>
+          <h3 id={`agent911-summary-title-${variant}`}>
+            {loading
+              ? isComplete ? "Sete posições estão virando uma história só." : "Sua pergunta está encontrando as três cartas."
+              : "O 911 não concluiu esta leitura."}
+          </h3>
+          <q>{question}</q>
+          {loading ? (
+            <div className="agent911-reading-stage" aria-hidden="true">
+              <span>Escutando o ponto vivo da pergunta</span>
+              <span>Cruzando cartas, posições e tensões</span>
+              <span>Lapidando uma resposta sem fórmulas prontas</span>
+            </div>
+          ) : (
+            <div className="agent911-reading-retry">
+              <p>Nenhum texto automático foi colocado no lugar. Sua mesa continua aberta; tente novamente para receber a leitura conectada.</p>
+              <button className="button button-glass" type="button" onClick={() => setAttempt((current) => current + 1)}>
+                <RotateCcw size={15} /> Tentar a leitura novamente
+              </button>
+              <small data-agent911-error={errorCode}>A tentativa não altera suas cartas nem consome uma pergunta.</small>
+            </div>
+          )}
+        </div>
+      </article>
+    );
+  }
 
   const reading = result.reading;
-  const isComplete = variant === "complete";
 
   return (
     <article

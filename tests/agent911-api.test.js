@@ -42,7 +42,7 @@ function modelReading() {
   return {
     responseMode: "reading",
     title: "A escolha pede medida",
-    opening: "A mesa mostra uma passagem entre impulso, evidência e escolha consciente.",
+    opening: "Você já percebeu que movimento sem verdade só muda o cenário do mesmo conflito.",
     sections: [{
       id: "whole-spread",
       title: "O movimento inteiro",
@@ -197,6 +197,7 @@ test("Gemini é o provedor principal, recebe schema compatível e mantém a chav
     );
     assert.match(providerCall.body.systemInstruction.parts[0].text, /ANTI-MONOTONIA/);
     assert.match(providerCall.body.contents[0].parts[0].text, /voiceDirection/);
+    assert.match(providerCall.body.contents[0].parts[0].text, /personalizationContract/);
     assert.equal(response.payload.meta.provider, "gemini");
     assert.equal(response.payload.meta.model, "gemini-3.5-flash");
     assert.equal(response.payload.meta.usedFallbackModel, false);
@@ -415,7 +416,7 @@ test("uma paráfrase pessoal não vira 502 quando só a checagem lexical da perg
     assert.equal(calls.length, 2);
     assert.match(calls[1].systemInstruction.parts[0].text, /palavra ou expressão concreta presente na pergunta/);
     assert.equal(response.payload.meta.grounded, true);
-    assert.ok(warnings.some((items) => items[0] === "agent911_audit_semantic_paraphrase"));
+    assert.ok(warnings.some((items) => items[0] === "agent911_audit_style_warning"));
     assert.equal(JSON.stringify(warnings).includes(body.context.reading.question), false);
   } finally {
     globalThis.fetch = originalFetch;

@@ -123,6 +123,8 @@ test("o funil entrega uma síntese automática e só pede cadastro na consulta",
   assert.match(summary, /opening_summary/);
   assert.match(summary, /complete_summary/);
   assert.match(summary, /catch\(\([^)]*\) =>/);
+  assert.match(summary, /Nenhum texto automático foi colocado no lugar/);
+  assert.doesNotMatch(summary, /setResult\(fallback\)/);
   assert.match(consultation, /Nome completo/);
   assert.match(consultation, /stage === "register"/);
   assert.doesNotMatch(agentStyles, /agent911-error/);

@@ -1,4 +1,4 @@
-const SUMMARY_PREFIX = "arcane911.agent-summary.v4:";
+const SUMMARY_PREFIX = "arcane911.agent-summary.v5:";
 const PROFILE_KEY = "arcane911.consultation-profile.v1";
 const CONSULTATION_PREFIX = "arcane911.consultation.v1:";
 const pendingSummaries = new Map();

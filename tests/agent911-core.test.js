@@ -60,7 +60,7 @@ function groundedResponse(normalized) {
     sections: [{
       id: "whole-spread",
       title: "O desenho da mesa",
-      text: `${cardNames.slice(0, 4).join(", ")} desenham uma passagem que precisa ser lida sem transformar sensação em prova.`,
+      text: `${cardNames.slice(0, 4).join(", ")} desenham o primeiro eixo; ${cardNames.slice(4).join(", ")} transformam a passagem sem fazer da sensação uma prova.`,
       cardSlugs: [...normalized.reading.cardSlugs],
     }],
     synthesis: "O movimento mais honesto separa desejo, medo e fatos antes de escolher.",
@@ -142,7 +142,10 @@ test("o parser do Gemini lê JSON estruturado e a direção de voz entra no cont
   const direction = selectAgent911VoiceDirection(normalized);
   assert.ok(direction.id);
   assert.ok(direction.instruction.length > 60);
-  assert.match(buildAgent911ModelInput(normalized), new RegExp(direction.id));
+  const modelInput = buildAgent911ModelInput(normalized);
+  assert.match(modelInput, new RegExp(direction.id));
+  assert.match(modelInput, /personalizationContract/);
+  assert.match(modelInput, /minimumNamedCards/);
 });
 
 test("o auditor aceita leitura ancorada e rejeita certeza ou carta ausente", () => {
@@ -169,6 +172,10 @@ test("o auditor aceita leitura ancorada e rejeita certeza ou carta ausente", () 
   const generic = structuredClone(response);
   generic.sections[0].text = "As posições formam uma passagem simbólica entre desejo, limite e consequência.";
   assert.ok(auditAgent911Response(generic, normalized).reasons.includes("selected_card_names_missing"));
+
+  const genericOpening = structuredClone(response);
+  genericOpening.opening = "A mesa mostra uma energia entre desejo e escolha.";
+  assert.ok(auditAgent911Response(genericOpening, normalized).reasons.includes("generic_opening"));
 });
 
 test("sem consentimento, nenhuma atualização de memória sobrevive à auditoria", () => {

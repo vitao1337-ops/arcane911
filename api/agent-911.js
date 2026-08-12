@@ -165,16 +165,28 @@ function repairInstruction(repairReasons) {
     if (reason === "selected_card_names_missing") {
       return "Nomeie as cartas selecionadas dentro da interpretação, conectando-as entre si em vez de apenas listá-las.";
     }
+    if (reason === "generic_opening") {
+      return "Troque a abertura genérica por uma frase de reconhecimento ligada ao conflito humano e a esta combinação de cartas.";
+    }
+    if (reason === "repetitive_language") {
+      return "Varie verbos, cadência e construção; não apoie a leitura inteira em mostra, pede, indica ou revela.";
+    }
     return `Corrija o requisito técnico ${reason}.`;
   }).join(" ");
 
   return `\n\nCORREÇÃO OBRIGATÓRIA: ${guidance} Refaça a leitura sem comentar a auditoria nem soar mecânica.`;
 }
 
-function isSemanticParaphraseOnly(audit) {
+const repairableStyleReasons = new Set([
+  "question_not_reflected",
+  "generic_opening",
+  "repetitive_language",
+]);
+
+function hasOnlyRepairableStyleIssues(audit) {
   return audit?.ok === false
-    && audit.reasons?.length === 1
-    && audit.reasons[0] === "question_not_reflected";
+    && audit.reasons?.length > 0
+    && audit.reasons.every((reason) => repairableStyleReasons.has(reason));
 }
 
 function providerFailure(payload, status, provider) {
@@ -367,12 +379,12 @@ export default async function handler(request, response) {
       audit = auditAgent911Response(reading, normalized);
     }
 
-    if (isSemanticParaphraseOnly(audit)) {
-      console.warn("agent911_audit_semantic_paraphrase", {
+    if (hasOnlyRepairableStyleIssues(audit)) {
+      console.warn("agent911_audit_style_warning", {
         requestId: normalized.requestId,
         reasons: audit.reasons,
       });
-      audit = { ok: true, reasons: [], warnings: ["question_not_reflected"] };
+      audit = { ok: true, reasons: [], warnings: audit.reasons };
     }
 
     if (!audit.ok) {
