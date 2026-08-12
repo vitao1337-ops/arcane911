@@ -135,15 +135,25 @@ test("a auditoria rejeita sentença afetiva e rótulo psicológico disfarçados 
   const foretold = personalReading(normalized, evaluationCases[0].anchors);
   foretold.synthesis = "O ciclo atual se encerrou; você já sabe o que quer e permanecer gerará ressentimento.";
 
+  const familyStory = personalReading(normalized, evaluationCases[0].anchors);
+  familyStory.synthesis = "O seu conflito real não é a proposta. As cartas mostram que um acordo inconsciente impede você de seguir.";
+
   assert.ok(auditAgent911Response(certainty, normalized).reasons.includes("unsupported_certainty_language"));
   assert.ok(auditAgent911Response(labeled, normalized).reasons.includes("unsupported_certainty_language"));
   assert.ok(auditAgent911Response(foretold, normalized).reasons.includes("unsupported_certainty_language"));
+  assert.ok(auditAgent911Response(familyStory, normalized).reasons.includes("unsupported_certainty_language"));
 
   const softened = normalizeAgent911InterpretiveLanguage(foretold);
   assert.equal(auditAgent911Response(softened, normalized).ok, true);
-  assert.match(softened.synthesis, /vale observar se o ciclo atual chegou ao limite/i);
+  assert.match(softened.synthesis, /o ciclo atual pode estar chegando ao limite/i);
   assert.match(softened.synthesis, /pode ser que uma parte sua já saiba/i);
   assert.match(softened.synthesis, /pode alimentar ressentimento/i);
+
+  const softenedFamilyStory = normalizeAgent911InterpretiveLanguage(familyStory);
+  assert.equal(auditAgent911Response(softenedFamilyStory, normalized).ok, true);
+  assert.match(softenedFamilyStory.synthesis, /o conflito talvez não seja apenas a proposta/i);
+  assert.match(softenedFamilyStory.synthesis, /levanta a hipótese/i);
+  assert.doesNotMatch(softenedFamilyStory.synthesis, /acordo inconsciente|impede você/i);
 });
 
 test("o modo conectado espera o Gemini e não exibe uma leitura local provisória", () => {

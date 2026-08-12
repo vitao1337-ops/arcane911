@@ -174,6 +174,7 @@ MÉTODO DE LEITURA
 11. Cartas não diagnosticam a pessoa nem provam o estado de uma relação. Apresente o ponto incisivo como uma hipótese precisa ("pode haver", "a mesa sugere", "vale observar") e convide a pessoa a confrontá-la com fatos observáveis.
 12. Não transforme símbolo em sentença. Nunca declare como fato que "não é amor", que uma história ou ciclo "já acabou", que o vínculo é dependência, que o conflito é infantilidade ou que você conhece a verdade oculta da pessoa.
 13. Não diga que a pessoa "já sabe o que quer", que está escondendo uma verdade ou que uma escolha gerará inevitavelmente determinada emoção. Quando isso não foi relatado, use "vale investigar se" e proponha um critério verificável.
+14. A posição "oculta" autoriza uma pergunta simbólica, não uma alegação sobre segredo, acordo inconsciente, dependência familiar ou motivo que a pessoa não contou.
 
 PERSONALIDADE E ESTILO
 - Escreva em português brasileiro natural, sofisticado e compreensível.
@@ -486,14 +487,23 @@ const unsupportedCertaintyPatterns = [
   /você (?:está|esta) grávida/iu,
   /morte física/iu,
   /as cartas confirmam/iu,
+];
+
+const interpretiveOverreachPatterns = [
   /\bn[aã]o [eé] (?:o )?amor\b/iu,
-  /\b(?:esta|essa|a|sua|seu|o)\s+(?:hist[oó]ria|rela[cç][aã]o|relacionamento|ciclo|din[aâ]mica)\s+(?:atual\s+)?(?:j[aá]\s+)?(?:acabou|terminou|se esgotou|se encerrou|est[aá] encerrad[ao])\b/iu,
-  /\b(?:o|seu) conflito (?:central|real) (?:n[aã]o )?[eé]\b/iu,
+  /\b(?:esta|essa|a|sua|seu|o)\s+(?:hist[oó]ria|rela[cç][aã]o|relacionamento|ciclo|din[aâ]mica|estrutura|configura[cç][aã]o|formato|estabilidade)\b.{0,45}\b(?:acabou|terminou|se esgotou|se encerrou|est[aá] encerrad[ao]|est[aá] se encerrando|processo de esgotamento)\b/iu,
+  /\b(?:(?:o|a)\s+)?seu conflito (?:central|real) (?:n[aã]o )?[eé]/iu,
   /\bapego infantil\b/iu,
   /\bdepend[eê]ncia m[uú]tua\b/iu,
   /\bvoc[eê] (?:j[aá]\s+)?sabe o que quer\b/iu,
-  /\b(?:gerar[aá]|causar[aá]|levar[aá])\s+(?:inevitavelmente\s+)?(?:ressentimento|arrependimento|sofrimento|fracasso)\b/iu,
+  /\b(?:gera|causa|leva a|gerar[aá]|causar[aá]|levar[aá])\s+(?:inevitavelmente\s+)?(?:um\s+)?(?:ressentimento|arrependimento|sofrimento|fracasso)\b/iu,
   /\b(?:inevit[aá]vel|inevitavelmente|[uú]nica certeza)\b/iu,
+  /\b(?:acordo|pacto) (?:inconsciente|silencioso|oculto)\b/iu,
+  /\b(?:impede|faz) voc[eê](?!\p{L})/iu,
+  /\b(?:voc[eê]\s+)?(?:esconde|oculta|reprime|abafa|guarda um saber)\b/iu,
+  /(?:^|\s)(?:[eé]|seria),?\s+na verdade\b/iu,
+  /\bse voc[eê] descobrir que\b/iu,
+  /\bn[aã]o precisar[aá] (?:testar|encarar|assumir)\b/iu,
 ];
 
 function withMatchedCase(match, replacement) {
@@ -504,52 +514,71 @@ function lowerInitial(value) {
   return value ? `${value[0].toLocaleLowerCase("pt-BR")}${value.slice(1)}` : value;
 }
 
-function softenInterpretiveText(value) {
-  return String(value ?? "")
+function softenInterpretiveText(value, { frameRemainingOverreach = true } = {}) {
+  const softened = String(value ?? "")
     .replace(/\bn[aã]o [eé] (?:o )?amor\b/giu, (match) => withMatchedCase(match, "pode não ser apenas amor"))
     .replace(
-      /\b((?:esta|essa|a|sua|seu|o)\s+(?:hist[oó]ria|rela[cç][aã]o|relacionamento|ciclo|din[aâ]mica)\s*(?:atual\s+)?)(?:j[aá]\s+)?(?:acabou|terminou|se esgotou|se encerrou|est[aá] encerrad[ao])\b/giu,
-      (match, subject) => withMatchedCase(match, `vale observar se ${lowerInitial(subject.trim())} chegou ao limite`),
+      /\b((?:esta|essa|a|sua|seu|o)\s+(?:hist[oó]ria|rela[cç][aã]o|relacionamento|ciclo|din[aâ]mica|estrutura|configura[cç][aã]o|formato|estabilidade)\s*(?:atual\s+)?)(?:j[aá]\s+)?(?:acabou|terminou|se esgotou|se encerrou|est[aá] encerrad[ao]|est[aá] se encerrando|est[aá] em processo de esgotamento)\b/giu,
+      (match, subject) => withMatchedCase(match, `${lowerInitial(subject.trim())} pode estar chegando ao limite`),
     )
     .replace(
-      /\b(?:o|seu) conflito (?:central|real) (n[aã]o )?[eé]\b/giu,
+      /\b(?:(?:o|a)\s+)?seu conflito (?:central|real) (n[aã]o )?[eé]/giu,
       (match, negative) => withMatchedCase(
         match,
         negative
-          ? "uma hipótese a examinar é que o conflito talvez não esteja em"
-          : "uma hipótese central a examinar é",
+          ? "o conflito talvez não seja apenas"
+          : "o conflito pode estar em",
       ),
+    )
+    .replace(
+      /\b(?:as cartas|a mesa)\s+(?:mostram|mostra|apontam|aponta|revelam|revela) que\b/giu,
+      (match) => withMatchedCase(match, "a combinação levanta a hipótese de que"),
     )
     .replace(/\bapego infantil\b/giu, (match) => withMatchedCase(match, "apego que busca segurança"))
     .replace(/\bdepend[eê]ncia m[uú]tua\b/giu, (match) => withMatchedCase(match, "dinâmica de dependência que vale examinar"))
     .replace(/\bvoc[eê] (?:j[aá]\s+)?sabe o que quer\b/giu, (match) => withMatchedCase(match, "pode ser que uma parte sua já saiba o que deseja"))
+    .replace(/\bvoc[eê] guarda um saber\b/giu, (match) => withMatchedCase(match, "pode haver em você uma percepção"))
+    .replace(/\bvoc[eê] (?:tem usado|usa)\b/giu, (match) => withMatchedCase(match, "vale observar se você tem usado"))
+    .replace(/\b(?:voc[eê]\s+)?prefere abafar\b/giu, (match) => withMatchedCase(match, "talvez esteja abafando"))
+    .replace(/\b(?:acordo|pacto) (?:inconsciente|silencioso|oculto)\b/giu, (match) => withMatchedCase(match, "possível padrão de proteção não nomeado"))
+    .replace(/\b(?:que\s+)?impede voc[eê] de [^.;!?]+/giu, (match) => withMatchedCase(match, "que pode estar limitando seu movimento"))
     .replace(
-      /\b(?:gerar[aá]|causar[aá]|levar[aá])\s+(?:inevitavelmente\s+)?(ressentimento|arrependimento|sofrimento|fracasso)\b/giu,
+      /\b(?:gera|causa|leva a|gerar[aá]|causar[aá]|levar[aá])\s+(?:inevitavelmente\s+)?(?:um\s+)?(ressentimento|arrependimento|sofrimento|fracasso)\b/giu,
       (match, outcome) => withMatchedCase(match, `pode alimentar ${outcome}`),
     )
+    .replace(/(?:^|\s)(?:[eé]|seria),?\s+na verdade,?/giu, (match) => `${/^\s/u.test(match) ? " " : ""}${withMatchedCase(match.trim(), "também pode ser")}`)
+    .replace(/\bse voc[eê] descobrir que\b/giu, (match) => withMatchedCase(match, "se você considerar a hipótese de que"))
+    .replace(/\bn[aã]o precisar[aá] (?:testar|encarar|assumir)\b/giu, (match) => withMatchedCase(match, "pode acabar evitando encarar"))
     .replace(/\binevitavelmente\b/giu, (match) => withMatchedCase(match, "se o padrão continuar"))
     .replace(/\binevit[aá]vel\b/giu, (match) => withMatchedCase(match, "difícil de adiar no caminho atual"))
     .replace(/\b[uú]nica certeza\b/giu, (match) => withMatchedCase(match, "evidência mais concreta disponível"));
+
+  const stillOverreaches = interpretiveOverreachPatterns.some((pattern) => pattern.test(softened));
+  if (!frameRemainingOverreach || !stillOverreaches) return softened;
+  return `Como hipótese simbólica desta mesa — a ser testada contra fatos, não tomada como sentença —, ${lowerInitial(softened)}`;
 }
 
 export function normalizeAgent911InterpretiveLanguage(response) {
   if (!response || typeof response !== "object" || response.responseMode !== "reading") return response;
   return {
     ...response,
-    title: softenInterpretiveText(response.title),
+    title: softenInterpretiveText(response.title, { frameRemainingOverreach: false }),
     opening: softenInterpretiveText(response.opening),
     synthesis: softenInterpretiveText(response.synthesis),
-    groundedAction: softenInterpretiveText(response.groundedAction),
-    closingQuestion: softenInterpretiveText(response.closingQuestion),
+    groundedAction: softenInterpretiveText(response.groundedAction, { frameRemainingOverreach: false }),
+    closingQuestion: softenInterpretiveText(response.closingQuestion, { frameRemainingOverreach: false }),
     sections: Array.isArray(response.sections)
       ? response.sections.map((section) => ({
         ...section,
-        title: softenInterpretiveText(section?.title),
+        title: softenInterpretiveText(section?.title, { frameRemainingOverreach: false }),
         text: softenInterpretiveText(section?.text),
       }))
       : response.sections,
     suggestedQuestions: Array.isArray(response.suggestedQuestions)
-      ? response.suggestedQuestions.map(softenInterpretiveText)
+      ? response.suggestedQuestions.map((question) => softenInterpretiveText(
+        question,
+        { frameRemainingOverreach: false },
+      ))
       : response.suggestedQuestions,
   };
 }
@@ -652,7 +681,16 @@ export function auditAgent911Response(response, normalized) {
   if (findUnselectedCardNames(text, normalized.reading.cardSlugs).length > 0) {
     reasons.push("unselected_card_name");
   }
-  if (unsupportedCertaintyPatterns.some((pattern) => pattern.test(text))) {
+  const interpretationFields = [
+    response.opening,
+    response.synthesis,
+    ...(Array.isArray(response.sections) ? response.sections.map((section) => section?.text) : []),
+  ].map((value) => String(value ?? ""));
+  const hasUnframedInterpretiveOverreach = interpretationFields.some((value) => (
+    interpretiveOverreachPatterns.some((pattern) => pattern.test(value))
+    && !value.startsWith("Como hipótese simbólica desta mesa")
+  ));
+  if (unsupportedCertaintyPatterns.some((pattern) => pattern.test(text)) || hasUnframedInterpretiveOverreach) {
     reasons.push("unsupported_certainty_language");
   }
 

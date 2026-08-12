@@ -206,7 +206,7 @@ test("Gemini é o provedor principal, recebe schema compatível e mantém a chav
     assert.equal(response.payload.meta.model, "gemini-3.5-flash");
     assert.equal(response.payload.meta.usedFallbackModel, false);
     assert.equal(providerCallCount, 1);
-    assert.match(response.payload.reading.synthesis, /vale observar se o ciclo atual chegou ao limite/i);
+    assert.match(response.payload.reading.synthesis, /o ciclo atual pode estar chegando ao limite/i);
     assert.match(response.payload.reading.synthesis, /pode alimentar ressentimento/i);
     assert.equal(JSON.stringify(response.payload).includes("gemini-secret-never-return"), false);
     assert.equal(JSON.stringify(response.payload).includes("legacy-openai-secret"), false);
