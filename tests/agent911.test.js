@@ -34,8 +34,8 @@ test("o contexto seguro do Agente 911 preserva pergunta, posições e guardrails
   assert.equal(agent911Config.offer.isCheckoutEnabled, false);
   assert.equal(agent911Config.offer.questionLimit, 3);
   assert.equal(agent911Config.enabled, true);
-  assert.equal(agent911Config.mode, "local");
-  assert.equal(agent911Config.remoteEnabled, false);
+  assert.equal(agent911Config.mode, "live");
+  assert.equal(agent911Config.remoteEnabled, true);
 });
 
 test("o cliente do Agente 911 fica desligado até ativação explícita", async () => {
@@ -96,6 +96,11 @@ test("a futura chamada usa endpoint próprio sem chave de provedor no navegador"
           followUps: ["O que muda se eu sustentar esse limite?"],
           conversationId: "conversation-911",
           questionsRemaining: 3,
+          meta: {
+            provider: "gemini",
+            model: "gemini-3.5-flash",
+            usedFallbackModel: false,
+          },
         }),
       };
     },
@@ -110,5 +115,6 @@ test("a futura chamada usa endpoint próprio sem chave de provedor no navegador"
   assert.equal(requestBody.memoryConsent, false);
   assert.match(response.answer, /Ferradura/);
   assert.equal(response.followUps.length, 1);
+  assert.equal(response.meta.provider, "gemini");
   assert.match(serializeAgent911Reading(response.reading), /O terreno/);
 });

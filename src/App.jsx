@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { completePositions, intents, positions, tarotBySlug, tarotCards } from "./data/tarot";
 import { getReadingForIntent, specificReadings } from "./data/products";
+import { agent911Config } from "./config/agent911";
 import { salesConfig } from "./config/sales";
 import Agent911Consultation from "./components/Agent911Consultation";
 import Agent911Summary from "./components/Agent911Summary";
@@ -740,7 +741,11 @@ function App() {
               placeholder={selectedIntent.prompt}
               rows="4"
             />
-            <small>{question.length}/800 · ao revelar, o 911 lê esta pergunta junto das cartas, sem cadastro</small>
+            <small>
+              {question.length}/800 · {agent911Config.remoteEnabled
+                ? "ao revelar, esta pergunta e as cartas seguem ao 911 conectado, sem cadastro"
+                : "ao revelar, esta pergunta e as cartas ficam neste dispositivo, sem cadastro"}
+            </small>
           </label>
 
           <button className="button button-primary button-large" type="button" onClick={beginRitual}>

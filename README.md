@@ -1,4 +1,4 @@
-# Arcane911 — V9 · Motor local contextual
+# Arcane911 — V10 · Gemini híbrido
 
 Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual do Sorriso Marcado e das 22 cartas originais dos Arcanos Maiores.
 
@@ -42,8 +42,11 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - Formulário astral renovado com nome completo e superfícies clicáveis de data e horário.
 - Microtipografia ampliada somente no desktop, preservando fontes, blocos e direção visual.
 - Síntese 911 automática nas leituras de três e sete cartas, pessoal e ancorada na pergunta, sem clique extra nem cadastro.
-- Motor local contextual instantâneo, sem custo por leitura: interpreta o conflito concreto da pergunta, as posições, as cartas e suas relações.
-- Modo conectado opcional: quando houver crédito, a OpenAI pode substituir a leitura local sem quebrar o funil.
+- Gemini conectado por padrão no mesmo endpoint seguro, usando `gemini-3.5-flash` e Structured Output.
+- Segunda rota gratuita automática em `gemini-3.5-flash-lite` quando o modelo principal atinge limite ou fica indisponível.
+- Motor local contextual instantâneo como última camada de resiliência: interpreta pergunta, posições, cartas e relações sem custo por leitura.
+- Seis direções de voz escolhidas pelo contexto e instruções anti-fórmula reduzem aberturas e cadências repetidas.
+- OpenAI preservada como provedor opcional e reversível, sem ser chamada quando o Gemini está selecionado.
 - Falha do modo conectado mantém a leitura essencial e não consome uma das três perguntas da Consulta 911.
 - Uma única síntese por tiragem; o antigo bloco genérico duplicado foi removido.
 - Consulta 911 separada da leitura, com cadastro solicitado somente ao entrar e até três aprofundamentos conectados à Ferradura.
@@ -51,7 +54,7 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - Bíblia canônica própria dos 22 Arcanos e das 231 combinações possíveis entre pares; o servidor reconstrói a mesa e não confia em significados enviados pelo navegador.
 - Auditoria automática rejeita cartas inventadas, cartas omitidas, certezas deterministas e afirmações sem sustentação na tiragem.
 - Memória opcional, privada neste dispositivo, com consentimento explícito e exclusão integral em dois passos.
-- Chave da OpenAI mantida exclusivamente na função server-side da Vercel; nenhuma credencial é enviada ao navegador.
+- Chaves de Gemini ou OpenAI mantidas exclusivamente na função server-side da Vercel; nenhuma credencial é enviada ao navegador.
 - Checkout permanece desacoplado no código para monetização futura, com eventos comerciais prontos para GTM/dataLayer.
 - Layout responsivo, navegação por teclado e redução de movimento.
 
@@ -64,7 +67,9 @@ npm install
 npm run dev
 ```
 
-O Vite exibirá o endereço local. Para validar a versão de produção:
+O Vite exibirá o endereço local e encaminhará `/api` para a função publicada em `https://arcane911.vercel.app`. Assim, o localhost usa a mesma chave segura da Vercel sem copiá-la para o navegador. Para apontar a um Preview, configure `ARCANE911_DEV_API_TARGET` em `.env.local`.
+
+Para validar a versão de produção:
 
 ```bash
 npm test
@@ -95,7 +100,7 @@ npm run preview
 - `src/lib/agent911Memory.js`: módulo de memória consentida preservado para a futura conta server-side; não é acionado na síntese automática.
 - `server/tarot-canon.js`: Bíblia 911 dos 22 Arcanos e relações de pares.
 - `server/agent911-core.js`: validação, prompt, Structured Output e auditoria.
-- `api/agent-911.js`: função serverless que conversa com a OpenAI sem expor a chave.
+- `api/agent-911.js`: função serverless híbrida que escolhe Gemini ou OpenAI sem expor chaves.
 - `public/cards/`: 22 imagens WebP otimizadas para o site.
 - `tests/`: contratos do baralho, rotas, Ferradura e cálculo astrológico.
 - `vercel.json`: fallback de SPA para abrir todas as rotas diretamente na Vercel.
@@ -120,16 +125,20 @@ Referência curatorial: [A history of tarot cards — Victoria and Albert Museum
 
 ## Agente 911 — publicar na Vercel
 
-A rota `POST /api/agent-911` já está pronta. No projeto da Vercel, abra **Settings → Environment Variables**, adicione `OPENAI_API_KEY` com a sua chave e aplique em Production, Preview e Development conforme a necessidade. Em seguida, faça um novo deploy. Opcionalmente, configure `OPENAI_MODEL=gpt-5.6-terra`; esse já é o modelo padrão do código.
+A rota `POST /api/agent-911` já está pronta. No projeto existente da Vercel, confirme estas variáveis em **Settings → Environment Variables** e faça um novo deploy:
 
 ```env
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-5.6-terra
+GEMINI_API_KEY=sua-chave-real
+AGENT911_PROVIDER=gemini
+GEMINI_MODEL=gemini-3.5-flash
+GEMINI_FALLBACK_MODEL=gemini-3.5-flash-lite
 VITE_AGENT911_ENABLED=true
-VITE_AGENT911_MODE=local
+VITE_AGENT911_MODE=live
 ```
 
-Nunca use o prefixo `VITE_` na chave secreta. Variáveis `VITE_*` entram no JavaScript público. No modo `local`, pergunta e cartas não são enviadas à OpenAI. Para reativar o modo conectado, defina `VITE_AGENT911_MODE=live` e faça novo deploy; as respostas continuam usando `store: false`. A memória é uma beta local: fica no navegador atual, não acompanha outro aparelho e pode ser apagada na própria interface.
+`GEMINI_API_KEY` é a única variável obrigatória do Gemini. `AGENT911_PROVIDER=gemini` apenas trava a escolha; sem ela, o modo `auto` já prefere Gemini quando encontra a chave. `GEMINI_MODEL` e `GEMINI_FALLBACK_MODEL` são opcionais porque os valores acima já são padrão no código.
+
+Nunca use `VITE_GEMINI_API_KEY`: tudo com prefixo `VITE_` entra no JavaScript público. A V10 envia `store: false`, não registra perguntas em logs ou analytics e envia somente o contexto necessário à leitura. No nível gratuito da Gemini Developer API, o Google informa que o conteúdo pode ser usado para melhorar seus produtos; esse ponto precisa entrar na política de privacidade antes de monetização. O motor local continua disponível com `VITE_AGENT911_MODE=local` e, nesse modo, a pergunta não sai do dispositivo.
 
 Para desligar o agente sem remover código, defina `VITE_AGENT911_ENABLED=false` e faça novo deploy. O passo a passo completo está em `AGENTE911-SETUP.md`.
 
@@ -140,8 +149,10 @@ O CTA da Ferradura está deliberadamente liberado nesta versão. A infraestrutur
 ```env
 VITE_CHECKOUT_URL=https://seu-checkout.com/produto/arcane911
 VITE_PRODUCT_ID=arcane911-leitura-profunda
-VITE_OFFER_PRICE=R$ 19,90
+VITE_OFFER_PRICE=
 ```
+
+Preço permanece vazio até decisão comercial explícita.
 
 Eventos disponíveis em `window.dataLayer` e no evento DOM `arcane911:commercial-event`:
 

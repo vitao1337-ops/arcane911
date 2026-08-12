@@ -97,6 +97,7 @@ export default function Agent911Summary({
           variant,
           card_count: cards.length,
           source: "live",
+          provider: liveResult.meta?.provider ?? "unknown",
         });
         setResult(normalized);
         setLoading(false);
@@ -126,6 +127,8 @@ export default function Agent911Summary({
       className={`synthesis-card agent911-summary is-${variant}`}
       aria-labelledby={`agent911-summary-title-${variant}`}
       data-agent911-source={result.source ?? "live"}
+      data-agent911-provider={result.meta?.provider
+        ?? (result.source === "local" ? "local" : result.source === "fallback" ? "fallback" : "unknown")}
     >
       <div className="synthesis-orb agent911-summary-orb" aria-hidden="true">
         <span>✦</span><strong>911</strong>

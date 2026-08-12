@@ -5,6 +5,9 @@ import {
   auditAgent911Response,
   buildAgent911ModelInput,
   createAgent911ResponseSchema,
+  createGeminiResponseSchema,
+  parseGeminiOutput,
+  selectAgent911VoiceDirection,
   validateAgent911Request,
 } from "../server/agent911-core.js";
 import {
@@ -49,6 +52,7 @@ function requestBody(overrides = {}) {
 }
 
 function groundedResponse(normalized) {
+  const cardNames = normalized.reading.canonical.cards.map((card) => card.name);
   return {
     responseMode: "reading",
     title: "O vínculo pede medida",
@@ -56,7 +60,7 @@ function groundedResponse(normalized) {
     sections: [{
       id: "whole-spread",
       title: "O desenho da mesa",
-      text: "As posições mostram uma passagem que precisa ser lida sem transformar sensação em prova.",
+      text: `${cardNames.slice(0, 4).join(", ")} desenham uma passagem que precisa ser lida sem transformar sensação em prova.`,
       cardSlugs: [...normalized.reading.cardSlugs],
     }],
     synthesis: "O movimento mais honesto separa desejo, medo e fatos antes de escolher.",
@@ -116,6 +120,31 @@ test("o esquema estruturado permite citar somente cartas selecionadas", () => {
   assert.equal(JSON.stringify(schema).includes("uniqueItems"), false);
 });
 
+test("o schema do Gemini preserva o contrato e remove palavras-chave incompatíveis", () => {
+  const normalized = validateAgent911Request(requestBody());
+  const schema = createGeminiResponseSchema(normalized.reading.cardSlugs);
+  assert.equal(schema.type, "object");
+  assert.equal(schema.additionalProperties, false);
+  assert.deepEqual(
+    schema.properties.sections.items.properties.cardSlugs.items.enum,
+    normalized.reading.cardSlugs,
+  );
+  assert.equal(JSON.stringify(schema).includes("maxLength"), false);
+  assert.equal(schema.properties.audit.properties.unsupportedCertainty.enum, undefined);
+});
+
+test("o parser do Gemini lê JSON estruturado e a direção de voz entra no contexto", () => {
+  const normalized = validateAgent911Request(requestBody());
+  const response = groundedResponse(normalized);
+  assert.deepEqual(parseGeminiOutput({
+    candidates: [{ content: { parts: [{ text: JSON.stringify(response) }] } }],
+  }), response);
+  const direction = selectAgent911VoiceDirection(normalized);
+  assert.ok(direction.id);
+  assert.ok(direction.instruction.length > 60);
+  assert.match(buildAgent911ModelInput(normalized), new RegExp(direction.id));
+});
+
 test("o auditor aceita leitura ancorada e rejeita certeza ou carta ausente", () => {
   const normalized = validateAgent911Request(requestBody());
   const response = groundedResponse(normalized);
@@ -136,6 +165,10 @@ test("o auditor aceita leitura ancorada e rejeita certeza ou carta ausente", () 
   const inventedName = structuredClone(response);
   inventedName.opening = "O Imperador confirma o resultado.";
   assert.equal(auditAgent911Response(inventedName, normalized).ok, false);
+
+  const generic = structuredClone(response);
+  generic.sections[0].text = "As posições formam uma passagem simbólica entre desejo, limite e consequência.";
+  assert.ok(auditAgent911Response(generic, normalized).reasons.includes("selected_card_names_missing"));
 });
 
 test("sem consentimento, nenhuma atualização de memória sobrevive à auditoria", () => {

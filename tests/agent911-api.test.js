@@ -38,6 +38,7 @@ function requestBody() {
 
 function modelReading() {
   const cardSlugs = selected.map((card) => card.slug);
+  const cardNames = selected.map((card) => card.name);
   return {
     responseMode: "reading",
     title: "A escolha pede medida",
@@ -45,7 +46,7 @@ function modelReading() {
     sections: [{
       id: "whole-spread",
       title: "O movimento inteiro",
-      text: "As sete posições formam uma narrativa única e mantêm a direção provável como tendência condicional.",
+      text: `${cardNames.slice(0, 4).join(", ")} formam o eixo da escolha; ${cardNames.slice(4).join(", ")} deslocam a direção provável sem transformá-la em sentença.`,
       cardSlugs,
     }],
     synthesis: "O caminho ganha consistência quando desejo, medo e fatos deixam de ocupar o mesmo lugar.",
@@ -74,12 +75,14 @@ function mockResponse() {
   };
 }
 
-test("a rota server-side usa Responses, Structured Output e nunca devolve a chave", async () => {
+test("o modo OpenAI legado continua usando Responses, Structured Output e nunca devolve a chave", async () => {
   const originalFetch = globalThis.fetch;
   const originalKey = process.env.OPENAI_API_KEY;
   const originalModel = process.env.OPENAI_MODEL;
+  const originalProvider = process.env.AGENT911_PROVIDER;
   let providerCall;
 
+  process.env.AGENT911_PROVIDER = "openai";
   process.env.OPENAI_API_KEY = "test-secret-never-return";
   process.env.OPENAI_MODEL = "gpt-5.6-terra";
   globalThis.fetch = async (url, options) => {
@@ -128,6 +131,149 @@ test("a rota server-side usa Responses, Structured Output e nunca devolve a chav
     else process.env.OPENAI_API_KEY = originalKey;
     if (originalModel === undefined) delete process.env.OPENAI_MODEL;
     else process.env.OPENAI_MODEL = originalModel;
+    if (originalProvider === undefined) delete process.env.AGENT911_PROVIDER;
+    else process.env.AGENT911_PROVIDER = originalProvider;
+  }
+});
+
+test("Gemini é o provedor principal, recebe schema compatível e mantém a chave no servidor", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalProvider = process.env.AGENT911_PROVIDER;
+  const originalKey = process.env.GEMINI_API_KEY;
+  const originalOpenAIKey = process.env.OPENAI_API_KEY;
+  const originalModel = process.env.GEMINI_MODEL;
+  const originalFallback = process.env.GEMINI_FALLBACK_MODEL;
+  let providerCall;
+
+  delete process.env.AGENT911_PROVIDER;
+  process.env.GEMINI_API_KEY = "gemini-secret-never-return";
+  process.env.OPENAI_API_KEY = "legacy-openai-secret";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash";
+  process.env.GEMINI_FALLBACK_MODEL = "off";
+  globalThis.fetch = async (url, options) => {
+    providerCall = { url, options, body: JSON.parse(options.body) };
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{
+          content: { parts: [{ text: JSON.stringify(modelReading()) }] },
+          finishReason: "STOP",
+        }],
+      }),
+    };
+  };
+
+  try {
+    const response = mockResponse();
+    await handler({
+      method: "POST",
+      body: requestBody(),
+      headers: {
+        origin: "https://arcane911.vercel.app",
+        host: "arcane911.vercel.app",
+        "x-forwarded-for": "198.51.100.78",
+      },
+      socket: {},
+    }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(providerCall.url, "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent");
+    assert.equal(providerCall.options.headers["x-goog-api-key"], "gemini-secret-never-return");
+    assert.equal(providerCall.options.headers.Authorization, undefined);
+    assert.equal(providerCall.body.store, false);
+    assert.equal(providerCall.body.generationConfig.responseMimeType, "application/json");
+    assert.equal(providerCall.body.generationConfig.responseJsonSchema.type, "object");
+    assert.equal(JSON.stringify(providerCall.body.generationConfig.responseJsonSchema).includes("maxLength"), false);
+    assert.equal(
+      providerCall.body.generationConfig.responseJsonSchema
+        .properties.audit.properties.unsupportedCertainty.enum,
+      undefined,
+    );
+    assert.match(providerCall.body.systemInstruction.parts[0].text, /ANTI-MONOTONIA/);
+    assert.match(providerCall.body.contents[0].parts[0].text, /voiceDirection/);
+    assert.equal(response.payload.meta.provider, "gemini");
+    assert.equal(response.payload.meta.model, "gemini-3.5-flash");
+    assert.equal(response.payload.meta.usedFallbackModel, false);
+    assert.equal(JSON.stringify(response.payload).includes("gemini-secret-never-return"), false);
+    assert.equal(JSON.stringify(response.payload).includes("legacy-openai-secret"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalProvider === undefined) delete process.env.AGENT911_PROVIDER;
+    else process.env.AGENT911_PROVIDER = originalProvider;
+    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+    if (originalOpenAIKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalOpenAIKey;
+    if (originalModel === undefined) delete process.env.GEMINI_MODEL;
+    else process.env.GEMINI_MODEL = originalModel;
+    if (originalFallback === undefined) delete process.env.GEMINI_FALLBACK_MODEL;
+    else process.env.GEMINI_FALLBACK_MODEL = originalFallback;
+  }
+});
+
+test("Gemini troca para Flash-Lite quando o modelo principal esgota a faixa disponível", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWarn = console.warn;
+  const originalProvider = process.env.AGENT911_PROVIDER;
+  const originalKey = process.env.GEMINI_API_KEY;
+  const originalModel = process.env.GEMINI_MODEL;
+  const originalFallback = process.env.GEMINI_FALLBACK_MODEL;
+  const calls = [];
+
+  process.env.AGENT911_PROVIDER = "gemini";
+  process.env.GEMINI_API_KEY = "gemini-fallback-secret";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash";
+  process.env.GEMINI_FALLBACK_MODEL = "gemini-3.5-flash-lite";
+  console.warn = () => {};
+  globalThis.fetch = async (url) => {
+    calls.push(url);
+    if (calls.length === 1) {
+      return {
+        ok: false,
+        status: 429,
+        json: async () => ({ error: { status: "RESOURCE_EXHAUSTED", message: "Free tier rate limit reached." } }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: JSON.stringify(modelReading()) }] } }],
+      }),
+    };
+  };
+
+  try {
+    const response = mockResponse();
+    await handler({
+      method: "POST",
+      body: requestBody(),
+      headers: {
+        origin: "https://arcane911.vercel.app",
+        host: "arcane911.vercel.app",
+        "x-forwarded-for": "198.51.100.79",
+      },
+      socket: {},
+    }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(calls.length, 2);
+    assert.match(calls[0], /gemini-3\.5-flash:generateContent$/);
+    assert.match(calls[1], /gemini-3\.5-flash-lite:generateContent$/);
+    assert.equal(response.payload.meta.model, "gemini-3.5-flash-lite");
+    assert.equal(response.payload.meta.usedFallbackModel, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.warn = originalWarn;
+    if (originalProvider === undefined) delete process.env.AGENT911_PROVIDER;
+    else process.env.AGENT911_PROVIDER = originalProvider;
+    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+    if (originalModel === undefined) delete process.env.GEMINI_MODEL;
+    else process.env.GEMINI_MODEL = originalModel;
+    if (originalFallback === undefined) delete process.env.GEMINI_FALLBACK_MODEL;
+    else process.env.GEMINI_FALLBACK_MODEL = originalFallback;
   }
 });
 
@@ -142,8 +288,10 @@ test("a rota recusa método diferente de POST sem chamar o provedor", async () =
 test("a rota distingue falta de crédito sem registrar a pergunta pessoal", async () => {
   const originalFetch = globalThis.fetch;
   const originalKey = process.env.OPENAI_API_KEY;
+  const originalProvider = process.env.AGENT911_PROVIDER;
   const originalError = console.error;
   const logs = [];
+  process.env.AGENT911_PROVIDER = "openai";
   process.env.OPENAI_API_KEY = "test-secret-never-return";
   globalThis.fetch = async () => ({
     ok: false,
@@ -180,5 +328,7 @@ test("a rota distingue falta de crédito sem registrar a pergunta pessoal", asyn
     console.error = originalError;
     if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = originalKey;
+    if (originalProvider === undefined) delete process.env.AGENT911_PROVIDER;
+    else process.env.AGENT911_PROVIDER = originalProvider;
   }
 });

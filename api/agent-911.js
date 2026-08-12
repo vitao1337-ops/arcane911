@@ -6,6 +6,8 @@ import {
   auditAgent911Response,
   buildAgent911ModelInput,
   createAgent911ResponseSchema,
+  createGeminiResponseSchema,
+  parseGeminiOutput,
   parseOpenAIOutput,
   validateAgent911Request,
 } from "../server/agent911-core.js";
@@ -14,6 +16,8 @@ export const config = { maxDuration: 60 };
 
 const RATE_WINDOW_MS = 10 * 60 * 1_000;
 const RATE_LIMIT = 24;
+const GEMINI_DEFAULT_MODEL = "gemini-3.5-flash";
+const GEMINI_DEFAULT_FALLBACK_MODEL = "gemini-3.5-flash-lite";
 const bucketStore = globalThis.__arcane911RateBuckets ?? new Map();
 globalThis.__arcane911RateBuckets = bucketStore;
 
@@ -84,23 +88,106 @@ function originIsAllowed(request) {
   }
 }
 
-async function callOpenAI(normalized, repairReasons = []) {
+function cleanModelName(value, fallback = "") {
+  const model = String(value ?? fallback).trim();
+  return /^[a-zA-Z0-9._-]+$/u.test(model) ? model : fallback;
+}
+
+function firstSecret(...values) {
+  return values.map((value) => String(value ?? "").trim()).find(Boolean) ?? "";
+}
+
+function resolveProvider() {
+  const requested = String(process.env.AGENT911_PROVIDER ?? "auto").trim().toLowerCase();
+  const geminiKey = firstSecret(
+    process.env.GEMINI_API_KEY,
+    process.env.GOOGLE_API_KEY,
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+  );
+  const openAIKey = firstSecret(process.env.OPENAI_API_KEY);
+
+  if (requested === "openai") {
+    return {
+      id: "openai",
+      key: openAIKey,
+      model: cleanModelName(process.env.OPENAI_MODEL, "gpt-5.6-terra"),
+    };
+  }
+
+  if (requested === "gemini" || (requested === "auto" && geminiKey)) {
+    const model = cleanModelName(process.env.GEMINI_MODEL, GEMINI_DEFAULT_MODEL);
+    const rawFallback = String(process.env.GEMINI_FALLBACK_MODEL ?? GEMINI_DEFAULT_FALLBACK_MODEL)
+      .trim()
+      .toLowerCase();
+    const fallbackModel = ["", "none", "off", "false"].includes(rawFallback)
+      ? ""
+      : cleanModelName(process.env.GEMINI_FALLBACK_MODEL, GEMINI_DEFAULT_FALLBACK_MODEL);
+    return {
+      id: "gemini",
+      key: geminiKey,
+      model,
+      fallbackModel: fallbackModel === model ? "" : fallbackModel,
+    };
+  }
+
+  if (requested === "auto" && openAIKey) {
+    return {
+      id: "openai",
+      key: openAIKey,
+      model: cleanModelName(process.env.OPENAI_MODEL, "gpt-5.6-terra"),
+    };
+  }
+
+  return {
+    id: requested === "openai" ? "openai" : "gemini",
+    key: "",
+    model: requested === "openai"
+      ? cleanModelName(process.env.OPENAI_MODEL, "gpt-5.6-terra")
+      : cleanModelName(process.env.GEMINI_MODEL, GEMINI_DEFAULT_MODEL),
+    fallbackModel: "",
+  };
+}
+
+function outputTokenLimit(normalized) {
+  const isSummary = normalized.action === "opening_summary" || normalized.action === "complete_summary";
+  return isSummary
+    ? normalized.reading.cardSlugs.length === 7 ? 1_500 : 1_000
+    : normalized.reading.cardSlugs.length === 7 ? 3_200 : 2_200;
+}
+
+function repairInstruction(repairReasons) {
+  return repairReasons.length
+    ? `\n\nCORREÇÃO OBRIGATÓRIA: a auditoria anterior rejeitou a resposta por: ${repairReasons.join(", ")}. Refaça a leitura corrigindo esses pontos, sem comentar a auditoria.`
+    : "";
+}
+
+function providerFailure(payload, status, provider) {
+  const providerCode = provider === "gemini"
+    ? payload?.error?.status || payload?.error?.code || `gemini_${status}`
+    : payload?.error?.code || `openai_${status}`;
+  const error = new Error(String(providerCode));
+  error.status = status;
+  error.provider = provider;
+  error.providerCode = String(providerCode).slice(0, 80);
+  error.providerType = String(payload?.error?.type ?? payload?.error?.status ?? "unknown").slice(0, 80);
+  error.providerMessage = String(payload?.error?.message ?? "").slice(0, 240);
+  return error;
+}
+
+async function callOpenAI(normalized, provider, repairReasons = []) {
   const controller = new AbortController();
   const timeout = setTimeout(
     () => controller.abort(new DOMException("provider_timeout", "AbortError")),
     48_000,
   );
-  const model = String(process.env.OPENAI_MODEL ?? "gpt-5.6-terra").trim();
+  const model = provider.model;
   const isSummary = normalized.action === "opening_summary" || normalized.action === "complete_summary";
-  const repairInstruction = repairReasons.length
-    ? `\n\nCORREÇÃO OBRIGATÓRIA: a auditoria anterior rejeitou a resposta por: ${repairReasons.join(", ")}. Refaça a leitura corrigindo esses pontos, sem comentar a auditoria.`
-    : "";
 
   try {
     const providerResponse = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${provider.key}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -111,11 +198,9 @@ async function callOpenAI(normalized, repairReasons = []) {
             ? "medium"
             : isSummary ? "low" : normalized.reading.cardSlugs.length === 7 ? "medium" : "low",
         },
-        instructions: AGENT911_INSTRUCTIONS + repairInstruction,
+        instructions: AGENT911_INSTRUCTIONS + repairInstruction(repairReasons),
         input: buildAgent911ModelInput(normalized),
-        max_output_tokens: isSummary
-          ? normalized.reading.cardSlugs.length === 7 ? 1_500 : 1_000
-          : normalized.reading.cardSlugs.length === 7 ? 3_200 : 2_200,
+        max_output_tokens: outputTokenLimit(normalized),
         text: {
           format: {
             type: "json_schema",
@@ -130,19 +215,99 @@ async function callOpenAI(normalized, repairReasons = []) {
 
     const payload = await providerResponse.json().catch(() => ({}));
     if (!providerResponse.ok) {
-      const providerCode = payload?.error?.code || `openai_${providerResponse.status}`;
-      const error = new Error(providerCode);
-      error.status = providerResponse.status;
-      error.providerCode = String(providerCode).slice(0, 80);
-      error.providerType = String(payload?.error?.type ?? "unknown").slice(0, 80);
-      error.providerMessage = String(payload?.error?.message ?? "").slice(0, 240);
-      throw error;
+      throw providerFailure(payload, providerResponse.status, "openai");
     }
 
-    return parseOpenAIOutput(payload);
+    return {
+      reading: parseOpenAIOutput(payload),
+      provider: "openai",
+      model,
+      usedFallbackModel: false,
+    };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function shouldTryGeminiFallback(error) {
+  return error?.status === 404 || error?.status === 429 || Number(error?.status) >= 500;
+}
+
+async function callGemini(normalized, provider, repairReasons = []) {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(new DOMException("provider_timeout", "AbortError")),
+    48_000,
+  );
+  const models = [provider.model, provider.fallbackModel].filter(Boolean);
+
+  try {
+    for (let index = 0; index < models.length; index += 1) {
+      const model = models[index];
+      try {
+        const providerResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": provider.key,
+            },
+            body: JSON.stringify({
+              store: false,
+              systemInstruction: {
+                parts: [{ text: AGENT911_INSTRUCTIONS + repairInstruction(repairReasons) }],
+              },
+              contents: [{
+                role: "user",
+                parts: [{ text: buildAgent911ModelInput(normalized) }],
+              }],
+              generationConfig: {
+                candidateCount: 1,
+                maxOutputTokens: outputTokenLimit(normalized),
+                responseMimeType: "application/json",
+                responseJsonSchema: createGeminiResponseSchema(normalized.reading.cardSlugs),
+                temperature: normalized.action === "complete_summary" ? 1.05 : 0.95,
+                topP: 0.95,
+              },
+            }),
+            signal: controller.signal,
+          },
+        );
+
+        const payload = await providerResponse.json().catch(() => ({}));
+        if (!providerResponse.ok) {
+          throw providerFailure(payload, providerResponse.status, "gemini");
+        }
+
+        return {
+          reading: parseGeminiOutput(payload),
+          provider: "gemini",
+          model,
+          usedFallbackModel: index > 0,
+        };
+      } catch (error) {
+        const canUseFallback = index === 0 && models.length > 1 && shouldTryGeminiFallback(error);
+        if (!canUseFallback) throw error;
+        console.warn("agent911_model_fallback", {
+          provider: "gemini",
+          fromModel: model,
+          toModel: models[index + 1],
+          status: Number(error?.status) || null,
+          providerCode: String(error?.providerCode ?? "unknown").slice(0, 80),
+        });
+      }
+    }
+    throw new Error("empty_model_output");
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function callProvider(normalized, provider, repairReasons = []) {
+  return provider.id === "openai"
+    ? callOpenAI(normalized, provider, repairReasons)
+    : callGemini(normalized, provider, repairReasons);
 }
 
 export default async function handler(request, response) {
@@ -165,17 +330,20 @@ export default async function handler(request, response) {
     return sendJson(response, 429, { error: "rate_limit" }, rateHeaders);
   }
 
-  if (!process.env.OPENAI_API_KEY) {
+  const provider = resolveProvider();
+  if (!provider.key) {
     return sendJson(response, 503, { error: "agent_not_configured" }, rateHeaders);
   }
 
   try {
     const normalized = validateAgent911Request(parseBody(request));
-    let reading = await callOpenAI(normalized);
+    let providerResult = await callProvider(normalized, provider);
+    let reading = providerResult.reading;
     let audit = auditAgent911Response(reading, normalized);
 
     if (!audit.ok) {
-      reading = await callOpenAI(normalized, audit.reasons);
+      providerResult = await callProvider(normalized, provider, audit.reasons);
+      reading = providerResult.reading;
       audit = auditAgent911Response(reading, normalized);
     }
 
@@ -200,6 +368,9 @@ export default async function handler(request, response) {
       meta: {
         schemaVersion: AGENT911_SCHEMA_VERSION,
         grounded: true,
+        provider: providerResult.provider,
+        model: providerResult.model,
+        usedFallbackModel: providerResult.usedFallbackModel,
       },
     }, rateHeaders);
   } catch (error) {
@@ -208,8 +379,7 @@ export default async function handler(request, response) {
     }
 
     const providerAuthError = error?.status === 401 || error?.status === 403;
-    const providerQuotaError = error?.status === 429
-      && /quota|credit|billing|insufficient/iu.test(`${error?.providerCode} ${error?.providerMessage}`);
+    const providerQuotaError = error?.status === 429;
     const providerModelError = error?.status === 404
       || /model.*(?:not|access|exist)|does not exist/iu.test(`${error?.providerCode} ${error?.providerMessage}`);
     const providerRequestError = error?.status === 400;
@@ -223,6 +393,7 @@ export default async function handler(request, response) {
       status: Number(error?.status) || null,
       providerCode: String(error?.providerCode ?? "unknown").slice(0, 80),
       providerType: String(error?.providerType ?? "unknown").slice(0, 80),
+      provider: String(error?.provider ?? provider.id ?? "unknown").slice(0, 20),
       message: String(error?.message ?? "unknown").slice(0, 160),
     });
 

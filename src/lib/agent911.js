@@ -190,7 +190,7 @@ export async function requestAgent911(context, options = {}) {
         agent_not_configured: "O Agente 911 ainda precisa da chave segura no servidor.",
         provider_auth: "A conexão segura do Agente 911 precisa ser revisada.",
         provider_timeout: "A leitura levou mais tempo do que o esperado. Tente novamente.",
-        provider_quota: "O modo conectado está temporariamente sem créditos.",
+        provider_quota: "O modo conectado atingiu o limite disponível por agora.",
         provider_request: "A configuração do modo conectado precisa ser revisada.",
         provider_model: "O modelo configurado para o 911 não está disponível nesta conta.",
         rate_limit: "Muitas leituras foram pedidas em sequência. Respire um pouco e tente novamente.",
@@ -215,6 +215,13 @@ export async function requestAgent911(context, options = {}) {
       questionsRemaining: Number.isInteger(payload.questionsRemaining)
         ? payload.questionsRemaining
         : Math.max(0, agent911Config.offer.questionLimit - (options.questionsUsed ?? 0)),
+      meta: {
+        provider: ["gemini", "openai"].includes(payload?.meta?.provider)
+          ? payload.meta.provider
+          : "unknown",
+        model: cleanText(payload?.meta?.model, 80),
+        usedFallbackModel: payload?.meta?.usedFallbackModel === true,
+      },
     };
   } catch (error) {
     if (error instanceof Agent911Error) throw error;

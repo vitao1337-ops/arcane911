@@ -5,7 +5,7 @@ import {
   isCanonicalSlug,
 } from "./tarot-canon.js";
 
-export const AGENT911_SCHEMA_VERSION = "2026-08-11.3";
+export const AGENT911_SCHEMA_VERSION = "2026-08-12.4";
 export const AGENT911_MAX_FOLLOW_UPS = 3;
 
 const actionIds = new Set(["opening_summary", "complete_summary", "initial_reading", "follow_up"]);
@@ -175,6 +175,14 @@ PERSONALIDADE E ESTILO
 - Não chame a pessoa de querida, filha, meu amor ou consulente.
 - Não use teatralidade, excesso de exclamações ou linguagem genérica de horóscopo.
 
+ANTI-MONOTONIA
+- O bloco voiceDirection muda a porta de entrada e o ritmo desta leitura. Siga a direção sem citar seu nome nem explicar que ela existe.
+- Não comece com “a mesa mostra”, “as cartas revelam”, “o caminho pede” ou outra moldura reutilizável. Entre direto no conflito humano ou numa imagem concreta sustentada pelas cartas.
+- Faça as cartas conversarem pelo nome no texto interpretativo. Metadados em cardSlugs não contam como leitura.
+- A frase de corte precisa nascer desta combinação específica; se ela servir intacta para qualquer pergunta, reescreva.
+- Varie extensão e cadência dos parágrafos. Evite repetir “pede”, “mostra”, “indica” ou “convida” como motor de todas as frases.
+- Não termine sempre com conselho abstrato. O gesto final deve ser observável e possível de executar.
+
 LIMITES INEGOCIÁVEIS
 - Tarot é reflexão simbólica, não prova factual ou poder sobrenatural demonstrável.
 - Nunca confirme traição, gravidez, doença, morte, crime, perseguição, feitiço, obsessão espiritual ou intenção secreta de terceiros.
@@ -200,6 +208,51 @@ FORMATO POR TAREFA
 - Em opening_summary e complete_summary, title, opening, synthesis e groundedAction formam uma única entrega concisa; não anuncie recursos, cadastro, preço ou funcionamento da IA.
 `;
 
+const voiceDirections = Object.freeze([
+  Object.freeze({
+    id: "contraste",
+    instruction: "Abra pelo contraste central entre o que a pessoa deseja e o preço que ela já percebe. Use frases firmes e uma virada curta no meio.",
+  }),
+  Object.freeze({
+    id: "imagem",
+    instruction: "Abra por uma imagem concreta nascida da relação entre duas cartas e traduza essa imagem imediatamente para a situação relatada. Mantenha linguagem sensorial, sem misticismo vazio.",
+  }),
+  Object.freeze({
+    id: "movimento",
+    instruction: "Abra pelo movimento que já começou, mesmo que a pessoa ainda o chame de dúvida. Faça a leitura avançar por causa, tensão e consequência condicional.",
+  }),
+  Object.freeze({
+    id: "limite",
+    instruction: "Abra nomeando o limite, acordo ou medida que está sendo testado. Use precisão quase cirúrgica e evite consolo automático.",
+  }),
+  Object.freeze({
+    id: "evidencia",
+    instruction: "Abra separando sensação, evidência e expectativa. Construa a leitura como uma depuração lúcida, sem esfriar a intimidade da voz.",
+  }),
+  Object.freeze({
+    id: "paradoxo",
+    instruction: "Abra pelo paradoxo específico da pergunta: aquilo que protege também aprisiona, ou aquilo que atrai também cobra. Resolva o paradoxo pelas relações da mesa.",
+  }),
+]);
+
+function stableVoiceIndex(value) {
+  let hash = 2166136261;
+  for (const character of String(value ?? "")) {
+    hash ^= character.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash) % voiceDirections.length;
+}
+
+export function selectAgent911VoiceDirection(normalized) {
+  const seed = [
+    normalized.action,
+    normalized.message || normalized.reading.question,
+    ...normalized.reading.cardSlugs,
+  ].join("|");
+  return voiceDirections[stableVoiceIndex(seed)];
+}
+
 export function buildAgent911ModelInput(normalized) {
   return JSON.stringify({
     task: normalized.action,
@@ -218,6 +271,7 @@ export function buildAgent911ModelInput(normalized) {
     questionsRemainingAfterThisResponse: normalized.action === "follow_up"
       ? Math.max(0, AGENT911_MAX_FOLLOW_UPS - normalized.questionsUsed - 1)
       : AGENT911_MAX_FOLLOW_UPS,
+    voiceDirection: selectAgent911VoiceDirection(normalized),
     CANON_911: normalized.reading.canonical,
   });
 }
@@ -314,6 +368,21 @@ export function createAgent911ResponseSchema(selectedSlugs) {
       },
     },
   };
+}
+
+function adaptSchemaForGemini(value) {
+  if (Array.isArray(value)) return value.map(adaptSchemaForGemini);
+  if (!value || typeof value !== "object") return value;
+
+  return Object.fromEntries(Object.entries(value).flatMap(([key, entry]) => {
+    if (["minLength", "maxLength", "pattern", "uniqueItems"].includes(key)) return [];
+    if (key === "enum" && value.type === "boolean") return [];
+    return [[key, adaptSchemaForGemini(entry)]];
+  }));
+}
+
+export function createGeminiResponseSchema(selectedSlugs) {
+  return adaptSchemaForGemini(createAgent911ResponseSchema(selectedSlugs));
 }
 
 function responseText(response) {
@@ -431,6 +500,15 @@ export function auditAgent911Response(response, normalized) {
       && !groundingTerms.some((term) => normalizedResponseText.includes(term))) {
     reasons.push("question_not_reflected");
   }
+  if (response.responseMode === "reading") {
+    const citedCardNames = normalized.reading.canonical.cards
+      .map((card) => normalizeForGrounding(card.name))
+      .filter((cardName) => normalizedResponseText.includes(cardName));
+    const requiredCardNames = normalized.action === "follow_up"
+      ? 1
+      : normalized.reading.cardSlugs.length === 7 ? 4 : 2;
+    if (citedCardNames.length < requiredCardNames) reasons.push("selected_card_names_missing");
+  }
   if (findUnselectedCardNames(text, normalized.reading.cardSlugs).length > 0) {
     reasons.push("unselected_card_name");
   }
@@ -445,6 +523,16 @@ export function auditAgent911Response(response, normalized) {
   return { ok: reasons.length === 0, reasons };
 }
 
+function parseModelJson(text) {
+  const normalized = String(text ?? "")
+    .trim()
+    .replace(/^```(?:json)?\s*/iu, "")
+    .replace(/\s*```$/u, "")
+    .trim();
+  if (!normalized) throw new Error("empty_model_output");
+  return JSON.parse(normalized);
+}
+
 export function parseOpenAIOutput(payload) {
   const chunks = Array.isArray(payload?.output)
     ? payload.output.flatMap((item) => Array.isArray(item?.content) ? item.content : [])
@@ -455,8 +543,29 @@ export function parseOpenAIOutput(payload) {
     .join("")
     .trim();
 
-  if (!text) throw new Error("empty_model_output");
-  return JSON.parse(text);
+  return parseModelJson(text);
+}
+
+export function parseGeminiOutput(payload) {
+  const text = Array.isArray(payload?.candidates)
+    ? payload.candidates
+      .flatMap((candidate) => Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [])
+      .filter((part) => typeof part?.text === "string")
+      .map((part) => part.text)
+      .join("")
+      .trim()
+    : "";
+
+  if (!text) {
+    const blockReason = payload?.promptFeedback?.blockReason;
+    const finishReason = payload?.candidates?.[0]?.finishReason;
+    const error = new Error(blockReason || finishReason || "empty_model_output");
+    error.providerCode = String(blockReason || finishReason || "empty_model_output").slice(0, 80);
+    error.providerType = blockReason ? "safety_block" : "empty_output";
+    throw error;
+  }
+
+  return parseModelJson(text);
 }
 
 export function summarizeResponseForConversation(response) {

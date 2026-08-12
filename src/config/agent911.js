@@ -6,7 +6,7 @@ function parsePositiveInteger(value, fallback) {
 }
 
 function parseMode(value) {
-  return String(value ?? "local").trim().toLowerCase() === "live" ? "live" : "local";
+  return String(value ?? "live").trim().toLowerCase() === "local" ? "local" : "live";
 }
 
 export const agent911Config = Object.freeze({
@@ -15,7 +15,7 @@ export const agent911Config = Object.freeze({
   mode: parseMode(viteEnv.VITE_AGENT911_MODE),
   remoteEnabled: parseMode(viteEnv.VITE_AGENT911_MODE) === "live",
   endpoint: String(viteEnv.VITE_AGENT911_ENDPOINT ?? "/api/agent-911").trim(),
-  contextSchemaVersion: "2026-08-11.3",
+  contextSchemaVersion: "2026-08-12.4",
   timeoutMs: 55_000,
   offer: Object.freeze({
     isVisible: false,

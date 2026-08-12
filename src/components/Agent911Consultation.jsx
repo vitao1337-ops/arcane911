@@ -153,6 +153,7 @@ export default function Agent911Consultation({
         reading_id: createdAt,
         question_number: responses.length + 1,
         source: "live",
+        provider: result.meta?.provider ?? "unknown",
       });
     } catch (requestError) {
       const reading = buildAgent911FollowUpFallback({
@@ -239,7 +240,12 @@ export default function Agent911Consultation({
             {responses.length ? (
               <div className="agent911-consultation-responses" aria-live="polite">
                 {responses.map((result, index) => (
-                  <article data-agent911-source={result.source ?? "live"} key={`${result.conversationId}-${index}`}>
+                  <article
+                    data-agent911-source={result.source ?? "live"}
+                    data-agent911-provider={result.meta?.provider
+                      ?? (result.source === "local" ? "local" : result.source === "fallback" ? "fallback" : "unknown")}
+                    key={`${result.conversationId}-${index}`}
+                  >
                     <span>Resposta {index + 1}</span>
                     <h4>{result.reading.title}</h4>
                     {result.reading.sections?.map((section) => <p key={section.id}>{section.text}</p>)}
