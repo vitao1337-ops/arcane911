@@ -85,6 +85,9 @@ test("ações compactas exigem o número certo de cartas e passam pela auditoria
 
   assert.equal(normalized.action, "opening_summary");
   assert.equal(auditAgent911Response(response, normalized).ok, true);
+  response.suggestedQuestions = ["Pergunta que não pertence à síntese automática."];
+  assert.equal(auditAgent911Response(response, normalized).ok, true);
+  assert.deepEqual(response.suggestedQuestions, []);
   assert.throws(
     () => validateAgent911Request(summaryRequest(complete, "opening_summary")),
     /exige três cartas/,

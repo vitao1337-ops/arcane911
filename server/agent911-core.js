@@ -532,9 +532,12 @@ export function auditAgent911Response(response, normalized) {
   if (response.responseMode === "reading" && response.audit?.usedCardSlugs?.length === 0) {
     reasons.push("reading_audit_empty");
   }
-  if (isSummaryAction(normalized.action) && response.responseMode === "reading"
-      && (!Array.isArray(response.suggestedQuestions) || response.suggestedQuestions.length !== 0)) {
-    reasons.push("summary_suggestions_invalid");
+  if (isSummaryAction(normalized.action) && response.responseMode === "reading") {
+    if (Array.isArray(response.suggestedQuestions)) {
+      response.suggestedQuestions = [];
+    } else {
+      reasons.push("summary_suggestions_invalid");
+    }
   }
   if (!isSummaryAction(normalized.action) && response.responseMode === "reading"
       && (!Array.isArray(response.suggestedQuestions) || response.suggestedQuestions.length !== 3)) {

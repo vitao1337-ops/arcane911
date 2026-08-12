@@ -34,6 +34,7 @@ O prompt pedia uma leitura específica, mas a auditoria aceitava somente um term
 - O modelo recebe um contrato explícito com âncoras concretas da pergunta e quantidade mínima de cartas nomeadas.
 - A auditoria exige até duas âncoras da pergunta, três cartas na abertura, cinco na Ferradura e duas no aprofundamento.
 - Aberturas genéricas e repetição excessiva de “mostra”, “pede”, “indica” e “revela” acionam reparo automático.
+- Perguntas sugeridas que o Gemini inclua numa síntese compacta são descartadas no servidor, pois não aparecem nessa etapa e não devem derrubar uma leitura válida.
 - Problemas apenas estilísticos não derrubam uma resposta segura depois da tentativa de reparo; violações de cartas, estrutura ou certeza continuam bloqueadas.
 - O baralho visual agora usa Fisher–Yates com `crypto.getRandomValues` nos navegadores modernos.
 - Uma nova embaralhada evita sobreposição excessiva e cartas presas às mesmas posições, respeitando os limites matemáticos do baralho de 22 e do segundo baralho de 19.
