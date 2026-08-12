@@ -131,8 +131,12 @@ test("a auditoria rejeita sentença afetiva e rótulo psicológico disfarçados 
   const labeled = personalReading(normalized, evaluationCases[0].anchors);
   labeled.synthesis = "Seu conflito real é um apego infantil sustentado por dependência mútua.";
 
+  const foretold = personalReading(normalized, evaluationCases[0].anchors);
+  foretold.synthesis = "O ciclo atual se encerrou; você já sabe o que quer e permanecer gerará ressentimento.";
+
   assert.ok(auditAgent911Response(certainty, normalized).reasons.includes("unsupported_certainty_language"));
   assert.ok(auditAgent911Response(labeled, normalized).reasons.includes("unsupported_certainty_language"));
+  assert.ok(auditAgent911Response(foretold, normalized).reasons.includes("unsupported_certainty_language"));
 });
 
 test("o modo conectado espera o Gemini e não exibe uma leitura local provisória", () => {

@@ -173,6 +173,7 @@ MÉTODO DE LEITURA
 10. Se a pergunta trouxer pouca informação, apresente sua leitura como hipótese simbólica e não preencha os vazios com uma história inventada.
 11. Cartas não diagnosticam a pessoa nem provam o estado de uma relação. Apresente o ponto incisivo como uma hipótese precisa ("pode haver", "a mesa sugere", "vale observar") e convide a pessoa a confrontá-la com fatos observáveis.
 12. Não transforme símbolo em sentença. Nunca declare como fato que "não é amor", que uma história ou ciclo "já acabou", que o vínculo é dependência, que o conflito é infantilidade ou que você conhece a verdade oculta da pessoa.
+13. Não diga que a pessoa "já sabe o que quer", que está escondendo uma verdade ou que uma escolha gerará inevitavelmente determinada emoção. Quando isso não foi relatado, use "vale investigar se" e proponha um critério verificável.
 
 PERSONALIDADE E ESTILO
 - Escreva em português brasileiro natural, sofisticado e compreensível.
@@ -185,6 +186,7 @@ PERSONALIDADE E ESTILO
 - Título é interpretação, não rótulo genérico: deve poder pertencer àquela pergunta e àquela mesa.
 - A abertura deve soar como reconhecimento humano, não como introdução de relatório. Uma frase curta e verdadeira vale mais que um parágrafo de preparação.
 - Acolhimento não é excesso de suavidade: reconheça dor, desejo ou medo sem retirar da pessoa a responsabilidade pela própria escolha.
+- Firmeza não exige certeza gramatical. Prefira uma hipótese nítida e testável a frases como "seu conflito real é", "o ciclo se encerrou", "isso gerará ressentimento" ou "você já sabe".
 - Evite clichês como “o universo está dizendo”, “confie no processo”, “tudo acontece por uma razão” e “as cartas nunca mentem”.
 - Não chame a pessoa de querida, filha, meu amor ou consulente.
 - Não use teatralidade, excesso de exclamações ou linguagem genérica de horóscopo.
@@ -485,10 +487,13 @@ const unsupportedCertaintyPatterns = [
   /morte física/iu,
   /as cartas confirmam/iu,
   /\bn[aã]o [eé] (?:o )?amor\b/iu,
-  /\b(?:esta|essa|a|sua|seu|o)\s+(?:hist[oó]ria|rela[cç][aã]o|relacionamento|ciclo|din[aâ]mica)\s+(?:atual\s+)?(?:j[aá]\s+)?(?:acabou|terminou|se esgotou|est[aá] encerrad[ao])\b/iu,
-  /\bseu conflito real [eé]\b/iu,
+  /\b(?:esta|essa|a|sua|seu|o)\s+(?:hist[oó]ria|rela[cç][aã]o|relacionamento|ciclo|din[aâ]mica)\s+(?:atual\s+)?(?:j[aá]\s+)?(?:acabou|terminou|se esgotou|se encerrou|est[aá] encerrad[ao])\b/iu,
+  /\b(?:o|seu) conflito (?:central|real) (?:n[aã]o )?[eé]\b/iu,
   /\bapego infantil\b/iu,
   /\bdepend[eê]ncia m[uú]tua\b/iu,
+  /\bvoc[eê] (?:j[aá]\s+)?sabe o que quer\b/iu,
+  /\b(?:gerar[aá]|causar[aá]|levar[aá])\s+(?:inevitavelmente\s+)?(?:ressentimento|arrependimento|sofrimento|fracasso)\b/iu,
+  /\b(?:inevit[aá]vel|inevitavelmente|[uú]nica certeza)\b/iu,
 ];
 
 const genericOpeningPatterns = [

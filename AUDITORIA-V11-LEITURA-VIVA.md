@@ -35,7 +35,7 @@ O prompt pedia uma leitura específica, mas a auditoria aceitava somente um term
 - A auditoria exige até duas âncoras da pergunta, três cartas na abertura, cinco na Ferradura e duas no aprofundamento.
 - Aberturas genéricas e repetição excessiva de “mostra”, “pede”, “indica” e “revela” acionam reparo automático.
 - Perguntas sugeridas que o Gemini inclua numa síntese compacta são descartadas no servidor, pois não aparecem nessa etapa e não devem derrubar uma leitura válida.
-- O corte ficou firme sem virar sentença: o prompt e a auditoria agora barram rótulos psicológicos e afirmações factuais como "não é amor", "a história acabou" ou "apego infantil"; a leitura precisa formular hipótese simbólica e apontar evidência observável.
+- O corte ficou firme sem virar sentença: o prompt e a auditoria agora barram rótulos psicológicos, futuros garantidos e afirmações factuais como "não é amor", "a história acabou", "isso gerará ressentimento", "você já sabe" ou "apego infantil"; a leitura precisa formular hipótese simbólica e apontar evidência observável.
 - Problemas apenas estilísticos não derrubam uma resposta segura depois da tentativa de reparo; violações de cartas, estrutura ou certeza continuam bloqueadas.
 - O baralho visual agora usa Fisher–Yates com `crypto.getRandomValues` nos navegadores modernos.
 - Uma nova embaralhada evita sobreposição excessiva e cartas presas às mesmas posições, respeitando os limites matemáticos do baralho de 22 e do segundo baralho de 19.

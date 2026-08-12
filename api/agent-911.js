@@ -172,7 +172,7 @@ function repairInstruction(repairReasons) {
       return "Varie verbos, cadência e construção; não apoie a leitura inteira em mostra, pede, indica ou revela.";
     }
     if (reason === "unsupported_certainty_language") {
-      return "Mantenha o corte, mas retire sentenças e rótulos: cartas não provam que não é amor, que um ciclo acabou nem que a pessoa é infantil ou dependente. Formule uma hipótese simbólica e confronte-a com fatos observáveis já relatados.";
+      return "Mantenha o corte, mas retire sentenças, futuros garantidos e rótulos: cartas não provam que não é amor, que um ciclo acabou, que algo gerará ressentimento, que a pessoa já sabe o que quer nem que ela é infantil ou dependente. Formule uma hipótese simbólica nítida e confronte-a com fatos observáveis já relatados.";
     }
     return `Corrija o requisito técnico ${reason}.`;
   }).join(" ");
@@ -302,8 +302,8 @@ async function callGemini(normalized, provider, repairReasons = []) {
                   includeThoughts: false,
                   thinkingLevel: "MINIMAL",
                 },
-                temperature: normalized.action === "complete_summary" ? 1.05 : 0.95,
-                topP: 0.95,
+                temperature: normalized.action === "complete_summary" ? 0.82 : 0.88,
+                topP: 0.9,
               },
             }),
             signal: controller.signal,
