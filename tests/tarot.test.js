@@ -6,7 +6,6 @@ import { completePositions, intents, tarotCards } from "../src/data/tarot.js";
 import { salesConfig } from "../src/config/sales.js";
 import { buildCheckoutUrl, isCheckoutConfigured } from "../src/lib/checkout.js";
 import {
-  buildCompleteSpread,
   buildCompleteSpreadFromSelections,
   buildCompleteSynthesis,
   buildSynthesis,
@@ -15,7 +14,6 @@ import {
   createRandomDrawPool,
   formatCompleteReading,
   formatReading,
-  pickSpread,
 } from "../src/lib/reading.js";
 
 const expectedOrder = [
@@ -67,15 +65,6 @@ test("slugs e imagens são únicos e todos os arquivos existem", () => {
   });
 });
 
-test("um embaralhamento sempre entrega três cartas distintas e é reproduzível", () => {
-  const first = pickSpread("uma pergunta importante");
-  const second = pickSpread("uma pergunta importante");
-
-  assert.equal(first.length, 3);
-  assert.equal(new Set(first.map((card) => card.slug)).size, 3);
-  assert.deepEqual(first.map((card) => card.slug), second.map((card) => card.slug));
-});
-
 test("a mesa manual usa Fisher–Yates e muda de verdade entre embaralhadas", () => {
   const random = seededRandom(911);
   const first = createRandomDrawPool(tarotCards, 9, [], random);
@@ -110,29 +99,16 @@ test("o segundo baralho preserva os três Arcanos e evita uma mesa quase idênti
   assert.ok(samePositions <= 1, `cartas presas à mesma posição: ${samePositions}`);
 });
 
-test("a Ferradura completa sete posições sem perder as três cartas escolhidas", () => {
+test("a segunda mesa monta a Ferradura com quatro escolhas manuais", () => {
   const opening = [tarotCards[0], tarotCards[11], tarotCards[21]];
-  const first = buildCompleteSpread("pergunta-ferradura", opening);
-  const second = buildCompleteSpread("pergunta-ferradura", opening);
+  const selected = [tarotCards[2], tarotCards[8], tarotCards[16], tarotCards[19]];
+  const complete = buildCompleteSpreadFromSelections(opening, selected);
 
   assert.equal(completePositions.length, 7);
   assert.deepEqual(
     completePositions.map((position) => position.id),
     ["past", "present", "hidden", "obstacle", "external", "action", "outcome"],
   );
-  assert.equal(first.length, 7);
-  assert.equal(new Set(first.map((card) => card.slug)).size, 7);
-  assert.equal(first[0], opening[0]);
-  assert.equal(first[1], opening[1]);
-  assert.equal(first[5], opening[2]);
-  assert.deepEqual(first.map((card) => card.slug), second.map((card) => card.slug));
-});
-
-test("a segunda mesa monta a Ferradura com quatro escolhas manuais", () => {
-  const opening = [tarotCards[0], tarotCards[11], tarotCards[21]];
-  const selected = [tarotCards[2], tarotCards[8], tarotCards[16], tarotCards[19]];
-  const complete = buildCompleteSpreadFromSelections(opening, selected);
-
   assert.equal(complete.length, 7);
   assert.equal(new Set(complete.map((card) => card.slug)).size, 7);
   assert.deepEqual(
@@ -175,7 +151,8 @@ test("o texto compartilhável contém pergunta, três posições e síntese", ()
 
 test("a leitura completa cobre as sete posições, integração e síntese", () => {
   const opening = [tarotCards[2], tarotCards[8], tarotCards[17]];
-  const cards = buildCompleteSpread("leitura-completa", opening);
+  const selected = [tarotCards[3], tarotCards[9], tarotCards[15], tarotCards[20]];
+  const cards = buildCompleteSpreadFromSelections(opening, selected);
   const synthesis = buildCompleteSynthesis(cards, "caminhos");
   const text = formatCompleteReading({
     cards,

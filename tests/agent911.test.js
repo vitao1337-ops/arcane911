@@ -120,3 +120,58 @@ test("a futura chamada usa endpoint próprio sem chave de provedor no navegador"
   assert.equal(response.meta.provider, "gemini");
   assert.match(serializeAgent911Reading(response.reading), /O terreno/);
 });
+
+test("clique duplo no cliente compartilha a mesma promise e faz um único fetch", async () => {
+  let fetchCalls = 0;
+  let releaseFetch;
+  const fetchImplementation = async () => {
+    fetchCalls += 1;
+    await new Promise((resolve) => { releaseFetch = resolve; });
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({
+        answer: "A Ferradura inteira sustenta uma resposta única.",
+        reading: {
+          responseMode: "reading",
+          title: "O movimento inteiro",
+          opening: "As sete posições formam uma narrativa única.",
+          sections: [{
+            id: "terrain",
+            title: "O terreno",
+            text: "A origem conversa com o movimento possível sem transformar tendência em sentença.",
+            cardSlugs: complete.map((card) => card.slug),
+          }],
+          synthesis: "A Ferradura inteira sustenta uma resposta única.",
+          groundedAction: "Separe o que é fato do que ainda é expectativa.",
+          closingQuestion: "O que depende de você agora?",
+          suggestedQuestions: [],
+          safetyMessage: "",
+          memoryUpdate: { summary: "", themes: [], people: [] },
+          audit: { usedCardSlugs: complete.map((card) => card.slug), confidence: "grounded", unsupportedCertainty: false },
+        },
+        followUps: [],
+        conversationId: "conversation-deduped",
+        questionsRemaining: 3,
+        meta: { provider: "gemini", model: "gemini-3.5-flash", usedFallbackModel: false },
+      }),
+    };
+  };
+  const options = {
+    enabled: true,
+    remoteEnabled: true,
+    endpoint: "/api/agent-911",
+    action: "complete_summary",
+    readingMode: "acolhedora",
+    fetchImplementation,
+  };
+
+  const first = requestAgent911(context, options);
+  const second = requestAgent911(context, options);
+  assert.equal(fetchCalls, 1);
+  releaseFetch();
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+  assert.equal(fetchCalls, 1);
+  assert.deepEqual(firstResult, secondResult);
+});

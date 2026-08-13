@@ -139,6 +139,11 @@ test("o parser do Gemini lê JSON estruturado e a direção de voz entra no cont
   assert.deepEqual(parseGeminiOutput({
     candidates: [{ content: { parts: [{ text: JSON.stringify(response) }] } }],
   }), response);
+  assert.deepEqual(parseGeminiOutput({
+    candidates: [{
+      content: { parts: [{ text: `Resposta estruturada:\n${JSON.stringify(response)}\nFim.` }] },
+    }],
+  }), response);
   const direction = selectAgent911VoiceDirection(normalized);
   assert.ok(direction.id);
   assert.ok(direction.instruction.length > 60);

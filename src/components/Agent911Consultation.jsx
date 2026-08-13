@@ -1,13 +1,13 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Check, LockKeyhole, Send, ShieldCheck, Sparkles } from "lucide-react";
 import { agent911Config } from "../config/agent911";
 import { normalizeAgent911ReadingMode } from "../config/agent911ReadingModes";
 import {
+  agent911ErrorMessage,
   createTarotAgentContext,
   requestAgent911,
   serializeAgent911Reading,
 } from "../lib/agent911";
-import { buildAgent911FollowUpFallback } from "../lib/agent911Fallback";
 import {
   loadConsultationProfile,
   loadConsultationState,
@@ -17,7 +17,7 @@ import {
 } from "../lib/agent911Session";
 import { trackCommercialEvent } from "../lib/checkout";
 
-function resultFromFallback(reading, index, source = "local") {
+function resultFromFallback(reading, index, source = "mock") {
   return {
     answer: reading.synthesis,
     reading,
@@ -51,6 +51,7 @@ export default function Agent911Consultation({
   const [responses, setResponses] = useState(persistedConversation.responses);
   const [history, setHistory] = useState(persistedConversation.history);
   const [connectionError, setConnectionError] = useState("");
+  const [retryDelayMs, setRetryDelayMs] = useState(0);
   const [loading, setLoading] = useState(false);
   const requestInFlight = useRef(false);
   const questionsRemaining = agent911Config.offer.questionLimit - responses.length;
@@ -62,6 +63,12 @@ export default function Agent911Consultation({
     question,
     createdAt,
   }), [cards, createdAt, intentId, intentLabel, question]);
+
+  useEffect(() => {
+    if (retryDelayMs <= 0) return undefined;
+    const timeout = globalThis.setTimeout(() => setRetryDelayMs(0), retryDelayMs);
+    return () => globalThis.clearTimeout(timeout);
+  }, [retryDelayMs]);
 
   function openConsultation() {
     trackCommercialEvent("agent911_consultation_opened", {
@@ -107,7 +114,8 @@ export default function Agent911Consultation({
   async function submitQuestion(event) {
     event.preventDefault();
     const currentMessage = message.trim();
-    if (!currentMessage || loading || requestInFlight.current || questionsRemaining <= 0) return;
+    if (!currentMessage || loading || requestInFlight.current || retryDelayMs > 0
+        || questionsRemaining <= 0) return;
 
     const baseHistory = history.length
       ? history
@@ -126,21 +134,22 @@ export default function Agent911Consultation({
     let answerWasCommitted = false;
 
     try {
-      if (!agent911Config.remoteEnabled) {
-        const reading = buildAgent911FollowUpFallback({
+      if (import.meta.env.DEV && agent911Config.devMockEnabled) {
+        const mockModule = await import("../lib/agent911Fallback");
+        const reading = mockModule.buildAgent911FollowUpFallback({
           cards,
           message: currentMessage,
           question,
           intentId,
         });
-        const result = resultFromFallback(reading, responses.length + 1, "local");
+        const result = resultFromFallback(reading, responses.length + 1, "mock");
         commitResponse(result, baseHistory, currentMessage);
         answerWasCommitted = true;
         trackCommercialEvent("agent911_consultation_question_answered", {
           intent: intentId,
           reading_id: createdAt,
           question_number: responses.length + 1,
-          source: "local",
+          source: "mock",
           reading_mode: normalizedReadingMode,
         });
         return;
@@ -166,6 +175,7 @@ export default function Agent911Consultation({
       });
     } catch (requestError) {
       setConnectionError(requestError?.code ?? "unknown");
+      setRetryDelayMs(requestError?.retryAfterMs ?? 0);
       trackCommercialEvent("agent911_consultation_question_unavailable", {
         intent: intentId,
         reading_id: createdAt,
@@ -251,7 +261,7 @@ export default function Agent911Consultation({
                   <article
                     data-agent911-source={result.source ?? "live"}
                     data-agent911-provider={result.meta?.provider
-                      ?? (result.source === "local" ? "local" : result.source === "fallback" ? "fallback" : "unknown")}
+                      ?? (result.source === "mock" ? "mock" : "unknown")}
                     key={`${result.conversationId}-${index}`}
                   >
                     <span>Resposta {index + 1}</span>
@@ -267,7 +277,7 @@ export default function Agent911Consultation({
             {connectionError ? (
               <div className="agent911-consultation-retry" aria-live="polite" data-agent911-error={connectionError}>
                 <Sparkles size={15} />
-                <p><strong>O 911 não concluiu esta resposta.</strong> Nenhum texto automático entrou no lugar e sua pergunta não foi consumida. Tente novamente quando quiser.</p>
+                <p><strong>O 911 não concluiu esta resposta.</strong> {agent911ErrorMessage(connectionError)} Nenhum texto automático entrou no lugar e sua pergunta não foi consumida.</p>
               </div>
             ) : null}
 
@@ -280,9 +290,9 @@ export default function Agent911Consultation({
                   onChange={(event) => setMessage(event.target.value.slice(0, 1_200))}
                   rows="4"
                   placeholder="Escreva do seu jeito. O 911 já conhece a pergunta e as sete posições."
-                  disabled={loading}
+                  disabled={loading || retryDelayMs > 0}
                 />
-                <div><small>{message.length}/1200</small><button className="button button-primary" type="submit" disabled={loading || !message.trim()}><Send size={16} /> {loading ? "Lendo a mesa…" : "Perguntar ao 911"}</button></div>
+                <div><small>{message.length}/1200</small><button className="button button-primary" type="submit" disabled={loading || retryDelayMs > 0 || !message.trim()}><Send size={16} /> {loading ? "Lendo a mesa…" : "Perguntar ao 911"}</button></div>
               </form>
             ) : (
               <div className="agent911-consultation-complete"><Check size={17} /><p><strong>Consulta concluída.</strong> As três respostas ficaram ligadas à mesma Ferradura.</p></div>

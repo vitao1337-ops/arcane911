@@ -1,3 +1,4 @@
+// Infraestrutura reservada para memória server-side/conta consentida; não remover como legado.
 const MEMORY_KEY = "arcane911.agent911.memory.v1";
 const CONSENT_KEY = "arcane911.agent911.consent.v1";
 const CONVERSATION_PREFIX = "arcane911.agent911.conversation.v1:";

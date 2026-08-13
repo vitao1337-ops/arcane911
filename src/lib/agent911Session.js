@@ -1,9 +1,9 @@
 import { normalizeAgent911ReadingMode } from "../config/agent911ReadingModes.js";
 
-const SUMMARY_PREFIX = "arcane911.agent-summary.v6:";
+const SUMMARY_PREFIX = "arcane911.agent-summary.v7:";
+const SUMMARY_CACHE_TTL_MS = 30 * 60 * 1_000;
 const PROFILE_KEY = "arcane911.consultation-profile.v1";
 const CONSULTATION_PREFIX = "arcane911.consultation.v1:";
-const pendingSummaries = new Map();
 
 function safeSession() {
   return typeof window === "object" ? window.sessionStorage : null;
@@ -16,8 +16,15 @@ export function summaryCacheKey(createdAt, variant, cards, readingMode = "acolhe
 
 export function loadAgent911Summary(key) {
   try {
-    const payload = JSON.parse(safeSession()?.getItem(`${SUMMARY_PREFIX}${key}`) ?? "null");
-    return payload?.reading?.synthesis ? payload : null;
+    const storageKey = `${SUMMARY_PREFIX}${key}`;
+    const payload = JSON.parse(safeSession()?.getItem(storageKey) ?? "null");
+    if (!payload?.reading?.synthesis || !Number.isFinite(payload.__cachedAt)
+        || Date.now() - payload.__cachedAt > SUMMARY_CACHE_TTL_MS) {
+      safeSession()?.removeItem(storageKey);
+      return null;
+    }
+    const { __cachedAt, ...result } = payload;
+    return result;
   } catch {
     return null;
   }
@@ -25,23 +32,13 @@ export function loadAgent911Summary(key) {
 
 export function saveAgent911Summary(key, result) {
   try {
-    safeSession()?.setItem(`${SUMMARY_PREFIX}${key}`, JSON.stringify(result));
+    safeSession()?.setItem(`${SUMMARY_PREFIX}${key}`, JSON.stringify({
+      ...result,
+      __cachedAt: Date.now(),
+    }));
   } catch {
     // A síntese continua na tela mesmo sem armazenamento de sessão.
   }
-}
-
-export function getPendingAgent911Summary(key) {
-  return pendingSummaries.get(key) ?? null;
-}
-
-export function setPendingAgent911Summary(key, promise) {
-  pendingSummaries.set(key, promise);
-  promise.then(
-    () => pendingSummaries.delete(key),
-    () => pendingSummaries.delete(key),
-  );
-  return promise;
 }
 
 export function loadConsultationProfile() {

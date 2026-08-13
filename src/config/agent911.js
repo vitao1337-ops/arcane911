@@ -5,18 +5,20 @@ function parsePositiveInteger(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function parseMode(value) {
-  return String(value ?? "live").trim().toLowerCase() === "local" ? "local" : "live";
-}
+const isDevelopment = viteEnv.DEV === true;
+const devRealAiEnabled = isDevelopment
+  && String(viteEnv.ARCANE911_DEV_REAL_AI ?? "false").trim().toLowerCase() === "true";
+const mode = isDevelopment && !devRealAiEnabled ? "mock" : "live";
 
 export const agent911Config = Object.freeze({
   id: "agent-911",
   enabled: String(viteEnv.VITE_AGENT911_ENABLED ?? "true").toLowerCase() !== "false",
-  mode: parseMode(viteEnv.VITE_AGENT911_MODE),
-  remoteEnabled: parseMode(viteEnv.VITE_AGENT911_MODE) === "live",
+  mode,
+  remoteEnabled: mode === "live",
+  devMockEnabled: mode === "mock",
   endpoint: String(viteEnv.VITE_AGENT911_ENDPOINT ?? "/api/agent-911").trim(),
   contextSchemaVersion: "2026-08-12.6",
-  timeoutMs: 55_000,
+  timeoutMs: 58_000,
   offer: Object.freeze({
     isVisible: false,
     isCheckoutEnabled: false,

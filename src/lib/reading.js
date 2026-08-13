@@ -8,29 +8,6 @@ const intentFrames = {
   interior: "Esta leitura volta o olhar para dentro, onde desejo, defesa e potência conversam.",
 };
 
-export function hashString(value) {
-  let hash = 2166136261;
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  return hash >>> 0;
-}
-
-function mulberry32(seed) {
-  let state = seed;
-
-  return () => {
-    state += 0x6d2b79f5;
-    let result = state;
-    result = Math.imul(result ^ (result >>> 15), result | 1);
-    result ^= result + Math.imul(result ^ (result >>> 7), result | 61);
-    return ((result ^ (result >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 function secureRandomUnit() {
   if (typeof globalThis.crypto?.getRandomValues === "function") {
     const value = new Uint32Array(1);
@@ -104,52 +81,6 @@ export function createRandomDrawPool(
   }
 
   return bestCandidate;
-}
-
-export function pickSpread(seedSource, deck = tarotCards) {
-  const random = mulberry32(hashString(String(seedSource)));
-  const shuffled = [...deck];
-
-  for (let index = shuffled.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(random() * (index + 1));
-    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
-  }
-
-  return shuffled.slice(0, 3);
-}
-
-export function buildCompleteSpread(seedSource, openingCards, deck = tarotCards) {
-  const uniqueOpeningCards = openingCards.filter(
-    (card, index, cards) => card && cards.findIndex((item) => item?.slug === card.slug) === index,
-  );
-
-  if (uniqueOpeningCards.length !== 3) return [];
-
-  const openingSlugs = new Set(uniqueOpeningCards.map((card) => card.slug));
-  const availableCards = deck.filter((card) => !openingSlugs.has(card.slug));
-  const random = mulberry32(hashString(`ferradura-${String(seedSource)}`));
-
-  for (let index = availableCards.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(random() * (index + 1));
-    [availableCards[index], availableCards[swapIndex]] = [
-      availableCards[swapIndex],
-      availableCards[index],
-    ];
-  }
-
-  if (availableCards.length < 4) return [];
-
-  const [hidden, obstacle, external, outcome] = availableCards;
-
-  return [
-    uniqueOpeningCards[0],
-    uniqueOpeningCards[1],
-    hidden,
-    obstacle,
-    external,
-    uniqueOpeningCards[2],
-    outcome,
-  ];
 }
 
 export function buildCompleteSpreadFromSelections(openingCards, selectedCards) {

@@ -771,6 +771,32 @@ export function auditAgent911Response(response, normalized) {
     return { ok: false, reasons: ["payload_not_object"] };
   }
 
+  if (!["reading", "clarification", "safety"].includes(response.responseMode)) {
+    reasons.push("response_mode_invalid");
+  }
+  if (response.responseMode === "reading" && [
+    response.title,
+    response.opening,
+    response.synthesis,
+    response.groundedAction,
+  ].some((value) => typeof value !== "string" || !value.trim())) {
+    reasons.push("required_text_missing");
+  }
+  if (Array.isArray(response.sections) && response.sections.some((section) => (
+    !section
+    || typeof section !== "object"
+    || typeof section.id !== "string"
+    || typeof section.title !== "string"
+    || typeof section.text !== "string"
+    || !section.text.trim()
+    || !Array.isArray(section.cardSlugs)
+  ))) {
+    reasons.push("section_invalid");
+  }
+  if (!response.audit || typeof response.audit !== "object" || Array.isArray(response.audit)) {
+    reasons.push("audit_missing");
+  }
+
   const selected = new Set(normalized.reading.cardSlugs);
   const sectionSlugs = new Set(
     Array.isArray(response.sections)
@@ -899,10 +925,26 @@ function parseModelJson(text) {
     .replace(/\s*```$/u, "")
     .trim();
   if (!normalized) throw new Error("empty_model_output");
-  return JSON.parse(normalized);
+  try {
+    return JSON.parse(normalized);
+  } catch (originalError) {
+    const firstBrace = normalized.indexOf("{");
+    const lastBrace = normalized.lastIndexOf("}");
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      return JSON.parse(normalized.slice(firstBrace, lastBrace + 1));
+    }
+    throw originalError;
+  }
 }
 
 export function parseOpenAIOutput(payload) {
+  if (payload?.status === "incomplete" || payload?.incomplete_details?.reason) {
+    const error = new Error("openai_output_truncated");
+    error.provider = "openai";
+    error.providerCode = String(payload?.incomplete_details?.reason ?? "incomplete").slice(0, 80);
+    error.providerType = "output_truncated";
+    throw error;
+  }
   const chunks = Array.isArray(payload?.output)
     ? payload.output.flatMap((item) => Array.isArray(item?.content) ? item.content : [])
     : [];

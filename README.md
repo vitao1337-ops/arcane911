@@ -1,4 +1,4 @@
-# Arcane911 — V13 · Documento Astral 911
+# Arcane911 — V14 · estabilização do Agent 911
 
 Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual do Sorriso Marcado e das 22 cartas originais dos Arcanos Maiores.
 
@@ -50,16 +50,19 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - Microtipografia ampliada somente no desktop, preservando fontes, blocos e direção visual.
 - Síntese 911 automática nas leituras de três e sete cartas, pessoal e ancorada na pergunta, sem clique extra nem cadastro.
 - Gemini conectado por padrão no mesmo endpoint seguro, usando `gemini-3.5-flash` e Structured Output.
-- Segunda rota gratuita automática em `gemini-3.5-flash-lite` quando o modelo principal atinge limite ou fica indisponível.
+- Segundo modelo Gemini automático em `gemini-3.5-flash-lite` quando o principal atinge quota ou fica temporariamente indisponível.
 - No modo conectado, a interface espera a leitura real do Gemini e nunca exibe um texto local provisório para substituí-lo depois.
-- Falha conectada preserva cartas e pergunta e oferece nova tentativa sem inventar uma leitura; o motor local existe apenas quando `VITE_AGENT911_MODE=local` é escolhido deliberadamente.
+- Falha conectada preserva cartas e pergunta, diferencia rate limit, quota, timeout e resposta inválida, e respeita cooldown antes de liberar nova tentativa.
 - Dez direções de voz escolhidas pelo contexto, contrato de personalização e auditoria anti-fórmula reduzem aberturas e cadências repetidas.
 - Chave simples **Sem rodeios OFF/ON** antes da tiragem. Desligada, a voz é acolhedora; ligada, usa o contrato incisivo. A chave acompanha a sessão e a Consulta 911.
 - A interface declara que essa chave muda apenas o tom e nunca interfere no embaralhamento, nas cartas escolhidas ou na tiragem.
 - No modo **Sem rodeios**, perguntas binárias recebem uma direção da mesa em **SIM**, **NÃO** ou **INCONCLUSIVA**; perguntas abertas começam por **Na mesa:**.
 - A direção binária continua simbólica e condicional. Alegações de traição, doença, crime, gravidez ou intenção secreta são marcadas como **INCONCLUSIVA**, nunca apresentadas como prova.
 - A abertura conectada precisa usar as três cartas pelo nome; a Ferradura precisa articular pelo menos cinco cartas e o aprofundamento conecta ao menos duas.
-- OpenAI preservada como provedor opcional e reversível, sem ser chamada quando o Gemini está selecionado.
+- OpenAI preservada como paraquedas opcional: só entra depois de falhas recuperáveis dos dois candidatos Gemini.
+- Uma resposta semanticamente válida e parafraseada não dispara nova geração; somente falha estrutural pode receber um reparo, sem loops.
+- Requisições idênticas são deduplicadas no cliente e no servidor, e a leitura pronta tem cache curto de sessão para evitar cobrança em refresh.
+- Logs de uso registram tokens, chamadas, modelo, fallback, reparo e duração sem registrar pergunta ou conteúdo da leitura.
 - Falha do modo conectado não consome uma das três perguntas da Consulta 911.
 - Uma única síntese por tiragem; o antigo bloco genérico duplicado foi removido.
 - Consulta 911 separada da leitura, com cadastro solicitado somente ao entrar e até três aprofundamentos conectados à Ferradura.
@@ -81,7 +84,14 @@ npm ci
 npm run dev
 ```
 
-O Vite exibirá o endereço local e encaminhará `/api` para a função publicada em `https://arcane911.vercel.app`. Assim, o localhost usa a mesma chave segura da Vercel sem copiá-la para o navegador. Para apontar a um Preview, configure `ARCANE911_DEV_API_TARGET` em `.env.local`.
+O Vite inicia em mock local e não cria proxy para produção. Assim, testes visuais custam zero chamadas de IA. Para testar a rota real deliberadamente, configure os dois campos em `.env.local` e reinicie o servidor:
+
+```env
+ARCANE911_DEV_REAL_AI=true
+ARCANE911_DEV_API_TARGET=https://seu-preview-controlado.vercel.app
+```
+
+Se o opt-in estiver ativo sem target, o Vite falha de forma explícita. Builds de produção nunca usam o mock.
 
 Para validar a versão de produção:
 
@@ -97,7 +107,7 @@ npm run preview
 - `src/styles.css`: direção visual, animações e responsividade.
 - `src/data/tarot.js`: conteúdo dos 22 Arcanos.
 - `src/data/products.js`: estrutura dos produtos específicos futuros.
-- `src/lib/reading.js`: embaralhamento, Ferradura determinística, leituras e textos compartilháveis.
+- `src/lib/reading.js`: embaralhamento Fisher–Yates, montagem pelas escolhas manuais, leituras e textos compartilháveis.
 - `src/lib/astrology.js`: cálculo natal, dupla verificação, interpretações e busca de cidades.
 - `src/pages/AstralMapPage.jsx`: formulário, mandala, leitura calculada e entrada do documento.
 - `src/components/Astral911Document.jsx`: estados, capítulos, práticas, cópia e impressão do documento premium.
@@ -111,7 +121,7 @@ npm run preview
 - `src/components/Agent911Summary.jsx`: síntese automática, espera ritual, cache conectado e nova tentativa sem texto provisório.
 - `src/components/Agent911Consultation.jsx`: cadastro progressivo e conversa de três perguntas.
 - `src/lib/agent911Fallback.js`: leitura essencial ancorada para indisponibilidade da API.
-- `src/lib/agent911Session.js`: deduplicação de chamadas, cache e cadastro beta local.
+- `src/lib/agent911Session.js`: cache curto por leitura/sessão e cadastro beta local.
 - `src/agent911.css`: camada visual isolada do agente, sem alterar o restante do site.
 - `src/lib/checkout.js`: parâmetros de compra e eventos comerciais.
 - `src/lib/agent911.js`: contexto, guardrails e cliente seguro da rota server-side.
@@ -156,14 +166,15 @@ GEMINI_API_KEY=sua-chave-real
 AGENT911_PROVIDER=gemini
 GEMINI_MODEL=gemini-3.5-flash
 GEMINI_FALLBACK_MODEL=gemini-3.5-flash-lite
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.6-terra
 VITE_AGENT911_ENABLED=true
-VITE_AGENT911_MODE=live
 VITE_ASTRO911_ENABLED=true
 ```
 
-`GEMINI_API_KEY` é a única variável obrigatória do Gemini. `AGENT911_PROVIDER=gemini` apenas trava a escolha; sem ela, o modo `auto` já prefere Gemini quando encontra a chave. `GEMINI_MODEL` e `GEMINI_FALLBACK_MODEL` são opcionais porque os valores acima já são padrão no código.
+`GEMINI_API_KEY` é a única variável obrigatória do Gemini. `AGENT911_PROVIDER=gemini` mantém Gemini como cérebro principal; se `OPENAI_API_KEY` também existir, OpenAI fica disponível apenas como paraquedas. `GEMINI_MODEL` e `GEMINI_FALLBACK_MODEL` são opcionais porque os valores acima já são padrão no código.
 
-Nunca use `VITE_GEMINI_API_KEY`: tudo com prefixo `VITE_` entra no JavaScript público. A V13 envia `store: false`, não registra perguntas nem dados natais nos logs ou analytics e envia somente o contexto necessário. No nível gratuito da Gemini Developer API, o Google informa que conteúdo pode ser usado para melhorar produtos; esse ponto precisa entrar na política de privacidade antes de monetização. O motor local do tarot continua disponível somente com `VITE_AGENT911_MODE=local`.
+Nunca use `VITE_GEMINI_API_KEY`: tudo com prefixo `VITE_` entra no JavaScript público. A V14 não registra perguntas nem dados natais nos logs ou analytics e envia somente o contexto necessário. O mock do tarot existe apenas no build de desenvolvimento; produção permanece sempre conectada ou mostra indisponibilidade, sem leitura falsa.
 
 Para desligar o agente sem remover código, defina `VITE_AGENT911_ENABLED=false` e faça novo deploy. O passo a passo completo está em `AGENTE911-SETUP.md`.
 

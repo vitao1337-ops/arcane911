@@ -3,11 +3,31 @@ import { normalizeAgent911ReadingMode } from "../config/agent911ReadingModes.js"
 import { completePositions, positions } from "../data/tarot.js";
 
 export class Agent911Error extends Error {
-  constructor(message, code, cause) {
+  constructor(message, code, cause, retryAfterMs = 0) {
     super(message, cause ? { cause } : undefined);
     this.name = "Agent911Error";
     this.code = code;
+    this.retryAfterMs = Math.max(0, Number(retryAfterMs) || 0);
   }
+}
+
+const pendingAgent911Requests = new Map();
+let requestCooldownUntil = 0;
+let requestCooldownCode = "";
+
+const publicErrorMessages = Object.freeze({
+  invalid_payload: "Esta leitura não pôde ser enviada. Refaça a tiragem e tente novamente.",
+  provider_invalid_response: "A leitura chegou incompleta e foi interrompida com segurança. Tente novamente.",
+  provider_quota: "O 911 está temporariamente indisponível. Tente novamente em alguns instantes.",
+  provider_timeout: "A leitura demorou mais do que o esperado. Tente novamente.",
+  provider_unavailable: "O 911 está temporariamente indisponível. Tente novamente em alguns instantes.",
+  rate_limit: "Muitas leituras foram pedidas em sequência. Aguarde um instante e tente novamente.",
+  question_limit: "O ciclo de três aprofundamentos desta leitura foi concluído.",
+  unknown: "O 911 não conseguiu concluir esta leitura agora. Tente novamente.",
+});
+
+export function agent911ErrorMessage(code) {
+  return publicErrorMessages[code] ?? publicErrorMessages.unknown;
 }
 
 function cleanText(value, maximumLength = 1_200) {
@@ -17,6 +37,24 @@ function cleanText(value, maximumLength = 1_200) {
 function createRequestId() {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
   return `a911-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function retryAfterMs(response, code) {
+  const rawValue = String(response?.headers?.get?.("retry-after") ?? "").trim();
+  const seconds = Number(rawValue);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1_000);
+  const date = Date.parse(rawValue);
+  if (rawValue && Number.isFinite(date)) return Math.max(0, date - Date.now());
+  if (code === "provider_quota") return 30_000;
+  if (code === "rate_limit") return 10_000;
+  if (["provider_timeout", "provider_unavailable"].includes(code)) return 5_000;
+  return 0;
+}
+
+function registerRequestCooldown(code, delayMs) {
+  if (delayMs <= 0) return;
+  requestCooldownUntil = Math.max(requestCooldownUntil, Date.now() + delayMs);
+  requestCooldownCode = code;
 }
 
 function assertSecureEndpoint(endpoint) {
@@ -86,63 +124,6 @@ export function createTarotAgentContext({
   };
 }
 
-export function createAstrologyAgentContext(chart) {
-  if (!chart || chart.planets?.length !== 10 || chart.houses?.length !== 12) {
-    throw new Agent911Error("Mapa astral incompleto para o Agente 911.", "invalid_astrology_context");
-  }
-
-  return {
-    schemaVersion: agent911Config.contextSchemaVersion,
-    experience: "astrology.natal.v1",
-    chart: {
-      person: cleanText(chart.person, 80),
-      birth: { ...chart.birth },
-      location: {
-        name: cleanText(chart.location?.name, 100),
-        country: cleanText(chart.location?.country, 80),
-        timezone: cleanText(chart.location?.timezone, 80),
-      },
-      bigThree: chart.bigThree.map((point) => ({
-        key: point.key,
-        title: point.title,
-        degreeLabel: point.degreeLabel,
-        text: point.text,
-      })),
-      planets: chart.planets.map((planet) => ({
-        key: planet.key,
-        name: planet.name,
-        sign: planet.sign.name,
-        degreeLabel: planet.degreeLabel,
-        house: planet.house,
-        retrograde: planet.retrograde,
-        interpretation: planet.interpretation,
-      })),
-      houses: chart.houses.map((house) => ({
-        number: house.number,
-        sign: house.sign.name,
-        theme: house.theme,
-        planets: [...house.planets],
-      })),
-      aspects: chart.aspects.map((aspect) => ({
-        name: aspect.name,
-        point1: aspect.point1Name,
-        point2: aspect.point2Name,
-        orb: aspect.orb,
-        interpretation: aspect.interpretation,
-      })),
-      synthesis: chart.synthesis,
-      method: chart.method,
-    },
-    guardrails: {
-      symbolicLanguage: true,
-      noDeterministicClaims: true,
-      noProfessionalSubstitution: true,
-      preserveUserAgency: true,
-      language: "pt-BR",
-    },
-  };
-}
-
 export async function requestAgent911(context, options = {}) {
   const enabled = options.enabled ?? agent911Config.enabled;
   if (!enabled) throw new Agent911Error("O Agente 911 ainda não está ativo.", "agent_disabled");
@@ -157,84 +138,116 @@ export async function requestAgent911(context, options = {}) {
     throw new Agent911Error("Este ambiente não oferece suporte à conexão.", "fetch_unavailable");
   }
 
-  const controller = new AbortController();
-  const timeoutMs = options.timeoutMs ?? agent911Config.timeoutMs;
-  const forwardAbort = () => controller.abort(options.signal?.reason);
-  if (options.signal?.aborted) forwardAbort();
-  options.signal?.addEventListener("abort", forwardAbort, { once: true });
-  const timeout = globalThis.setTimeout(() => controller.abort("timeout"), timeoutMs);
-
-  try {
-    const response = await fetchImplementation(endpoint, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        agent: agent911Config.id,
-        requestId: createRequestId(),
-        schemaVersion: agent911Config.contextSchemaVersion,
-        action: options.action ?? "initial_reading",
-        readingMode: normalizeAgent911ReadingMode(options.readingMode),
-        message: cleanText(options.message, 1_200),
-        history: Array.isArray(options.history) ? options.history.slice(-8) : [],
-        memoryConsent: options.memoryConsent === true,
-        memory: options.memoryConsent === true ? options.memory ?? {} : {},
-        questionsUsed: Number.isInteger(options.questionsUsed) ? options.questionsUsed : 0,
-        context,
-      }),
-      signal: controller.signal,
-    });
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const responseCode = cleanText(payload?.error, 80) || `http_${response.status}`;
-      const friendlyMessages = {
-        agent_not_configured: "O Agente 911 ainda precisa da chave segura no servidor.",
-        provider_auth: "A conexão segura do Agente 911 precisa ser revisada.",
-        provider_timeout: "A leitura levou mais tempo do que o esperado. Tente novamente.",
-        provider_quota: "O modo conectado atingiu o limite disponível por agora.",
-        provider_request: "A configuração do modo conectado precisa ser revisada.",
-        provider_model: "O modelo configurado para o 911 não está disponível nesta conta.",
-        rate_limit: "Muitas leituras foram pedidas em sequência. Respire um pouco e tente novamente.",
-        question_limit: "O ciclo de três aprofundamentos desta leitura foi concluído.",
-        reading_not_grounded: "A auditoria do 911 recusou uma leitura imprecisa. Peça novamente.",
-      };
-      throw new Agent911Error(friendlyMessages[responseCode] ?? "O Agente 911 não conseguiu responder agora.", responseCode);
-    }
-
-    if (typeof payload?.answer !== "string" || !payload.answer.trim()
-        || !payload.reading || !Array.isArray(payload.reading.sections)) {
-      throw new Agent911Error("Resposta inválida recebida do Agente 911.", "invalid_response");
-    }
-
-    return {
-      answer: payload.answer.trim(),
-      reading: payload.reading,
-      followUps: Array.isArray(payload.followUps)
-        ? payload.followUps.map((item) => cleanText(item, 180)).filter(Boolean).slice(0, 3)
-        : [],
-      conversationId: cleanText(payload.conversationId, 100),
-      questionsRemaining: Number.isInteger(payload.questionsRemaining)
-        ? payload.questionsRemaining
-        : Math.max(0, agent911Config.offer.questionLimit - (options.questionsUsed ?? 0)),
-      meta: {
-        provider: ["gemini", "openai"].includes(payload?.meta?.provider)
-          ? payload.meta.provider
-          : "unknown",
-        model: cleanText(payload?.meta?.model, 80),
-        usedFallbackModel: payload?.meta?.usedFallbackModel === true,
-      },
-    };
-  } catch (error) {
-    if (error instanceof Agent911Error) throw error;
-    if (controller.signal.aborted) {
-      throw new Agent911Error("A conexão com o Agente 911 foi interrompida.", "request_aborted", error);
-    }
-    throw new Agent911Error("Falha ao conectar com o Agente 911.", "network_error", error);
-  } finally {
-    globalThis.clearTimeout(timeout);
-    options.signal?.removeEventListener("abort", forwardAbort);
+  const remainingCooldownMs = requestCooldownUntil - Date.now();
+  if (remainingCooldownMs > 0) {
+    throw new Agent911Error(
+      agent911ErrorMessage(requestCooldownCode),
+      requestCooldownCode || "provider_unavailable",
+      undefined,
+      remainingCooldownMs,
+    );
   }
+
+  const requestPayload = {
+    agent: agent911Config.id,
+    schemaVersion: agent911Config.contextSchemaVersion,
+    action: options.action ?? "initial_reading",
+    readingMode: normalizeAgent911ReadingMode(options.readingMode),
+    message: cleanText(options.message, 1_200),
+    history: Array.isArray(options.history) ? options.history.slice(-8) : [],
+    memoryConsent: options.memoryConsent === true,
+    memory: options.memoryConsent === true ? options.memory ?? {} : {},
+    questionsUsed: Number.isInteger(options.questionsUsed) ? options.questionsUsed : 0,
+    context,
+  };
+  const basePendingKey = `${endpoint}:${JSON.stringify(requestPayload)}`;
+  const pendingKey = options.signal ? `${basePendingKey}:${createRequestId()}` : basePendingKey;
+  const currentRequest = pendingAgent911Requests.get(pendingKey);
+  if (currentRequest) return currentRequest;
+
+  const operation = (async () => {
+    const controller = new AbortController();
+    const timeoutMs = options.timeoutMs ?? agent911Config.timeoutMs;
+    let timedOut = false;
+    const forwardAbort = () => controller.abort(options.signal?.reason);
+    if (options.signal?.aborted) forwardAbort();
+    options.signal?.addEventListener("abort", forwardAbort, { once: true });
+    const timeout = globalThis.setTimeout(() => {
+      timedOut = true;
+      controller.abort("timeout");
+    }, timeoutMs);
+
+    try {
+      const response = await fetchImplementation(endpoint, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...requestPayload, requestId: createRequestId() }),
+        signal: controller.signal,
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const responseCode = cleanText(payload?.error, 80) || "unknown";
+        const delayMs = retryAfterMs(response, responseCode);
+        registerRequestCooldown(responseCode, delayMs);
+        throw new Agent911Error(
+          agent911ErrorMessage(responseCode),
+          responseCode,
+          undefined,
+          delayMs,
+        );
+      }
+
+      if (typeof payload?.answer !== "string" || !payload.answer.trim()
+          || !payload.reading || !Array.isArray(payload.reading.sections)) {
+        throw new Agent911Error(agent911ErrorMessage("provider_invalid_response"), "provider_invalid_response");
+      }
+
+      return {
+        answer: payload.answer.trim(),
+        reading: payload.reading,
+        followUps: Array.isArray(payload.followUps)
+          ? payload.followUps.map((item) => cleanText(item, 180)).filter(Boolean).slice(0, 3)
+          : [],
+        conversationId: cleanText(payload.conversationId, 100),
+        questionsRemaining: Number.isInteger(payload.questionsRemaining)
+          ? payload.questionsRemaining
+          : Math.max(0, agent911Config.offer.questionLimit - (options.questionsUsed ?? 0)),
+        meta: {
+          provider: ["gemini", "openai"].includes(payload?.meta?.provider)
+            ? payload.meta.provider
+            : "unknown",
+          model: cleanText(payload?.meta?.model, 80),
+          usedFallbackModel: payload?.meta?.usedFallbackModel === true,
+        },
+      };
+    } catch (error) {
+      if (error instanceof Agent911Error) throw error;
+      if (controller.signal.aborted) {
+        const code = timedOut ? "provider_timeout" : "request_aborted";
+        const delayMs = timedOut ? 5_000 : 0;
+        registerRequestCooldown(code, delayMs);
+        throw new Agent911Error(
+          timedOut ? agent911ErrorMessage(code) : "A conexão com o Agente 911 foi interrompida.",
+          code,
+          error,
+          delayMs,
+        );
+      }
+      throw new Agent911Error(agent911ErrorMessage("provider_unavailable"), "provider_unavailable", error);
+    } finally {
+      globalThis.clearTimeout(timeout);
+      options.signal?.removeEventListener("abort", forwardAbort);
+    }
+  })();
+
+  pendingAgent911Requests.set(pendingKey, operation);
+  operation.then(
+    () => pendingAgent911Requests.delete(pendingKey),
+    () => pendingAgent911Requests.delete(pendingKey),
+  );
+  return operation;
 }
 
 export function serializeAgent911Reading(reading) {

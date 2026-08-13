@@ -132,5 +132,8 @@ test("o funil entrega uma síntese automática e só pede cadastro na consulta",
   assert.match(consultation, /stage === "register"/);
   assert.doesNotMatch(agentStyles, /agent911-error/);
   assert.match(vite, /ARCANE911_DEV_API_TARGET/);
+  assert.match(vite, /ARCANE911_DEV_REAL_AI/);
+  assert.match(vite, /Sem opt-in não existe proxy/);
+  assert.doesNotMatch(vite, /https:\/\/arcane911\.vercel\.app/);
   assert.match(vite, /"\/api"/);
 });

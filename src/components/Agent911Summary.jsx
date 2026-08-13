@@ -2,33 +2,34 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { RotateCcw, Sparkles } from "lucide-react";
 import { agent911Config } from "../config/agent911";
 import { normalizeAgent911ReadingMode } from "../config/agent911ReadingModes";
-import { createTarotAgentContext, requestAgent911 } from "../lib/agent911";
-import { buildAgent911Fallback } from "../lib/agent911Fallback";
+import {
+  agent911ErrorMessage,
+  createTarotAgentContext,
+  requestAgent911,
+} from "../lib/agent911";
 import { trackCommercialEvent } from "../lib/checkout";
 import {
-  getPendingAgent911Summary,
   loadAgent911Summary,
   saveAgent911Summary,
-  setPendingAgent911Summary,
   summaryCacheKey,
 } from "../lib/agent911Session";
 import "../agent911.css";
 
-function wrapLocalReading(reading, key) {
+function wrapDevMockReading(reading, key) {
   return {
     answer: reading.synthesis,
     reading,
     followUps: [],
     conversationId: `essential-${key}`,
     questionsRemaining: 3,
-    source: "local",
+    source: "mock",
   };
 }
 
 function canUseCachedSummary(cached) {
   if (!cached) return false;
-  return !agent911Config.remoteEnabled
-    ? cached.source === "local"
+  return agent911Config.devMockEnabled
+    ? cached.source === "mock"
     : cached.source === "live" && ["gemini", "openai"].includes(cached.meta?.provider);
 }
 
@@ -59,20 +60,13 @@ export default function Agent911Summary({
     () => `${summaryCacheKey(createdAt, variant, cards, normalizedReadingMode)}:${agent911Config.mode}`,
     [cards, createdAt, normalizedReadingMode, variant],
   );
-  const localResult = useMemo(
-    () => !agent911Config.remoteEnabled
-      ? wrapLocalReading(buildAgent911Fallback({ cards, intentId, question, variant }), cacheKey)
-      : null,
-    [cacheKey, cards, intentId, question, variant],
-  );
   const cached = useMemo(() => loadAgent911Summary(cacheKey), [cacheKey]);
   const [result, setResult] = useState(() => (
-    canUseCachedSummary(cached) ? cached : localResult
+    canUseCachedSummary(cached) ? cached : null
   ));
-  const [loading, setLoading] = useState(
-    agent911Config.remoteEnabled && !canUseCachedSummary(cached),
-  );
+  const [loading, setLoading] = useState(!canUseCachedSummary(cached));
   const [errorCode, setErrorCode] = useState("");
+  const [retryDelayMs, setRetryDelayMs] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const onResultRef = useRef(onResult);
   onResultRef.current = onResult;
@@ -92,23 +86,38 @@ export default function Agent911Summary({
       setResult(stored);
       setLoading(false);
       setErrorCode("");
+      setRetryDelayMs(0);
       onResultRef.current?.(stored);
       return () => { active = false; };
     }
 
-    if (!agent911Config.remoteEnabled) {
-      setResult(localResult);
-      setLoading(false);
+    if (import.meta.env.DEV && agent911Config.devMockEnabled) {
+      setResult(null);
+      setLoading(true);
       setErrorCode("");
-      saveAgent911Summary(cacheKey, localResult);
-      onResultRef.current?.(localResult);
-      trackCommercialEvent("agent911_summary_ready", {
-        variant,
-        card_count: cards.length,
-        source: "local",
-        reading_mode: normalizedReadingMode,
+      const mockModule = import("../lib/agent911Fallback");
+      mockModule.then(({ buildAgent911Fallback }) => {
+        const mockResult = wrapDevMockReading(
+          buildAgent911Fallback({ cards, intentId, question, variant }),
+          cacheKey,
+        );
+        saveAgent911Summary(cacheKey, mockResult);
+        if (!active) return;
+        setResult(mockResult);
+        setLoading(false);
+        setRetryDelayMs(0);
+        onResultRef.current?.(mockResult);
+        trackCommercialEvent("agent911_summary_ready", {
+          variant,
+          card_count: cards.length,
+          source: "mock",
+          reading_mode: normalizedReadingMode,
+        });
+      }).catch(() => {
+        if (!active) return;
+        setLoading(false);
+        setErrorCode("unknown");
       });
-      setLoading(false);
       return () => { active = false; };
     }
 
@@ -117,15 +126,11 @@ export default function Agent911Summary({
     setErrorCode("");
     onResultRef.current?.(null);
 
-    const pendingKey = `${cacheKey}:connected:${attempt}`;
-    const currentRequest = getPendingAgent911Summary(pendingKey) ?? setPendingAgent911Summary(
-      pendingKey,
-      requestAgent911(context, {
-        action: variant === "complete" ? "complete_summary" : "opening_summary",
-        readingMode: normalizedReadingMode,
-        memoryConsent: false,
-      }),
-    );
+    const currentRequest = requestAgent911(context, {
+      action: variant === "complete" ? "complete_summary" : "opening_summary",
+      readingMode: normalizedReadingMode,
+      memoryConsent: false,
+    });
 
     currentRequest
       .then((liveResult) => {
@@ -141,6 +146,7 @@ export default function Agent911Summary({
         });
         setResult(normalized);
         setLoading(false);
+        setRetryDelayMs(0);
         onResultRef.current?.(normalized);
       })
       .catch((requestError) => {
@@ -154,11 +160,18 @@ export default function Agent911Summary({
         setResult(null);
         setLoading(false);
         setErrorCode(requestError?.code ?? "unknown");
+        setRetryDelayMs(requestError?.retryAfterMs ?? 0);
         onResultRef.current?.(null);
       });
 
     return () => { active = false; };
-  }, [attempt, cacheKey, cards.length, context, localResult, normalizedReadingMode, variant]);
+  }, [attempt, cacheKey, cards, context, intentId, normalizedReadingMode, question, variant]);
+
+  useEffect(() => {
+    if (retryDelayMs <= 0) return undefined;
+    const timeout = globalThis.setTimeout(() => setRetryDelayMs(0), retryDelayMs);
+    return () => globalThis.clearTimeout(timeout);
+  }, [retryDelayMs]);
 
   const isComplete = variant === "complete";
 
@@ -198,11 +211,20 @@ export default function Agent911Summary({
             </div>
           ) : (
             <div className="agent911-reading-retry">
-              <p>Nenhum texto automático foi colocado no lugar. Sua mesa continua aberta; tente novamente para receber a leitura conectada.</p>
-              <button className="button button-glass" type="button" onClick={() => setAttempt((current) => current + 1)}>
+              <p>{agent911ErrorMessage(errorCode)} Nenhum texto automático foi colocado no lugar.</p>
+              <button
+                className="button button-glass"
+                type="button"
+                disabled={retryDelayMs > 0}
+                onClick={() => setAttempt((current) => current + 1)}
+              >
                 <RotateCcw size={15} /> Tentar a leitura novamente
               </button>
-              <small data-agent911-error={errorCode}>A tentativa não altera suas cartas nem consome uma pergunta.</small>
+              <small data-agent911-error={errorCode}>
+                {retryDelayMs > 0
+                  ? "A nova tentativa será liberada após o intervalo seguro."
+                  : "A tentativa não altera suas cartas nem consome uma pergunta."}
+              </small>
             </div>
           )}
         </div>
@@ -223,7 +245,7 @@ export default function Agent911Summary({
       aria-labelledby={`agent911-summary-title-${variant}`}
       data-agent911-source={result.source ?? "live"}
       data-agent911-provider={result.meta?.provider
-        ?? (result.source === "local" ? "local" : result.source === "fallback" ? "fallback" : "unknown")}
+        ?? (result.source === "mock" ? "mock" : "unknown")}
       data-agent911-reading-mode={normalizedReadingMode}
     >
       <div className="synthesis-orb agent911-summary-orb" aria-hidden="true">

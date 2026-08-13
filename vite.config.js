@@ -1,33 +1,51 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode, isPreview }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const agentTarget = env.ARCANE911_DEV_API_TARGET || "https://arcane911.vercel.app";
-  const agentOrigin = new URL(agentTarget).origin;
+  const isDevelopmentServer = command === "serve" && !isPreview;
+  const devRealAi = String(env.ARCANE911_DEV_REAL_AI ?? "false").trim().toLowerCase() === "true";
+  const agentTarget = String(env.ARCANE911_DEV_API_TARGET ?? "").trim();
+  let proxy = undefined;
+
+  if (isDevelopmentServer && devRealAi) {
+    if (!agentTarget) {
+      throw new Error("ARCANE911_DEV_REAL_AI=true exige ARCANE911_DEV_API_TARGET explícito.");
+    }
+    const targetUrl = new URL(agentTarget);
+    const localTarget = ["localhost", "127.0.0.1"].includes(targetUrl.hostname);
+    if (targetUrl.protocol !== "https:" && !(localTarget && targetUrl.protocol === "http:")) {
+      throw new Error("ARCANE911_DEV_API_TARGET precisa usar HTTPS ou HTTP local.");
+    }
+    proxy = {
+      "/api": {
+        target: targetUrl.origin,
+        changeOrigin: true,
+        secure: targetUrl.protocol === "https:",
+        configure(proxyServer) {
+          proxyServer.on("proxyReq", (proxyRequest) => {
+            proxyRequest.setHeader("Origin", targetUrl.origin);
+          });
+        },
+      },
+    };
+    console.info(`[Arcane911 DEV] IA real habilitada explicitamente em ${targetUrl.origin}.`);
+  } else if (isDevelopmentServer) {
+    console.info("[Arcane911 DEV] usando Agent911 mock — nenhuma chamada paga foi realizada.");
+  }
 
   return {
     plugins: [react()],
+    // Expõe ao cliente somente o booleano de opt-in; o target continua privado no Vite.
+    envPrefix: ["VITE_", "ARCANE911_DEV_REAL_AI"],
     build: {
       // O motor astral é um chunk tardio: só é baixado ao abrir /mapa-astral.
       chunkSizeWarningLimit: 900,
     },
     server: {
       host: "0.0.0.0",
-      // Em desenvolvimento, a função serverless continua segura na Vercel.
-      // Isso elimina o 404 de /api/agent-911 no localhost sem expor chaves de provedor.
-      proxy: {
-        "/api": {
-          target: agentTarget,
-          changeOrigin: true,
-          secure: true,
-          configure(proxy) {
-            proxy.on("proxyReq", (proxyRequest) => {
-              proxyRequest.setHeader("Origin", agentOrigin);
-            });
-          },
-        },
-      },
+      // Sem opt-in não existe proxy: localhost nunca consome produção silenciosamente.
+      proxy,
     },
   };
 });
