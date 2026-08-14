@@ -5,6 +5,7 @@ export default defineConfig(({ command, mode, isPreview }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const isDevelopmentServer = command === "serve" && !isPreview;
   const devRealAi = String(env.ARCANE911_DEV_REAL_AI ?? "false").trim().toLowerCase() === "true";
+  const devUnlockPaid = String(env.ARCANE911_DEV_UNLOCK_PAID ?? "true").trim().toLowerCase() !== "false";
   const agentTarget = String(env.ARCANE911_DEV_API_TARGET ?? "").trim();
   let proxy = undefined;
 
@@ -31,16 +32,28 @@ export default defineConfig(({ command, mode, isPreview }) => {
     };
     console.info(`[Arcane911 DEV] IA real habilitada explicitamente em ${targetUrl.origin}.`);
   } else if (isDevelopmentServer) {
-    console.info("[Arcane911 DEV] usando Agent911 mock — nenhuma chamada paga foi realizada.");
+    console.info("[Arcane911 DEV] usando mocks do Tarot e Documento Astral — nenhuma chamada paga foi realizada.");
+  }
+  if (isDevelopmentServer && devUnlockPaid) {
+    console.info("[Arcane911 DEV] tiragem completa e perguntas pagas liberadas somente neste ambiente.");
   }
 
   return {
     plugins: [react()],
     // Expõe ao cliente somente o booleano de opt-in; o target continua privado no Vite.
-    envPrefix: ["VITE_", "ARCANE911_DEV_REAL_AI"],
+    envPrefix: ["VITE_", "ARCANE911_DEV_REAL_AI", "ARCANE911_DEV_UNLOCK_PAID"],
     build: {
       // O motor astral é um chunk tardio: só é baixado ao abrir /mapa-astral.
       chunkSizeWarningLimit: 900,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes("/circular-natal-horoscope-js/")) return "astro-chart-engine";
+            if (id.includes("/astronomy-engine/")) return "astro-precision-engine";
+            return undefined;
+          },
+        },
+      },
     },
     server: {
       host: "0.0.0.0",

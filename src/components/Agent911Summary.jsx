@@ -53,6 +53,7 @@ export default function Agent911Summary({
   readingMode = "acolhedora",
   createdAt,
   variant = "opening",
+  spreadId = "",
   onResult,
 }) {
   const normalizedReadingMode = normalizeAgent911ReadingMode(readingMode);
@@ -77,7 +78,8 @@ export default function Agent911Summary({
     intentLabel,
     question,
     createdAt,
-  }), [cards, createdAt, intentId, intentLabel, question]);
+    spreadId,
+  }), [cards, createdAt, intentId, intentLabel, question, spreadId]);
 
   useEffect(() => {
     let active = true;
@@ -98,7 +100,7 @@ export default function Agent911Summary({
       const mockModule = import("../lib/agent911Fallback");
       mockModule.then(({ buildAgent911Fallback }) => {
         const mockResult = wrapDevMockReading(
-          buildAgent911Fallback({ cards, intentId, question, variant }),
+          buildAgent911Fallback({ cards, intentId, question, variant, spreadId }),
           cacheKey,
         );
         saveAgent911Summary(cacheKey, mockResult);
@@ -127,7 +129,9 @@ export default function Agent911Summary({
     onResultRef.current?.(null);
 
     const currentRequest = requestAgent911(context, {
-      action: variant === "complete" ? "complete_summary" : "opening_summary",
+      action: variant === "complete"
+        ? "complete_summary"
+        : variant === "specific" ? "specific_summary" : "opening_summary",
       readingMode: normalizedReadingMode,
       memoryConsent: false,
     });
@@ -165,7 +169,7 @@ export default function Agent911Summary({
       });
 
     return () => { active = false; };
-  }, [attempt, cacheKey, cards, context, intentId, normalizedReadingMode, question, variant]);
+  }, [attempt, cacheKey, cards, context, intentId, normalizedReadingMode, question, spreadId, variant]);
 
   useEffect(() => {
     if (retryDelayMs <= 0) return undefined;
@@ -174,6 +178,10 @@ export default function Agent911Summary({
   }, [retryDelayMs]);
 
   const isComplete = variant === "complete";
+  const isSpecific = variant === "specific";
+  const summaryLabel = isComplete
+    ? "Síntese pessoal da Ferradura"
+    : isSpecific ? "Resposta pessoal da pergunta" : "Leitura pessoal do 911";
 
   if (!result) {
     return (
@@ -189,7 +197,7 @@ export default function Agent911Summary({
         </div>
         <div className="agent911-summary-copy">
           <div className="agent911-summary-meta">
-            <span className="section-kicker">{isComplete ? "Síntese pessoal da Ferradura" : "Leitura pessoal do 911"}</span>
+            <span className="section-kicker">{summaryLabel}</span>
             <span className={loading ? "is-reading" : ""} role="status">
               <Sparkles size={13} /> {loading ? "lendo sua mesa…" : "leitura interrompida"}
             </span>
@@ -199,7 +207,9 @@ export default function Agent911Summary({
           </div>
           <h3 id={`agent911-summary-title-${variant}`}>
             {loading
-              ? isComplete ? "Sete posições estão virando uma história só." : "Sua pergunta está encontrando as três cartas."
+              ? isComplete
+                ? "Sete posições estão virando uma história só."
+                : isSpecific ? "Cinco posições estão respondendo à mesma pergunta." : "Sua pergunta está encontrando as três cartas."
               : "O 911 não concluiu esta leitura."}
           </h3>
           <q>{question}</q>
@@ -253,7 +263,7 @@ export default function Agent911Summary({
       </div>
       <div className="agent911-summary-copy">
         <div className="agent911-summary-meta">
-          <span className="section-kicker">{isComplete ? "Síntese pessoal da Ferradura" : "Leitura pessoal do 911"}</span>
+          <span className="section-kicker">{summaryLabel}</span>
           <span className={loading ? "is-reading" : ""} role="status">
             <Sparkles size={13} /> {loading ? "afinando a leitura…" : "leitura concluída"}
           </span>

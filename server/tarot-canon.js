@@ -434,9 +434,11 @@ function selectReadingRelationships(slugs, intentId, maximum) {
     .map(({ relation }) => relation);
 }
 
-export function buildCanonicalReading(slugs, intentId, experience) {
+export function buildCanonicalReading(slugs, intentId, experience, customLayout = []) {
   const isComplete = slugs.length === 7;
-  const layout = isComplete ? completePositions : positions;
+  const isSpecific = slugs.length === 5;
+  const layout = isComplete ? completePositions : isSpecific ? customLayout : positions;
+  if (layout.length !== slugs.length) return null;
   const cards = slugs.map((slug, index) => {
     const canonical = getCanonicalCard(slug, intentId);
     return canonical ? { ...canonical, position: layout[index] } : null;
@@ -449,10 +451,12 @@ export function buildCanonicalReading(slugs, intentId, experience) {
     tradition: "Arcanos Maiores na estrutura Rider–Waite–Smith, leitura simbólica, relacional e orientada à autonomia.",
     experience,
     cards,
-    relationships: selectReadingRelationships(slugs, intentId, isComplete ? 6 : 3),
+    relationships: selectReadingRelationships(slugs, intentId, isComplete ? 6 : isSpecific ? 5 : 3),
     layoutRule: isComplete
       ? "Leia a Ferradura como narrativa: origem → presente → influência oculta → nó → campo externo → ação → direção provável. A direção é condicional, nunca destino."
-      : "Leia as três cartas como narrativa: raiz → espelho → movimento. Nenhuma carta deve ser interpretada isoladamente.",
+      : isSpecific
+        ? "Leia as cinco posições como resposta focada à pergunta. Faça as cartas conversarem, respeite a função de cada posição e trate a última como direção condicional, nunca sentença."
+        : "Leia as três cartas como narrativa: raiz → espelho → movimento. Nenhuma carta deve ser interpretada isoladamente.",
   };
 }
 

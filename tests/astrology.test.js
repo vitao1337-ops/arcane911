@@ -45,6 +45,36 @@ test("o mapa é serializável e o resumo compartilhável contém método e posi�
   assert.match(text, /Casas Iguais/);
 });
 
+test("o cálculo recusa data impossível, nascimento futuro e coordenadas inválidas", () => {
+  assert.throws(
+    () => calculateNatalChart({
+      name: "Pessoa de Teste",
+      date: "1990-02-31",
+      time: "12:00",
+      location: fallbackLocations[0],
+    }),
+    /data e um horário de nascimento válidos/u,
+  );
+  assert.throws(
+    () => calculateNatalChart({
+      name: "Pessoa de Teste",
+      date: "2990-01-01",
+      time: "12:00",
+      location: fallbackLocations[0],
+    }),
+    /data e um horário de nascimento válidos/u,
+  );
+  assert.throws(
+    () => calculateNatalChart({
+      name: "Pessoa de Teste",
+      date: "1990-01-01",
+      time: "12:00",
+      location: { ...fallbackLocations[0], latitude: 120 },
+    }),
+    /cidade válida/u,
+  );
+});
+
 test("a interface astrológica expõe cálculo, privacidade e atribuição", () => {
   const pagePath = fileURLToPath(new URL("../src/pages/AstralMapPage.jsx", import.meta.url));
   const page = readFileSync(pagePath, "utf8");
@@ -53,6 +83,10 @@ test("a interface astrológica expõe cálculo, privacidade e atribuição", () 
   assert.match(page, /Privacidade por minimização/);
   assert.match(page, /nunca data, horário ou cidade/);
   assert.match(page, /Astral911Document/);
+  assert.match(page, /astralAccessGranted/u);
+  assert.match(page, /verifyHostedCheckout/u);
+  assert.match(page, /Documento Astral[\s\S]*?protegido/u);
+  assert.doesNotMatch(page, /<Astral911Document chart=\{chart\} onStatus=\{updateStatus\} \/>\s*\n\s*<section/u);
   assert.match(page, /Open-Meteo/);
   assert.match(page, /10 planetas/);
   assert.match(page, /12 casas/);
@@ -60,4 +94,6 @@ test("a interface astrológica expõe cálculo, privacidade e atribuição", () 
   assert.match(page, /showPicker/);
   assert.match(page, /id="birth-date"/);
   assert.match(page, /id="birth-time"/);
+  assert.match(page, /sessionStorage/u);
+  assert.match(page, /ASTRO_STORAGE_MAX_AGE_MS/u);
 });

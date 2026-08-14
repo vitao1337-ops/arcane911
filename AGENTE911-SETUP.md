@@ -1,6 +1,6 @@
-# Arcane911 V14 — operação segura do Agent 911
+# Arcane911 V15 — operação segura do Agent 911 e Documento Astral
 
-O tarot usa `POST /api/agent-911`. Gemini continua como provedor principal; o segundo modelo Gemini e a OpenAI são paraquedas para falhas recuperáveis. Chaves nunca entram no React.
+O tarot usa `POST /api/agent-911` e o Documento Astral usa `POST /api/astro-911`. Nos dois, Gemini continua principal; o segundo modelo Gemini e a OpenAI são paraquedas para falhas recuperáveis. Chaves nunca entram no React.
 
 ## Produção
 
@@ -18,6 +18,7 @@ OPENAI_MODEL=gpt-5.6-terra
 
 VITE_AGENT911_ENABLED=true
 VITE_ASTRO911_ENABLED=true
+ASTRO911_PROVIDER=gemini
 ```
 
 Com `AGENT911_PROVIDER=gemini`, o plano é:
@@ -37,13 +38,21 @@ npm ci
 npm run dev
 ```
 
-Sem configuração adicional, o Agent 911 usa um mock local com o mesmo contrato de leitura. O Vite não cria proxy para `/api` e imprime:
+Sem configuração adicional, o Agent 911 e o Documento Astral usam mocks locais com seus contratos reais. O Vite não cria proxy para `/api` e imprime:
 
 ```text
-[Arcane911 DEV] usando Agent911 mock — nenhuma chamada paga foi realizada.
+[Arcane911 DEV] usando mocks do Tarot e Documento Astral — nenhuma chamada paga foi realizada.
+[Arcane911 DEV] tiragem completa e perguntas pagas liberadas somente neste ambiente.
 ```
 
-O mock é condicionado a `import.meta.env.DEV`; builds de produção sempre usam o modo conectado. Para habilitar a rota real em DEV, as duas escolhas precisam ser explícitas em `.env.local`:
+Os mocks e a liberação comercial são condicionados a `import.meta.env.DEV`; builds de produção sempre usam o modo conectado e não aceitam esse bypass. Para explicitar o acesso completo local:
+
+```env
+ARCANE911_DEV_REAL_AI=false
+ARCANE911_DEV_UNLOCK_PAID=true
+```
+
+Para habilitar as rotas reais em DEV, as duas escolhas abaixo precisam ser explícitas em `.env.local`:
 
 ```env
 ARCANE911_DEV_REAL_AI=true
@@ -71,6 +80,15 @@ AGENT911_TOTAL_TIMEOUT_MS=50000
 AGENT911_QUOTA_COOLDOWN_MS=60000
 AGENT911_PROVIDER_COOLDOWN_MS=12000
 AGENT911_DEDUPE_TTL_MS=120000
+
+ASTRO911_RATE_LIMIT=8
+ASTRO911_RATE_WINDOW_MS=600000
+ASTRO911_PROVIDER_TIMEOUT_MS=35000
+ASTRO911_TOTAL_TIMEOUT_MS=55000
+ASTRO911_QUOTA_COOLDOWN_MS=60000
+ASTRO911_PROVIDER_COOLDOWN_MS=15000
+ASTRO911_DEDUPE_TTL_MS=600000
+ASTRO911_MAX_OUTPUT_TOKENS=8192
 ```
 
 - O rate limit interno devolve `429 rate_limit` e `Retry-After`.
@@ -93,6 +111,8 @@ AGENT911_DEDUPE_TTL_MS=120000
 
 Não há retry automático de rede nem loop de reparo. Só existe um reparo estrutural, no mesmo candidato, e o orçamento global nunca ultrapassa três chamadas.
 
+O Documento Astral segue o mesmo teto: normalmente uma chamada; duas quando o Gemini principal cai no modelo reserva ou quando um JSON realmente incompleto exige reparo; três apenas quando os dois modelos Gemini falham de modo recuperável e a OpenAI assume. Capítulos fora de ordem e diferenças naturais de redação são normalizados localmente.
+
 ## Logs e custo
 
 Os eventos são:
@@ -105,9 +125,28 @@ Os eventos são:
 - `agent911_request_completed`
 - `agent911_request_failed`
 
-`agent911_usage` registra provider, modelo, tipo da tiragem, ação, tokens de entrada/saída/raciocínio/total quando fornecidos pelo provider, chamadas, fallback, reparo e duração. `usageByCall` preserva a divisão entre candidatos. Não são registrados pergunta, resposta, nome, e-mail ou chave.
+E, no Documento Astral:
+
+- `astro911_request_started`
+- `astro911_provider_call`
+- `astro911_model_fallback`
+- `astro911_provider_fallback`
+- `astro911_usage`
+- `astro911_request_completed`
+- `astro911_request_failed`
+
+`agent911_usage` e `astro911_usage` registram provider, modelo, tipo da leitura, tokens de entrada/saída/raciocínio/total quando fornecidos pelo provider, chamadas, fallback, reparo e duração. `usageByCall` preserva a divisão entre candidatos. Não são registrados pergunta, resposta, documento, dados natais, nome, e-mail ou chave.
 
 Não há estimativa monetária hardcoded. Custos devem ser calculados externamente a partir de tokens e chamadas, com a tabela de preços vigente.
+
+## Funil comercial atual
+
+- Tiragem Completa: R$ 19,99 e modal obrigatório antes de seguir. Em produção, o modal encaminha ao checkout configurado; no DEV, o mesmo modal explica o pagamento e oferece bypass sem cobrança.
+- Consulta 911 ligada à Ferradura: R$ 5,00 por pergunta, conforme o limite configurado.
+- Pergunta específica de cinco cartas depois da Tiragem Completa: R$ 5,00.
+- Pergunta específica avulsa, acessada pela primeira página da tiragem: R$ 10,00.
+
+Os dois valores das perguntas específicas possuem IDs e URLs de checkout separados. O valor de R$ 5,00 exige uma Tiragem Completa paga e essa elegibilidade deve ser confirmada no servidor; o parâmetro de origem do navegador serve apenas para apresentação da oferta.
 
 ## Mensagens públicas
 
@@ -121,4 +160,7 @@ O backend distingue `rate_limit`, `provider_quota`, `provider_timeout`, `provide
 4. Em Preview, simule 429 no Gemini e confirme a sequência principal → modelo fallback → OpenAI, se configurada.
 5. Confirme que 429 interno mostra `rate_limit`, enquanto quota termina em `provider_quota`.
 6. Confirme `agent911_usage` sem conteúdo privado.
-7. Abra o Documento Astral e valide seu fluxo separadamente; esta política não altera o endpoint `/api/astro-911`.
+7. Abra o Documento Astral e confirme um único `astro911_provider_call` no sucesso normal.
+8. Confira `astro911_usage`, cache, dedupe e mensagens neutras de quota/timeout.
+9. Em DEV padrão, confira Network sem chamadas para Vercel, Gemini ou OpenAI e atravesse todos os produtos pagos com `ARCANE911_DEV_UNLOCK_PAID=true`.
+10. Antes de cobrar em produção, conclua a confirmação server-side do provedor descrita em `PAGAMENTOS-SETUP.md`.

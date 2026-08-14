@@ -30,9 +30,11 @@ test("o contexto seguro do Agente 911 preserva pergunta, posições e guardrails
   assert.equal(context.reading.cards[5].position.id, "action");
   assert.equal(context.reading.question, "Qual movimento pede coragem agora?");
   assert.equal(context.guardrails.preserveUserAgency, true);
-  assert.equal(agent911Config.offer.isVisible, false);
-  assert.equal(agent911Config.offer.isCheckoutEnabled, false);
+  assert.equal(agent911Config.offer.isVisible, true);
+  assert.equal(agent911Config.offer.productId, "agent911-pergunta");
   assert.equal(agent911Config.offer.questionLimit, 3);
+  assert.equal(agent911Config.offer.price, "R$ 5,00");
+  assert.equal(agent911Config.offer.priceCents, 500);
   assert.equal(agent911Config.enabled, true);
   assert.equal(agent911Config.mode, "live");
   assert.equal(agent911Config.remoteEnabled, true);

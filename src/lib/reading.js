@@ -133,6 +133,19 @@ export function completeCardReading(card, positionId) {
   return readings[positionId] ?? card.message;
 }
 
+export function specificCardReading(card, position, index) {
+  const movement = index === 4
+    ? `Como direção desta abertura, ${card.name} não fecha o futuro: aponta a qualidade de ${card.keywords[0]} que pode ser testada no caminho atual.`
+    : `${card.name} ocupa “${position}” e aproxima a pergunta de ${card.archetype.toLowerCase()}.`;
+  return `${movement} ${card.message}`;
+}
+
+export function buildSpecificSynthesis(cards, reading) {
+  if (!Array.isArray(cards) || cards.length !== 5 || !reading) return "";
+  const [first, second, third, fourth, fifth] = cards;
+  return `${reading.promise} A sequência começa em ${first.name}, atravessa o que ${second.name} torna visível e encontra o ponto de tensão em ${third.name}. ${fourth.name} mostra onde sua posição precisa mudar; ${fifth.name} oferece uma direção de ${fifth.keywords[0]}, desde que ela seja medida por atitudes concretas e não tratada como promessa. O gesto mais útil agora é este: ${fifth.action}`;
+}
+
 export function buildSynthesis(cards, intentId) {
   const [root, mirror, movement] = cards;
   const frame = intentFrames[intentId] ?? intentFrames.caminhos;

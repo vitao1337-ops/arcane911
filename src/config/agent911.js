@@ -1,3 +1,5 @@
+import { commerceConfig } from "./commerce.js";
+
 const viteEnv = typeof import.meta.env === "object" ? import.meta.env : {};
 
 function parsePositiveInteger(value, fallback) {
@@ -9,6 +11,7 @@ const isDevelopment = viteEnv.DEV === true;
 const devRealAiEnabled = isDevelopment
   && String(viteEnv.ARCANE911_DEV_REAL_AI ?? "false").trim().toLowerCase() === "true";
 const mode = isDevelopment && !devRealAiEnabled ? "mock" : "live";
+const questionProduct = commerceConfig.products.agentQuestion;
 
 export const agent911Config = Object.freeze({
   id: "agent-911",
@@ -17,14 +20,14 @@ export const agent911Config = Object.freeze({
   remoteEnabled: mode === "live",
   devMockEnabled: mode === "mock",
   endpoint: String(viteEnv.VITE_AGENT911_ENDPOINT ?? "/api/agent-911").trim(),
-  contextSchemaVersion: "2026-08-12.6",
+  contextSchemaVersion: "2026-08-13.1",
   timeoutMs: 58_000,
   offer: Object.freeze({
-    isVisible: false,
-    isCheckoutEnabled: false,
-    productId: String(viteEnv.VITE_AGENT911_PRODUCT_ID ?? "agent911-tres-perguntas").trim(),
+    isVisible: true,
+    devUnlocked: commerceConfig.devUnlocked,
+    productId: questionProduct.id,
     questionLimit: parsePositiveInteger(viteEnv.VITE_AGENT911_QUESTION_LIMIT, 3),
-    draftPrice: String(viteEnv.VITE_AGENT911_DRAFT_PRICE ?? "R$ 10,00").trim(),
-    checkoutUrl: String(viteEnv.VITE_AGENT911_CHECKOUT_URL ?? "").trim(),
+    price: questionProduct.price,
+    priceCents: questionProduct.priceCents,
   }),
 });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   CalendarDays,
@@ -16,14 +16,32 @@ import {
 } from "lucide-react";
 import Astral911Document from "../components/Astral911Document";
 import NatalWheel from "../components/NatalWheel";
+import { astro911Config } from "../config/astro911";
+import { commerceConfig } from "../config/commerce";
+import { astro911Fingerprint, clearCachedAstro911Document } from "../lib/astro911";
 import {
   buildAstroShareText,
   calculateNatalChart,
   fallbackLocations,
   searchBirthplaces,
 } from "../lib/astrology";
+import {
+  checkoutErrorMessage,
+  clearPendingCheckout,
+  createCheckoutOrderId,
+  createHostedCheckout,
+  findPaymentEntitlement,
+  loadPendingCheckout,
+  savePaymentEntitlement,
+  savePendingCheckout,
+  trackCommercialEvent,
+  verifyHostedCheckout,
+} from "../lib/checkout";
 
-const ASTRO_STORAGE_KEY = "arcane911.astral.v1";
+const ASTRO_STORAGE_KEY = "arcane911.astral.v2";
+const LEGACY_ASTRO_STORAGE_KEY = "arcane911.astral.v1";
+const ASTRO_STORAGE_MAX_AGE_MS = 12 * 60 * 60 * 1_000;
+const ASTRAL_OFFER_CONTEXT = "astral_document";
 
 function formatLocation(location) {
   return [location.name, location.admin1, location.country].filter(Boolean).join(" · ");
@@ -89,16 +107,98 @@ function TemporalPickerField({
   );
 }
 
-function readStoredChart() {
+function chartIsComplete(chart) {
+  return chart?.planets?.length === 10 && chart?.houses?.length === 12 && chart?.aspects?.length >= 3;
+}
+
+function safeSessionStorage() {
   try {
-    const stored = JSON.parse(window.localStorage.getItem(ASTRO_STORAGE_KEY) ?? "null");
-    return stored?.planets?.length === 10 && stored?.houses?.length === 12 ? stored : null;
+    return typeof window === "object" ? window.sessionStorage : null;
   } catch {
     return null;
   }
 }
 
+function storeChart(chart) {
+  try {
+    safeSessionStorage()?.setItem(ASTRO_STORAGE_KEY, JSON.stringify({
+      savedAt: new Date().toISOString(),
+      chart,
+    }));
+  } catch {
+    // O mapa atual continua aberto mesmo quando a sessão bloqueia armazenamento.
+  }
+}
+
+function clearStoredChart() {
+  try {
+    safeSessionStorage()?.removeItem(ASTRO_STORAGE_KEY);
+    window.localStorage?.removeItem(LEGACY_ASTRO_STORAGE_KEY);
+  } catch {
+    // O estado em memória ainda é limpo.
+  }
+}
+
+function readStoredChart() {
+  try {
+    const session = safeSessionStorage();
+    const stored = JSON.parse(session?.getItem(ASTRO_STORAGE_KEY) ?? "null");
+    const age = Date.now() - new Date(stored?.savedAt ?? 0).getTime();
+    if (chartIsComplete(stored?.chart) && age >= 0 && age <= ASTRO_STORAGE_MAX_AGE_MS) {
+      return stored.chart;
+    }
+    session?.removeItem(ASTRO_STORAGE_KEY);
+
+    // Preserva uma sessão recente de versões anteriores e remove a retenção
+    // persistente dos dados natais completos.
+    const legacy = JSON.parse(window.localStorage?.getItem(LEGACY_ASTRO_STORAGE_KEY) ?? "null");
+    window.localStorage?.removeItem(LEGACY_ASTRO_STORAGE_KEY);
+    const legacyAge = Date.now() - new Date(legacy?.createdAt ?? 0).getTime();
+    if (chartIsComplete(legacy) && legacyAge >= 0 && legacyAge <= ASTRO_STORAGE_MAX_AGE_MS) {
+      storeChart(legacy);
+      return legacy;
+    }
+  } catch {
+    try {
+      window.localStorage?.removeItem(LEGACY_ASTRO_STORAGE_KEY);
+    } catch {
+      // Nada a fazer quando o navegador bloqueia armazenamento.
+    }
+  }
+  return null;
+}
+
+function AstralDocumentGate({ product, paymentState, paymentMessage, onCheckout }) {
+  const busy = paymentState === "opening" || paymentState === "verifying";
+  return (
+    <section className="astro-document astro-document-loading astro-document-access" aria-labelledby="astro-access-title">
+      <div className="astro-document-seal" aria-hidden="true"><span>✦</span><strong>911</strong></div>
+      <div>
+        <span className="section-kicker">03 · Documento Astral 911</span>
+        <h3 id="astro-access-title">Seu céu está calculado.<br />O documento completo está protegido.</h3>
+        <p>
+          A compra libera a leitura longa ancorada neste mapa, com cinco capítulos,
+          retrato central, práticas de integração, perguntas de reflexão e versão para PDF.
+        </p>
+        <div className="astro-document-progress" aria-label="Conteúdo do Documento Astral">
+          <span><FileText size={15} /> Cinco capítulos pessoais</span>
+          <span><Sparkles size={15} /> Posições reais do mapa</span>
+          <span><ShieldCheck size={15} /> Confirmação segura no servidor</span>
+        </div>
+        <button className="button button-primary astro-access-action" type="button" onClick={onCheckout} disabled={busy}>
+          {busy ? "Confirmando acesso…" : `Liberar Documento Astral · ${product.price}`}
+          <ArrowRight size={17} />
+        </button>
+        {paymentMessage ? <small className={`astro-payment-message is-${paymentState}`} role={paymentState === "error" ? "alert" : "status"}>{paymentMessage}</small> : null}
+        <small>O cálculo básico permanece disponível. Dados de nascimento e texto do documento não são enviados ao pagamento.</small>
+      </div>
+    </section>
+  );
+}
+
 export default function AstralMapPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [form, setForm] = useState({ name: "", date: "", time: "", city: "" });
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [locations, setLocations] = useState([]);
@@ -106,14 +206,111 @@ export default function AstralMapPage() {
   const [chart, setChart] = useState(readStoredChart);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [astralEntitlement, setAstralEntitlement] = useState(null);
+  const [paymentState, setPaymentState] = useState("idle");
+  const [paymentMessage, setPaymentMessage] = useState("");
   const controllerRef = useRef(null);
   const resultRef = useRef(null);
+  const checkoutVerificationRef = useRef("");
   const updateStatus = useMemo(() => (message) => setStatus(message), []);
 
-  const maxDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const maxDate = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  }, []);
   const featuredCities = fallbackLocations.slice(0, 5);
+  const astralProduct = commerceConfig.products.astralDocument;
+  const chartFingerprint = useMemo(() => {
+    try {
+      return chart ? astro911Fingerprint(chart) : "";
+    } catch {
+      return "";
+    }
+  }, [chart]);
+  const astralAccessGranted = !astralProduct.accessRequired
+    || commerceConfig.devUnlocked
+    || Boolean(
+      astralEntitlement
+      && astralEntitlement.productId === astralProduct.id
+      && astralEntitlement.readingId === chartFingerprint
+      && astralEntitlement.offerContext === ASTRAL_OFFER_CONTEXT,
+    );
 
   useEffect(() => () => controllerRef.current?.abort(), []);
+
+  useEffect(() => {
+    if (!chartFingerprint) {
+      setAstralEntitlement(null);
+      return;
+    }
+    setAstralEntitlement(findPaymentEntitlement({
+      productId: astralProduct.id,
+      readingId: chartFingerprint,
+      offerContext: ASTRAL_OFFER_CONTEXT,
+    }));
+  }, [astralProduct.id, chartFingerprint]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const checkoutState = params.get("checkout");
+    if (!checkoutState) return;
+
+    if (checkoutState === "cancelled") {
+      clearPendingCheckout();
+      setPaymentState("idle");
+      setPaymentMessage("Pagamento cancelado. Seu mapa calculado continua disponível.");
+      setStatus("Pagamento cancelado. Nenhum valor foi confirmado por esta tela.");
+      navigate("/mapa-astral", { replace: true });
+      return;
+    }
+
+    const sessionId = params.get("session_id") ?? "";
+    if (checkoutState !== "success" || !sessionId || checkoutVerificationRef.current === sessionId) return;
+    if (!chartFingerprint) {
+      clearPendingCheckout();
+      setPaymentState("error");
+      setPaymentMessage("Não foi possível recuperar o mapa desta compra nesta sessão.");
+      navigate("/mapa-astral", { replace: true });
+      return;
+    }
+
+    checkoutVerificationRef.current = sessionId;
+    const pending = loadPendingCheckout();
+    if (!pending || pending.productId !== astralProduct.id
+        || pending.readingId !== chartFingerprint
+        || pending.offerContext !== ASTRAL_OFFER_CONTEXT) {
+      clearPendingCheckout();
+      setPaymentState("error");
+      setPaymentMessage("Não foi possível vincular este pagamento ao mapa atual.");
+      setStatus("O pagamento não foi vinculado. Nenhum documento foi liberado.");
+      navigate("/mapa-astral", { replace: true });
+      return;
+    }
+
+    setPaymentState("verifying");
+    setPaymentMessage("Confirmando o pagamento…");
+    verifyHostedCheckout(sessionId, pending)
+      .then((result) => {
+        const entitlement = savePaymentEntitlement(result.entitlement);
+        clearPendingCheckout(pending.orderId);
+        setAstralEntitlement(entitlement);
+        setPaymentState("paid");
+        setPaymentMessage("Pagamento confirmado. Documento liberado nesta sessão.");
+        setStatus("Pagamento confirmado. O Documento Astral está sendo preparado.");
+        trackCommercialEvent("astral_document_payment_confirmed", {
+          product_id: pending.productId,
+          reading_id: pending.readingId,
+        });
+        navigate("/mapa-astral", { replace: true });
+      })
+      .catch((checkoutError) => {
+        setPaymentState("error");
+        setPaymentMessage(checkoutErrorMessage(checkoutError?.code));
+        setStatus(checkoutErrorMessage(checkoutError?.code));
+        checkoutVerificationRef.current = "";
+        navigate("/mapa-astral", { replace: true });
+      });
+  }, [astralProduct.id, chartFingerprint, location.search, navigate]);
 
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -160,13 +357,58 @@ export default function AstralMapPage() {
     try {
       const nextChart = calculateNatalChart({ ...form, location: selectedLocation });
       setChart(nextChart);
-      window.localStorage.setItem(ASTRO_STORAGE_KEY, JSON.stringify(nextChart));
-      setStatus("Mapa calculado e guardado somente neste dispositivo.");
+      storeChart(nextChart);
+      setPaymentState("idle");
+      setPaymentMessage("");
+      setStatus("Mapa calculado e guardado temporariamente nesta sessão.");
       window.requestAnimationFrame(() => {
         resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     } catch (chartError) {
       setError(chartError.message);
+    }
+  }
+
+  async function proceedToAstralCheckout() {
+    if (!astralProduct.accessRequired || paymentState === "opening" || paymentState === "verifying") return;
+    if (!chartFingerprint) {
+      setPaymentState("error");
+      setPaymentMessage("Calcule novamente o mapa antes de abrir o pagamento.");
+      return;
+    }
+
+    if (commerceConfig.devUnlocked) {
+      setPaymentState("paid");
+      setPaymentMessage("Modo DEV: acesso liberado sem cobrança.");
+      return;
+    }
+
+    const pending = savePendingCheckout({
+      orderId: createCheckoutOrderId(),
+      productId: astralProduct.id,
+      readingId: chartFingerprint,
+      offerContext: ASTRAL_OFFER_CONTEXT,
+      returnPath: "/mapa-astral",
+    });
+    setPaymentState("opening");
+    setPaymentMessage("Abrindo o pagamento seguro…");
+
+    try {
+      const checkout = await createHostedCheckout(pending);
+      trackCommercialEvent("begin_checkout", {
+        product_id: astralProduct.id,
+        price_label: astralProduct.price,
+        reading_id: chartFingerprint,
+      });
+      window.location.assign(checkout.checkoutUrl);
+    } catch (checkoutError) {
+      clearPendingCheckout(pending.orderId);
+      setPaymentState("error");
+      setPaymentMessage(checkoutErrorMessage(checkoutError?.code));
+      trackCommercialEvent("checkout_unavailable", {
+        product_id: astralProduct.id,
+        reason: checkoutError?.code ?? "unknown",
+      });
     }
   }
 
@@ -188,10 +430,15 @@ export default function AstralMapPage() {
   }
 
   function startAgain() {
+    clearCachedAstro911Document(chart);
+    clearStoredChart();
     setChart(null);
     setForm({ name: "", date: "", time: "", city: "" });
     setSelectedLocation(null);
     setLocations([]);
+    setAstralEntitlement(null);
+    setPaymentState("idle");
+    setPaymentMessage("");
     setError("");
     setStatus("Pronto para um novo mapa.");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -210,8 +457,12 @@ export default function AstralMapPage() {
           <div className="astro-test-access">
             <FileText size={17} />
             <span>
-              <strong>Documento premium em validação.</strong>
-              Acesso aberto e sem cobrança durante esta fase de testes.
+              <strong>{commerceConfig.devUnlocked ? "Modo DEV completo e gratuito." : "Documento premium em validação."}</strong>
+              {commerceConfig.devUnlocked && astro911Config.devMockEnabled
+                ? " Leitura local com o mesmo contrato, sem chamadas pagas."
+                : astralProduct.accessRequired
+                  ? ` O cálculo abre primeiro; o documento completo custa ${astralProduct.price}.`
+                  : " Acesso aberto enquanto o preço próprio do Documento Astral é definido."}
             </span>
           </div>
           <div className="astro-hero-notes">
@@ -243,7 +494,7 @@ export default function AstralMapPage() {
             <div>
               <strong>Privacidade por minimização.</strong>
               <span>
-                O cálculo fica no navegador. Para escrever o documento, o Gemini recebe somente
+                O cálculo fica no navegador. Para escrever o documento, o 911 recebe somente
                 seu primeiro nome e as posições calculadas — nunca data, horário ou cidade.
               </span>
             </div>
@@ -343,7 +594,7 @@ export default function AstralMapPage() {
           </button>
           <p className="astro-form-source astro-field-wide">
             Coordenadas por Open-Meteo · efemérides verificadas em dois motores independentes ·
-            texto conectado pelo Gemini.
+            interpretação conectada pelo 911.
           </p>
         </form>
       </section>
@@ -382,7 +633,16 @@ export default function AstralMapPage() {
             </article>
           </div>
 
-          <Astral911Document chart={chart} onStatus={updateStatus} />
+          {astralAccessGranted ? (
+            <Astral911Document chart={chart} onStatus={updateStatus} />
+          ) : (
+            <AstralDocumentGate
+              product={astralProduct}
+              paymentState={paymentState}
+              paymentMessage={paymentMessage}
+              onCheckout={proceedToAstralCheckout}
+            />
+          )}
 
           <section className="big-three-section" aria-labelledby="big-three-title">
             <div className="astro-section-heading">

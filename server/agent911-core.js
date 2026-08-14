@@ -1,4 +1,5 @@
 import { completePositions, intents, positions } from "../src/data/tarot.js";
+import { buildSpecificLayout, specificReadingsBySlug } from "../src/data/products.js";
 import {
   getAgent911ReadingMode,
   normalizeAgent911ReadingMode,
@@ -9,10 +10,10 @@ import {
   isCanonicalSlug,
 } from "./tarot-canon.js";
 
-export const AGENT911_SCHEMA_VERSION = "2026-08-12.6";
+export const AGENT911_SCHEMA_VERSION = "2026-08-13.1";
 export const AGENT911_MAX_FOLLOW_UPS = 3;
 
-const actionIds = new Set(["opening_summary", "complete_summary", "initial_reading", "follow_up"]);
+const actionIds = new Set(["opening_summary", "specific_summary", "complete_summary", "initial_reading", "follow_up"]);
 const intentIds = new Set(intents.map((intent) => intent.id));
 
 export class Agent911ValidationError extends Error {
@@ -73,8 +74,10 @@ function normalizeHistory(rawHistory) {
     .filter((entry) => entry.content);
 }
 
-function expectedLayout(cardCount) {
-  return cardCount === 7 ? completePositions : positions;
+function expectedLayout(cardCount, spreadId = "") {
+  if (cardCount === 7) return completePositions;
+  if (cardCount === 5) return buildSpecificLayout(specificReadingsBySlug[spreadId]);
+  return positions;
 }
 
 export function validateAgent911Request(body) {
@@ -89,8 +92,8 @@ export function validateAgent911Request(body) {
   const context = body.context;
   const reading = context?.reading;
   const rawCards = reading?.cards;
-  if (!context || !reading || !Array.isArray(rawCards) || ![3, 7].includes(rawCards.length)) {
-    throw new Agent911ValidationError("A leitura precisa conter três ou sete cartas.", "invalid_reading");
+  if (!context || !reading || !Array.isArray(rawCards) || ![3, 5, 7].includes(rawCards.length)) {
+    throw new Agent911ValidationError("A leitura precisa conter três, cinco ou sete cartas.", "invalid_reading");
   }
 
   const slugs = rawCards.map((card) => cleanText(card?.slug, 50, { required: true }));
@@ -98,7 +101,11 @@ export function validateAgent911Request(body) {
     throw new Agent911ValidationError("As cartas precisam ser únicas e pertencer ao baralho oficial.", "invalid_cards");
   }
 
-  const layout = expectedLayout(slugs.length);
+  const spreadId = slugs.length === 5 ? cleanText(reading.spreadId, 40, { required: true }) : "";
+  const layout = expectedLayout(slugs.length, spreadId);
+  if (layout.length !== slugs.length) {
+    throw new Agent911ValidationError("A estrutura da pergunta específica é inválida.", "invalid_positions");
+  }
   rawCards.forEach((card, index) => {
     const receivedPosition = cleanText(card?.position?.id, 40);
     if (receivedPosition && receivedPosition !== layout[index].id) {
@@ -115,6 +122,9 @@ export function validateAgent911Request(body) {
   if (action === "complete_summary" && slugs.length !== 7) {
     throw new Agent911ValidationError("A síntese completa exige sete cartas.", "invalid_summary_layout");
   }
+  if (action === "specific_summary" && slugs.length !== 5) {
+    throw new Agent911ValidationError("A resposta específica exige cinco cartas.", "invalid_summary_layout");
+  }
   const userMessage = cleanText(body.message, 1_200, { required: action === "follow_up" });
   const questionsUsed = Number.isInteger(body.questionsUsed)
     ? Math.min(Math.max(body.questionsUsed, 0), AGENT911_MAX_FOLLOW_UPS)
@@ -124,9 +134,11 @@ export function validateAgent911Request(body) {
     throw new Agent911ValidationError("O ciclo de aprofundamentos desta leitura terminou.", "question_limit");
   }
 
-  const experience = slugs.length === 7 ? "tarot.horseshoe.v1" : "tarot.opening.v1";
+  const experience = slugs.length === 7
+    ? "tarot.horseshoe.v1"
+    : slugs.length === 5 ? "tarot.specific.v1" : "tarot.opening.v1";
   const memoryConsent = body.memoryConsent === true;
-  const canonical = buildCanonicalReading(slugs, intentId, experience);
+  const canonical = buildCanonicalReading(slugs, intentId, experience, layout);
   const question = cleanText(reading.question, 800, { required: true });
 
   return {
@@ -145,6 +157,7 @@ export function validateAgent911Request(body) {
       intentLabel: cleanText(reading.intentLabel, 80) || intent.label,
       question,
       cardSlugs: slugs,
+      spreadId,
       experience,
       canonical,
     },
@@ -237,10 +250,11 @@ AUDITORIA
 
 FORMATO POR TAREFA
 - opening_summary: devolva uma única seção que use as três cartas. O texto da seção deve conter a leitura relacional; a síntese deve responder ao conflito concreto em 80 a 130 palavras. Termine com um gesto curto. Não ofereça perguntas sugeridas.
+- specific_summary: devolva uma única seção que use as cinco cartas e respeite as cinco posições da pergunta específica. Responda ao conflito concreto em 110 a 180 palavras, sem transformar as posições em cinco verbetes. Termine com um gesto observável. Não ofereça perguntas sugeridas.
 - complete_summary: devolva uma única seção que use as sete cartas como narrativa. O texto da seção deve condensar as relações mais importantes; a síntese deve responder ao conflito concreto em 140 a 220 palavras. Não repita sete verbetes e não ofereça perguntas sugeridas.
 - initial_reading: faça a leitura estruturada e devolva três perguntas sugeridas.
 - follow_up: responda somente ao aprofundamento atual, mantendo o contexto, e devolva três possíveis continuidades.
-- Em opening_summary e complete_summary, title, opening, synthesis e groundedAction formam uma única entrega concisa; não anuncie recursos, cadastro, preço ou funcionamento da IA.
+- Em opening_summary, specific_summary e complete_summary, title, opening, synthesis e groundedAction formam uma única entrega concisa; não anuncie recursos, cadastro, preço ou funcionamento da IA.
 `;
 
 const voiceDirections = Object.freeze([
@@ -391,7 +405,9 @@ export function buildAgent911ModelInput(normalized) {
   return JSON.stringify({
     task: normalized.action,
     language: "pt-BR",
-    depth: normalized.reading.cardSlugs.length === 7 ? "deep" : "opening",
+    depth: normalized.reading.cardSlugs.length === 7
+      ? "deep"
+      : normalized.reading.cardSlugs.length === 5 ? "focused" : "opening",
     originalQuestion: normalized.reading.question,
     currentMessage: normalized.message,
     intent: {
@@ -413,7 +429,7 @@ export function buildAgent911ModelInput(normalized) {
       selectedCardNames: cardNames,
       minimumNamedCards: normalized.action === "follow_up"
         ? Math.min(2, cardNames.length)
-        : cardNames.length === 7 ? 5 : 3,
+        : cardNames.length === 7 ? 5 : cardNames.length === 5 ? 4 : 3,
       instruction: "Use os detalhes como parte do raciocínio e conecte as cartas; não copie a pergunta nem liste significados isolados.",
     },
     CANON_911: normalized.reading.canonical,
@@ -421,7 +437,7 @@ export function buildAgent911ModelInput(normalized) {
 }
 
 function isSummaryAction(action) {
-  return action === "opening_summary" || action === "complete_summary";
+  return ["opening_summary", "specific_summary", "complete_summary"].includes(action);
 }
 
 export function createAgent911ResponseSchema(selectedSlugs) {
@@ -884,7 +900,9 @@ export function auditAgent911Response(response, normalized) {
       .filter((cardName) => normalizedResponseText.includes(cardName));
     const requiredCardNames = normalized.action === "follow_up"
       ? Math.min(2, normalized.reading.cardSlugs.length)
-      : normalized.reading.cardSlugs.length === 7 ? 5 : 3;
+      : normalized.reading.cardSlugs.length === 7
+        ? 5
+        : normalized.reading.cardSlugs.length === 5 ? 4 : 3;
     if (citedCardNames.length < requiredCardNames) reasons.push("selected_card_names_missing");
   }
   if (response.responseMode === "reading" && genericOpeningPatterns.some(

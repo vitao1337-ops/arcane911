@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { completePositions, intents, tarotCards } from "../src/data/tarot.js";
 import { salesConfig } from "../src/config/sales.js";
-import { buildCheckoutUrl, isCheckoutConfigured } from "../src/lib/checkout.js";
 import {
   buildCompleteSpreadFromSelections,
   buildCompleteSynthesis,
@@ -171,21 +170,26 @@ test("a leitura completa cobre as sete posições, integração e síntese", () 
   assert.match(text, /Síntese completa/);
 });
 
-test("a tiragem de sete cartas está liberada no fluxo, sem passar pelo checkout", () => {
+test("a tiragem de sete cartas usa checkout em produção e bypass somente no DEV", () => {
   const appPath = fileURLToPath(new URL("../src/App.jsx", import.meta.url));
   const vercelPath = fileURLToPath(new URL("../vercel.json", import.meta.url));
   const app = readFileSync(appPath, "utf8");
   const vercel = JSON.parse(readFileSync(vercelPath, "utf8"));
 
-  assert.match(app, /Tiragem completa liberada/);
+  assert.match(app, /Tiragem completa · acesso premium/);
   assert.match(app, /onClick=\{openCompleteReading\}/);
+  assert.match(app, /if \(salesConfig\.devUnlocked\)/);
+  assert.match(app, /verifyHostedCheckout/);
+  assert.match(app, /completeAccessGranted/);
+  assert.match(app, /openCheckout/);
   assert.match(app, /navigate\("\/tiragem-completa"\)/);
   assert.match(app, /isCompleteRoute \? renderCompleteRoute\(\)/);
   assert.match(app, /saveReadingSession/);
   assert.match(app, /A Ferradura de 7 cartas/);
   assert.match(app, /Segundo baralho/);
   assert.match(app, /completeSelectedCards.length !== 4/);
-  assert.match(app, /renderCompleteSpecificTeasers/);
+  assert.match(app, /renderSpecificQuestionOffer\("complete"\)/);
+  assert.match(app, /renderSpecificQuestionOffer\("standalone"\)/);
   assert.doesNotMatch(app, /buildCompleteSpread[(]/);
   assert.deepEqual(vercel.rewrites, [{ source: "/(.*)", destination: "/index.html" }]);
 });
@@ -202,29 +206,22 @@ test("a plataforma separa landing, tarot, mapa astral e produtos específicos", 
   ["/tiragem-gratis", "/tiragem-completa", "/mapa-astral", "/leituras/"].forEach((path) => {
     assert.match(app, new RegExp(path.replaceAll("/", "\\/")));
   });
-  ["amor", "caminhos", "trabalho", "decisao"].forEach((slug) => {
+  ["amor", "caminhos", "trabalho", "decisao", "interior"].forEach((slug) => {
     assert.match(products, new RegExp(`slug: "${slug}"`));
   });
   assert.match(app, /lazy\(\(\) => import\("\.\/pages\/AstralMapPage"\)\)/);
 });
 
-test("a oferta comercial fica configurável sem acoplar um provedor de pagamento", () => {
-  assert.equal(isCheckoutConfigured(""), false);
-  assert.equal(isCheckoutConfigured("/checkout"), false);
-  assert.equal(isCheckoutConfigured("https://pay.exemplo.com/arcane911"), true);
-  assert.equal(salesConfig.offer.features.length, 4);
+test("a oferta comercial usa o catálogo central e o checkout server-side", () => {
+  const checkoutPath = fileURLToPath(new URL("../server/checkout-core.js", import.meta.url));
+  const checkout = readFileSync(checkoutPath, "utf8");
 
-  const url = new URL(
-    buildCheckoutUrl("https://pay.exemplo.com/arcane911", {
-      product_id: "leitura-profunda",
-      intent: "amor",
-      cards: "o-louco,a-estrela,o-mundo",
-    }),
-  );
-
-  assert.equal(url.searchParams.get("product_id"), "leitura-profunda");
-  assert.equal(url.searchParams.get("intent"), "amor");
-  assert.equal(url.searchParams.get("cards"), "o-louco,a-estrela,o-mundo");
+  assert.equal(salesConfig.offer.features.length, 5);
+  assert.equal(salesConfig.offer.price, "R$ 19,99");
+  assert.match(checkout, /createProductCatalog/u);
+  assert.match(checkout, /STRIPE_SECRET_KEY/u);
+  assert.match(checkout, /unit_amount/u);
+  assert.doesNotMatch(checkout, /raw\.price/u);
 });
 
 test("a landing mantém a composição completa e a centralização óptica das cartas", () => {

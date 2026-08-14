@@ -15,7 +15,16 @@ import {
   saveConsultationState,
   validateConsultationProfile,
 } from "../lib/agent911Session";
-import { trackCommercialEvent } from "../lib/checkout";
+import {
+  checkoutErrorMessage,
+  clearPendingCheckout,
+  consumePaymentEntitlement,
+  createCheckoutOrderId,
+  createHostedCheckout,
+  loadPaymentEntitlements,
+  savePendingCheckout,
+  trackCommercialEvent,
+} from "../lib/checkout";
 
 function resultFromFallback(reading, index, source = "mock") {
   return {
@@ -36,6 +45,7 @@ export default function Agent911Consultation({
   readingMode = "acolhedora",
   createdAt,
   initialResult,
+  parentSessionId = "",
 }) {
   const normalizedReadingMode = normalizeAgent911ReadingMode(readingMode);
   const readingId = `${createdAt ?? "reading"}:complete:${normalizedReadingMode}`;
@@ -51,6 +61,9 @@ export default function Agent911Consultation({
   const [responses, setResponses] = useState(persistedConversation.responses);
   const [history, setHistory] = useState(persistedConversation.history);
   const [connectionError, setConnectionError] = useState("");
+  const [paymentMessage, setPaymentMessage] = useState("");
+  const [paymentState, setPaymentState] = useState("idle");
+  const [activeEntitlement, setActiveEntitlement] = useState(null);
   const [retryDelayMs, setRetryDelayMs] = useState(0);
   const [loading, setLoading] = useState(false);
   const requestInFlight = useRef(false);
@@ -70,14 +83,68 @@ export default function Agent911Consultation({
     return () => globalThis.clearTimeout(timeout);
   }, [retryDelayMs]);
 
-  function openConsultation() {
+  useEffect(() => {
+    const synchronizeCredit = () => {
+      if (agent911Config.offer.devUnlocked) return;
+      const entitlement = loadPaymentEntitlements().find((item) => (
+        item.productId === agent911Config.offer.productId
+        && item.readingId === createdAt
+        && !item.consumedAt
+      ));
+      if (!entitlement) return;
+      setActiveEntitlement(entitlement);
+      setPaymentMessage("Pagamento confirmado. Uma pergunta foi liberada.");
+      setPaymentState("paid");
+      setStage(profile ? "conversation" : "register");
+    };
+    synchronizeCredit();
+    window.addEventListener("arcane911:entitlements-changed", synchronizeCredit);
+    return () => window.removeEventListener("arcane911:entitlements-changed", synchronizeCredit);
+  }, [createdAt, profile]);
+
+  async function openConsultation() {
     trackCommercialEvent("agent911_consultation_opened", {
       intent: intentId,
       reading_id: createdAt,
       returning_profile: Boolean(profile),
       reading_mode: normalizedReadingMode,
     });
-    setStage(profile ? "conversation" : "register");
+    if (agent911Config.offer.devUnlocked) {
+      setPaymentMessage("");
+      setStage(profile ? "conversation" : "register");
+      return;
+    }
+
+    if (activeEntitlement) {
+      setStage(profile ? "conversation" : "register");
+      return;
+    }
+
+    if (paymentState === "opening") return;
+    const pending = savePendingCheckout({
+      orderId: createCheckoutOrderId(),
+      productId: agent911Config.offer.productId,
+      readingId: createdAt,
+      questionNumber: responses.length + 1,
+      parentSessionId,
+      returnPath: "/tiragem-completa",
+    });
+    setPaymentState("opening");
+    setPaymentMessage("Abrindo o pagamento seguro…");
+    try {
+      const checkout = await createHostedCheckout(pending);
+      trackCommercialEvent("begin_checkout", {
+        product_id: agent911Config.offer.productId,
+        price_label: agent911Config.offer.price,
+        reading_id: createdAt,
+        question_number: responses.length + 1,
+      });
+      window.location.assign(checkout.checkoutUrl);
+    } catch (error) {
+      clearPendingCheckout(pending.orderId);
+      setPaymentState("error");
+      setPaymentMessage(checkoutErrorMessage(error?.code));
+    }
   }
 
   function register(event) {
@@ -109,13 +176,20 @@ export default function Agent911Consultation({
     setHistory(nextHistory);
     setConnectionError("");
     saveConsultationState(readingId, { responses: nextResponses, history: nextHistory });
+    if (!agent911Config.offer.devUnlocked && activeEntitlement) {
+      consumePaymentEntitlement(activeEntitlement.sessionId);
+      setActiveEntitlement(null);
+      setPaymentState("idle");
+      setPaymentMessage("Resposta entregue. A próxima pergunta exige um novo pagamento.");
+    }
   }
 
   async function submitQuestion(event) {
     event.preventDefault();
     const currentMessage = message.trim();
     if (!currentMessage || loading || requestInFlight.current || retryDelayMs > 0
-        || questionsRemaining <= 0) return;
+        || questionsRemaining <= 0
+        || (!agent911Config.offer.devUnlocked && !activeEntitlement)) return;
 
     const baseHistory = history.length
       ? history
@@ -205,16 +279,20 @@ export default function Agent911Consultation({
 
         {stage === "offer" ? (
           <>
-            <p>A consulta mantém esta Ferradura aberta e permite três perguntas conectadas à mesma história. O cadastro só é pedido aqui — sua leitura continua livre sem ele.</p>
+            <p>A consulta mantém esta Ferradura aberta. Você pode fazer até três perguntas conectadas à mesma história, adquiridas individualmente por {agent911Config.offer.price} cada.</p>
             <div className="agent911-consultation-benefits">
-              <span><Check size={14} /> 3 perguntas na mesma mesa</span>
+              <span><Check size={14} /> até 3 perguntas · {agent911Config.offer.price} cada</span>
               <span><Check size={14} /> contexto preservado</span>
               <span><Check size={14} /> respostas pessoais e ancoradas</span>
             </div>
-            <button className="button button-primary button-large" type="button" onClick={openConsultation}>
-              Fazer uma consulta com o 911 <ArrowRight size={18} />
+            <button className="button button-primary button-large" type="button" onClick={openConsultation} disabled={paymentState === "opening"}>
+              {agent911Config.offer.devUnlocked
+                ? "Abrir consulta no modo DEV"
+                : paymentState === "opening" ? "Abrindo pagamento…" : `Fazer uma pergunta · ${agent911Config.offer.price}`} <ArrowRight size={18} />
             </button>
-            <small><LockKeyhole size={13} /> Cadastro somente ao iniciar a consulta. Pagamento preparado para a próxima fase.</small>
+            <small><LockKeyhole size={13} /> {agent911Config.offer.devUnlocked
+              ? "DEV liberado: nenhuma cobrança é criada e a resposta usa mock local por padrão."
+              : paymentMessage || "Pagamento único por pergunta. O texto escrito nunca é enviado ao pagamento."}</small>
           </>
         ) : null}
 
@@ -244,15 +322,19 @@ export default function Agent911Consultation({
               {errors.email ? <small role="alert">{errors.email}</small> : null}
             </div>
             <button className="button button-primary" type="submit">Entrar na consulta <ArrowRight size={17} /></button>
-            <p><ShieldCheck size={14} /> Nesta fase beta, seu cadastro fica somente neste dispositivo. A integração de conta e pagamento já tem ponto isolado no código.</p>
+            <p><ShieldCheck size={14} /> {agent911Config.offer.devUnlocked
+              ? "No DEV, o cadastro fica somente neste dispositivo e os créditos de teste ficam liberados."
+              : "Este cadastro fica neste dispositivo e mantém a resposta ligada à Ferradura atual."}</p>
           </form>
         ) : null}
 
         {stage === "conversation" ? (
           <div className="agent911-consultation-room">
             <div className="agent911-consultation-counter">
-              <span>{questionsRemaining} de {agent911Config.offer.questionLimit} perguntas disponíveis</span>
-              <small>As respostas continuam ancoradas nestas sete cartas.</small>
+              <span>{questionsRemaining} de {agent911Config.offer.questionLimit} perguntas ainda possíveis</span>
+              <small>{agent911Config.offer.devUnlocked
+                ? "Créditos DEV liberados · custo zero."
+                : activeEntitlement ? "1 crédito pago disponível agora." : `Cada nova pergunta custa ${agent911Config.offer.price}.`}</small>
             </div>
 
             {responses.length ? (
@@ -281,7 +363,7 @@ export default function Agent911Consultation({
               </div>
             ) : null}
 
-            {questionsRemaining > 0 ? (
+            {questionsRemaining > 0 && (agent911Config.offer.devUnlocked || activeEntitlement) ? (
               <form className="agent911-consultation-composer" onSubmit={submitQuestion}>
                 <label htmlFor="agent911-consultation-question">O que você quer perguntar a partir desta leitura?</label>
                 <textarea
@@ -294,6 +376,14 @@ export default function Agent911Consultation({
                 />
                 <div><small>{message.length}/1200</small><button className="button button-primary" type="submit" disabled={loading || retryDelayMs > 0 || !message.trim()}><Send size={16} /> {loading ? "Lendo a mesa…" : "Perguntar ao 911"}</button></div>
               </form>
+            ) : questionsRemaining > 0 ? (
+              <div className="agent911-question-credit">
+                <div><LockKeyhole size={16} /><span><strong>Próxima pergunta</strong>Um novo crédito libera uma resposta conectada a esta mesma Ferradura.</span></div>
+                <button className="button button-primary" type="button" onClick={openConsultation} disabled={paymentState === "opening"}>
+                  {paymentState === "opening" ? "Abrindo pagamento…" : `Liberar por ${agent911Config.offer.price}`} <ArrowRight size={16} />
+                </button>
+                {paymentMessage ? <small role="status">{paymentMessage}</small> : null}
+              </div>
             ) : (
               <div className="agent911-consultation-complete"><Check size={17} /><p><strong>Consulta concluída.</strong> As três respostas ficaram ligadas à mesma Ferradura.</p></div>
             )}

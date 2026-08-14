@@ -1,4 +1,5 @@
 import { completePositions, positions } from "../data/tarot.js";
+import { buildSpecificLayout, specificReadingsBySlug } from "../data/products.js";
 import { buildRelationshipMap, getCanonicalCard } from "../../server/tarot-canon.js";
 
 const intentLabels = {
@@ -350,13 +351,52 @@ function buildCompleteReading(selected, intentId, profile) {
   };
 }
 
-export function buildAgent911Fallback({ cards, intentId, question, variant = "opening" }) {
+function buildSpecificReading(selected, intentId, profile, spreadId) {
+  const reading = specificReadingsBySlug[spreadId];
+  const layout = buildSpecificLayout(reading);
+  if (!reading || layout.length !== 5) return null;
+
+  const interpreted = canonicalCards(selected, intentId);
+  const slugs = selected.map((card) => card.slug);
+  const relation = relationshipSentence(selected, intentId, [2, 3, 4]);
+  const title = pick(
+    titleBanks[profile.titleKey] ?? titleBanks.path,
+    `${profile.original}:${slugs.join(":")}:${spreadId}:specific`,
+  );
+  const positionStory = interpreted.map(({ card, canon }, index) => (
+    `${card.name}, em ${layout[index].eyebrow.toLocaleLowerCase("pt-BR")}, ${clause(canon?.intentLens ?? card.message)}`
+  ));
+
+  return {
+    responseMode: "reading",
+    title,
+    opening: profile.original ? `Você perguntou: “${profile.original}”` : "Esta foi a pergunta colocada diante da mesa.",
+    sections: [{
+      id: "pergunta-especifica",
+      title: reading.shortTitle,
+      text: `${positionStory.slice(0, 2).join("; ")}. ${relation} ${positionStory.slice(2).join("; ")}.`,
+      cardSlugs: slugs,
+    }],
+    synthesis: `A resposta não está numa carta isolada. ${selected[0].name} abre o tema, ${selected[1].name} traz o que ainda precisa ser reconhecido e ${selected[2].name} localiza o ponto de tensão. A mudança passa por ${selected[3].name}; ${selected[4].name} oferece a direção condicional desta leitura. É ${inSituation(profile.situation)} que esse conjunto precisa ser medido, ${profile.pressure}.`,
+    groundedAction: `${sentence(selected[4].action)} Use esse gesto para testar a resposta no mundo real.`,
+    closingQuestion: layout[4].prompt,
+    suggestedQuestions: [],
+    safetyMessage: "",
+    memoryUpdate: emptyMemoryUpdate(),
+    audit: { usedCardSlugs: slugs, confidence: "grounded", unsupportedCertainty: false },
+  };
+}
+
+export function buildAgent911Fallback({ cards, intentId, question, variant = "opening", spreadId = "" }) {
   const selected = Array.isArray(cards) ? cards.filter(Boolean) : [];
   const personalQuestion = cleanQuestion(question);
   if (needsImmediateSafety(personalQuestion)) return buildSafetyFallback(personalQuestion);
 
   const profile = analyzeQuestion(personalQuestion, intentId);
   if (variant === "complete" && selected.length === 7) return buildCompleteReading(selected, intentId, profile);
+  if (variant === "specific" && selected.length === 5) {
+    return buildSpecificReading(selected, intentId, profile, spreadId);
+  }
   if (selected.length !== 3) return null;
   return buildOpeningReading(selected, intentId, profile);
 }

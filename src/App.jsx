@@ -21,17 +21,25 @@ import {
   X,
 } from "lucide-react";
 import { completePositions, intents, positions, tarotBySlug, tarotCards } from "./data/tarot";
-import { getReadingForIntent, specificReadings } from "./data/products";
+import { getReadingForIntent } from "./data/products";
 import { agent911Config } from "./config/agent911";
 import { getAgent911ReadingMode } from "./config/agent911ReadingModes";
+import { commerceConfig } from "./config/commerce";
 import { salesConfig } from "./config/sales";
 import Agent911Consultation from "./components/Agent911Consultation";
 import Agent911Summary from "./components/Agent911Summary";
 import NatalWheel from "./components/NatalWheel";
 import {
-  buildCheckoutUrl,
-  isCheckoutConfigured,
+  checkoutErrorMessage,
+  clearPendingCheckout,
+  createCheckoutOrderId,
+  createHostedCheckout,
+  findPaymentEntitlement,
+  loadPendingCheckout,
+  savePaymentEntitlement,
+  savePendingCheckout,
   trackCommercialEvent,
+  verifyHostedCheckout,
 } from "./lib/checkout";
 import {
   buildCompleteSpreadFromSelections,
@@ -309,9 +317,14 @@ function App() {
     () => (initialSession?.completeCards ?? []).map((slug) => tarotBySlug[slug]).filter(Boolean),
     [initialSession],
   );
+  const initialCompleteEntitlement = useMemo(() => findPaymentEntitlement({
+    productId: salesConfig.productId,
+    readingId: initialSession?.createdAt,
+  }), [initialSession]);
+  const initialCompleteAccess = salesConfig.devUnlocked || Boolean(initialCompleteEntitlement);
   const [phase, setPhase] = useState(() => {
-    if (route === "/tiragem-completa" && initialComplete.length === 7) return "complete";
-    if (route === "/tiragem-completa" && initialOpening.length === 3) return "complete-deck";
+    if (route === "/tiragem-completa" && initialCompleteAccess && initialComplete.length === 7) return "complete";
+    if (route === "/tiragem-completa" && initialCompleteAccess && initialOpening.length === 3) return "complete-deck";
     if (["/", "/tiragem-gratis"].includes(route) && initialOpening.length === 3) return "reading";
     return "intent";
   });
@@ -334,16 +347,25 @@ function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [activeCard, setActiveCard] = useState(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutState, setCheckoutState] = useState("idle");
+  const [checkoutMessage, setCheckoutMessage] = useState("");
+  const [completeAccessGranted, setCompleteAccessGranted] = useState(initialCompleteAccess);
+  const [completeEntitlement, setCompleteEntitlement] = useState(initialCompleteEntitlement);
   const [agentSummaries, setAgentSummaries] = useState({ opening: null, complete: null });
   const [status, setStatus] = useState("");
   const timerRef = useRef(null);
   const ritualRef = useRef(null);
+  const checkoutVerificationRef = useRef("");
   const isLanding = route === "/";
   const isFreeRoute = route === "/tiragem-gratis";
   const isCompleteRoute = route === "/tiragem-completa";
   const isAstroRoute = route === "/mapa-astral";
   const isSpecificRoute = route.startsWith("/leituras/");
   const featuredSpecificReading = getReadingForIntent(intentId);
+  const specificReadingOrigin = new URLSearchParams(location.search).get("origem");
+  const specificReadingHasCompleteContext = specificReadingOrigin === "tiragem-completa"
+    && completeSpread.length === 7
+    && completeAccessGranted;
 
   const selectedIntent = useMemo(
     () => intents.find((intent) => intent.id === intentId) ?? intents[0],
@@ -372,7 +394,6 @@ function App() {
         && record.cards.every((slug, index) => slug === activeReadingCards[index]?.slug);
     })
     : false;
-  const checkoutConfigured = isCheckoutConfigured(salesConfig.checkoutUrl);
 
   useEffect(() => {
     const queryIntent = new URLSearchParams(location.search).get("intencao");
@@ -395,8 +416,11 @@ function App() {
   }, [location.search]);
 
   useEffect(() => {
-    if (isCompleteRoute && completeSpread.length === 7) setPhase("complete");
-    if (isCompleteRoute && spread.length === 3 && completeSpread.length !== 7) setPhase("complete-deck");
+    if (isCompleteRoute && completeAccessGranted && completeSpread.length === 7) setPhase("complete");
+    if (isCompleteRoute && completeAccessGranted && spread.length === 3 && completeSpread.length !== 7) setPhase("complete-deck");
+    if (isCompleteRoute && !completeAccessGranted && ["complete", "complete-deck"].includes(phase)) {
+      setPhase(spread.length === 3 ? "reading" : "intent");
+    }
     if (!isCompleteRoute && ["complete", "complete-deck"].includes(phase)) {
       setPhase(spread.length === 3 ? "reading" : "intent");
     }
@@ -404,7 +428,72 @@ function App() {
       window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "instant" }));
     });
     return () => window.cancelAnimationFrame(firstFrame);
-  }, [route]);
+  }, [completeAccessGranted, route]);
+
+  useEffect(() => {
+    if (!isCompleteRoute) return;
+    const params = new URLSearchParams(location.search);
+    const paymentReturn = params.get("checkout");
+    if (!paymentReturn) return;
+
+    if (paymentReturn === "cancelled") {
+      clearPendingCheckout();
+      setCheckoutState("idle");
+      setCheckoutMessage("Pagamento cancelado. Suas três cartas continuam guardadas.");
+      setStatus("Pagamento cancelado. Sua leitura gratuita continua aberta.");
+      navigate("/tiragem-completa", { replace: true });
+      return;
+    }
+
+    const sessionId = params.get("session_id") ?? "";
+    if (paymentReturn !== "success" || !sessionId || checkoutVerificationRef.current === sessionId) return;
+    checkoutVerificationRef.current = sessionId;
+    const pending = loadPendingCheckout();
+    const acceptedProducts = new Set([
+      salesConfig.productId,
+      commerceConfig.products.agentQuestion.id,
+    ]);
+    if (!pending || !acceptedProducts.has(pending.productId) || pending.readingId !== createdAt) {
+      setCheckoutState("error");
+      setCheckoutMessage("Não foi possível vincular este pagamento à leitura atual.");
+      setStatus("O pagamento não foi vinculado. Nenhum acesso foi liberado.");
+      navigate("/tiragem-completa", { replace: true });
+      return;
+    }
+
+    setCheckoutState("verifying");
+    setCheckoutMessage("Confirmando o pagamento…");
+    verifyHostedCheckout(sessionId, pending)
+      .then((result) => {
+        const entitlement = savePaymentEntitlement(result.entitlement);
+        clearPendingCheckout(pending.orderId);
+        setCheckoutState("paid");
+        setCheckoutMessage("Pagamento confirmado.");
+
+        if (pending.productId === salesConfig.productId) {
+          setCompleteEntitlement(entitlement);
+          setCompleteAccessGranted(true);
+          setCheckoutOpen(false);
+          startCompleteReading(true);
+          setStatus("Pagamento confirmado. Continue na mesma mesa.");
+        } else {
+          setStatus("Pagamento confirmado. Uma pergunta ao 911 foi liberada nesta Ferradura.");
+        }
+
+        trackCommercialEvent("checkout_payment_confirmed", {
+          product_id: pending.productId,
+          reading_id: pending.readingId,
+        });
+        navigate("/tiragem-completa", { replace: true });
+      })
+      .catch((error) => {
+        setCheckoutState("error");
+        setCheckoutMessage(checkoutErrorMessage(error?.code));
+        setStatus(checkoutErrorMessage(error?.code));
+        checkoutVerificationRef.current = "";
+        navigate("/tiragem-completa", { replace: true });
+      });
+  }, [createdAt, isCompleteRoute, location.search, navigate]);
 
   useEffect(() => {
     const titles = {
@@ -585,8 +674,9 @@ function App() {
     }
   }
 
-  function openCompleteReading() {
+  function startCompleteReading(forceAccess = false) {
     if (!createdAt || spread.length !== 3) return;
+    if (!salesConfig.devUnlocked && !completeAccessGranted && !forceAccess) return;
 
     if (completeSpread.length === 7) {
       setPhase("complete");
@@ -615,6 +705,10 @@ function App() {
       opening_cards: spread.map((card) => card.slug).join(","),
     });
     navigate("/tiragem-completa");
+  }
+
+  function openCompleteReading() {
+    openCheckout();
   }
 
   function shuffleCompleteDeck() {
@@ -685,36 +779,51 @@ function App() {
       intent: intentId,
       reading_id: createdAt,
     });
+    setCheckoutState("idle");
+    setCheckoutMessage("");
     setCheckoutOpen(true);
   }
 
-  function proceedToCheckout() {
-    if (!checkoutConfigured) {
-      trackCommercialEvent("checkout_missing_configuration", {
+  async function proceedToCheckout() {
+    if (checkoutState === "opening" || checkoutState === "verifying") return;
+    if (salesConfig.devUnlocked) {
+      trackCommercialEvent("checkout_dev_bypassed", {
         product_id: salesConfig.productId,
+        intent: intentId,
+        reading_id: createdAt,
       });
-      setStatus("Checkout preparado no código. Conecte VITE_CHECKOUT_URL antes de publicar.");
       setCheckoutOpen(false);
+      startCompleteReading();
       return;
     }
 
-    const checkoutUrl = buildCheckoutUrl(salesConfig.checkoutUrl, {
-      product_id: salesConfig.productId,
-      reading_id: createdAt,
-      intent: intentId,
-      cards: spread.map((card) => card.slug).join(","),
-      utm_source: "arcane911",
-      utm_medium: "free_reading",
-      utm_campaign: "leitura_profunda",
+    const pending = savePendingCheckout({
+      orderId: createCheckoutOrderId(),
+      productId: salesConfig.productId,
+      readingId: createdAt,
+      returnPath: "/tiragem-completa",
     });
+    setCheckoutState("opening");
+    setCheckoutMessage("Abrindo o pagamento seguro…");
 
-    trackCommercialEvent("begin_checkout", {
-      product_id: salesConfig.productId,
-      price_label: salesConfig.offer.price,
-      intent: intentId,
-      reading_id: createdAt,
-    });
-    window.location.assign(checkoutUrl);
+    try {
+      const checkout = await createHostedCheckout(pending);
+      trackCommercialEvent("begin_checkout", {
+        product_id: salesConfig.productId,
+        price_label: salesConfig.offer.price,
+        intent: intentId,
+        reading_id: createdAt,
+      });
+      window.location.assign(checkout.checkoutUrl);
+    } catch (error) {
+      clearPendingCheckout(pending.orderId);
+      setCheckoutState("error");
+      setCheckoutMessage(checkoutErrorMessage(error?.code));
+      trackCommercialEvent("checkout_unavailable", {
+        product_id: salesConfig.productId,
+        reason: error?.code ?? "unknown",
+      });
+    }
   }
 
   function renderIntentPhase() {
@@ -951,7 +1060,7 @@ function App() {
           </div>
 
           <div className="conversion-copy">
-            <span className="section-kicker">Tiragem completa liberada</span>
+            <span className="section-kicker">Tiragem completa · acesso premium</span>
             <h3 id="deep-reading-title">O sinal apareceu.<br />Agora falta entender o movimento inteiro.</h3>
             <p>
               O 911 já encontrou o ponto vivo da sua pergunta. A Ferradura continua exatamente desta mesa: quatro novos Arcanos revelam o padrão oculto, o nó central, o campo ao redor e a direção provável do caminho atual.
@@ -965,22 +1074,24 @@ function App() {
 
             <div className="offer-line">
               <div>
-                <small>experiência liberada</small>
-                <strong>7 cartas</strong>
+                <small>{salesConfig.devUnlocked ? "preço em produção · DEV liberado" : salesConfig.offer.paymentLabel}</small>
+                <strong>{salesConfig.offer.price}</strong>
               </div>
               <button className="button button-primary button-large" type="button" onClick={openCompleteReading}>
-                Abrir tiragem completa
+                {salesConfig.devUnlocked ? "Ver acesso da tiragem completa" : "Liberar tiragem completa"}
                 <ArrowRight size={18} />
               </button>
             </div>
 
             <div className="offer-trust">
-              <span><ShieldCheck size={14} /> Sem cadastro</span>
-              <span><CreditCard size={14} /> Sem cartão</span>
+              <span><ShieldCheck size={14} /> Pagamento único</span>
+              <span><CreditCard size={14} /> Sem recorrência</span>
               <span><Bookmark size={14} /> Mantém suas três cartas</span>
             </div>
           </div>
         </section>
+
+        {renderSpecificQuestionOffer("standalone")}
 
         <div className="reading-actions">
           <button
@@ -1005,38 +1116,66 @@ function App() {
     );
   }
 
-  function renderCompleteSpecificTeasers() {
-    const orderedReadings = [
-      featuredSpecificReading,
-      ...specificReadings.filter((item) => item.slug !== featuredSpecificReading.slug),
-    ];
+  function renderSpecificQuestionOffer(origin = "standalone") {
+    const insideCompleteReading = origin === "complete";
+    const offer = insideCompleteReading
+      ? commerceConfig.products.specificQuestionComplete
+      : commerceConfig.products.specificQuestionStandalone;
+    const sectionId = insideCompleteReading
+      ? "complete-specific-offer-title"
+      : "opening-specific-offer-title";
 
     return (
-      <section className="specific-teasers" aria-labelledby="complete-specific-teasers-title">
-        <div className="specific-teasers-heading">
-          <div>
-            <span className="section-kicker">Depois do panorama, uma pergunta direta</span>
-            <h3 id="complete-specific-teasers-title">Aprofunde o ponto que a Ferradura revelou.</h3>
+      <section
+        className={`specific-question-offer is-${origin}`}
+        aria-labelledby={sectionId}
+        data-specific-question-price={offer.priceCents}
+        data-specific-intent={selectedIntent.id}
+      >
+        <div className="specific-context-copy">
+          <span className="section-kicker">
+            {insideCompleteReading
+              ? `Aprofundamento da Ferradura · ${offer.price}`
+              : `Pergunta específica · ${selectedIntent.label}`}
+          </span>
+          <h3 id={sectionId}>
+            {insideCompleteReading
+              ? `Continue exatamente no tema ${selectedIntent.label.toLocaleLowerCase("pt-BR")}.`
+              : `${selectedIntent.label}: transforme o ponto aberto em uma pergunta direta.`}
+          </h3>
+          <p>
+            {insideCompleteReading
+              ? `A mesa mantém sua Ferradura e abre cinco posições próprias para ${selectedIntent.label.toLocaleLowerCase("pt-BR")}.`
+              : `Você escolheu ${selectedIntent.label}. Por isso, a próxima leitura continua somente nesse assunto, com cinco posições desenhadas para ele.`}
+          </p>
+          <div className="specific-context-origin">
+            <small>Sua pergunta nesta tiragem</small>
+            <q>{resolvedQuestion}</q>
           </div>
-          <p>Se você não precisa da síntese inteira nem de uma consulta, escolha uma lente direta para vínculo, decisão, trabalho ou caminho. Estas leituras ficam como uma alternativa menor.</p>
         </div>
 
-        <div className="specific-teasers-grid">
-          {orderedReadings.map((reading, index) => (
-            <Link
-              className={"specific-teaser-card " + (index === 0 ? "is-featured" : "")}
-              to={"/leituras/" + reading.slug}
-              key={reading.slug}
-            >
-              <span className="specific-teaser-icon">
-                {index === 0 ? <Sparkles size={17} /> : <LockKeyhole size={16} />}
-              </span>
-              <small>{index === 0 ? "Resposta direta" : reading.eyebrow.replace("Leitura específica · ", "")}</small>
-              <strong>{reading.shortTitle}</strong>
-              <p>{reading.promise}</p>
-              <b>Conhecer estrutura <ArrowRight size={15} /></b>
-            </Link>
-          ))}
+        <div className="specific-context-offer">
+          <div className="specific-context-offer-heading">
+            <span><Sparkles size={18} /></span>
+            <div>
+              <small>Leitura contextual · 5 cartas</small>
+              <strong>{featuredSpecificReading.shortTitle}</strong>
+            </div>
+          </div>
+          <div className="specific-context-positions" aria-label="As cinco posições desta pergunta">
+            {featuredSpecificReading.positions.map((position, index) => (
+              <span key={position}><b>{String(index + 1).padStart(2, "0")}</b>{position}</span>
+            ))}
+          </div>
+          <p>{featuredSpecificReading.promise}</p>
+          <Link
+            className="button button-primary"
+            to={`/leituras/${featuredSpecificReading.slug}${insideCompleteReading ? "?origem=tiragem-completa" : ""}`}
+          >
+            Abrir pergunta de {selectedIntent.label} · {offer.price}
+            <ArrowRight size={16} />
+          </Link>
+          <small><LockKeyhole size={13} /> Pagamento único. A pergunta continua privada.</small>
         </div>
       </section>
     );
@@ -1076,6 +1215,7 @@ function App() {
         readingMode={readingMode}
         createdAt={createdAt}
         initialResult={agentSummaries.complete}
+        parentSessionId={completeEntitlement?.sessionId ?? ""}
       />
     );
   }
@@ -1340,7 +1480,7 @@ function App() {
 
         {renderAgent911Consultation()}
 
-        {renderCompleteSpecificTeasers()}
+        {renderSpecificQuestionOffer("complete")}
 
         <div className="reading-actions complete-reading-actions">
           <button
@@ -1447,7 +1587,28 @@ function App() {
               Começar pelas 3 cartas
               <ArrowRight size={18} />
             </Link>
-            <small><ShieldCheck size={15} /> Liberada para testes · sem cadastro e sem cobrança</small>
+            <small><ShieldCheck size={15} /> {salesConfig.offer.price} · pagamento único</small>
+          </section>
+        </main>
+      );
+    }
+
+    if (!completeAccessGranted) {
+      return (
+        <main className="complete-route-main complete-route-empty" id="complete-reading-top">
+          <section>
+            <div className="complete-empty-symbol" aria-hidden="true"><span>✦</span></div>
+            <span className="section-kicker">Ferradura de 7 cartas · premium</span>
+            <h1>Suas três cartas continuam<br /><em>exatamente onde estão.</em></h1>
+            <p>
+              A tiragem completa preserva sua pergunta e acrescenta quatro novas posições,
+              a síntese integrada do 911 e o acesso à consulta conectada à mesma mesa.
+            </p>
+            <button className="button button-primary button-large" type="button" onClick={openCheckout}>
+              Liberar por {salesConfig.offer.price}
+              <ArrowRight size={18} />
+            </button>
+            <small><ShieldCheck size={15} /> Pagamento único · sem recorrência</small>
           </section>
         </main>
       );
@@ -1480,7 +1641,7 @@ function App() {
                 <strong>{readingIsComplete ? "Ferradura completa" : "Segundo baralho"}</strong>
                 <small>{readingIsComplete ? "Sete cartas + síntese integrada" : "3 preservadas + 4 novas escolhas"}</small>
               </div>
-              <b>Liberada</b>
+              <b>{salesConfig.devUnlocked ? "DEV liberado" : completeEntitlement ? "Pagamento confirmado" : "Acesso premium"}</b>
             </div>
             {readingIsComplete ? renderCompleteReadingPhase() : renderCompleteDeckPhase()}
             <p className="live-status" aria-live="polite">{status}</p>
@@ -1644,12 +1805,17 @@ function App() {
             <h2>As cartas capturam o agora.<br /><em>O mapa guarda o instante de chegada.</em></h2>
             <p>
               Descubra Sol, Lua, Ascendente, planetas, casas e aspectos — e receba um documento
-              pessoal escrito pelo Gemini somente depois que o céu real for calculado e auditado.
+              pessoal escrito pelo 911 somente depois que o céu real for calculado e auditado.
             </p>
             <div className="astro-entry-proof">
               <span><Check size={15} /> Cálculo local real</span>
-              <span><ShieldCheck size={15} /> Gemini sem data, hora ou cidade</span>
-              <span><Sparkles size={15} /> Documento premium aberto em teste</span>
+              <span><ShieldCheck size={15} /> IA sem data, hora ou cidade</span>
+              <span>
+                <Sparkles size={15} />
+                {commerceConfig.products.astralDocument.accessRequired
+                  ? `Documento completo · ${commerceConfig.products.astralDocument.price}`
+                  : "Documento premium aberto em teste"}
+              </span>
             </div>
             <Link className="button button-primary button-large" to="/mapa-astral">
               Criar meu mapa astral
@@ -1684,7 +1850,18 @@ function App() {
       ) : null}
       {isSpecificRoute ? (
         <Suspense fallback={<div className="route-loading"><span>✦</span><p>Abrindo a estrutura…</p></div>}>
-          <SpecificReadingPage slug={route.split("/")[2]} />
+          <SpecificReadingPage
+            key={`${route}${location.search}`}
+            slug={route.split("/")[2]}
+            insideCompleteReading={specificReadingHasCompleteContext}
+            parentReadingId={specificReadingHasCompleteContext ? createdAt : ""}
+            sourceQuestion={featuredSpecificReading.slug === route.split("/")[2] && spread.length === 3
+              ? resolvedQuestion
+              : ""}
+            sourceIntentLabel={featuredSpecificReading.slug === route.split("/")[2]
+              ? selectedIntent.label
+              : ""}
+          />
         </Suspense>
       ) : null}
       {!["/", "/tiragem-gratis", "/tiragem-completa", "/mapa-astral"].includes(route) && !isSpecificRoute ? <Navigate to="/" replace /> : null}
@@ -1767,8 +1944,18 @@ function App() {
 
             <div className="checkout-emblem" aria-hidden="true"><Gem size={28} /></div>
             <span className="section-kicker">{salesConfig.offer.name}</span>
-            <h2 id="checkout-title">Continue sem quebrar o fio.</h2>
-            <p>{salesConfig.offer.promise}</p>
+            <h2 id="checkout-title">Sua mesa ainda está aberta.</h2>
+            <p>As três cartas mostraram o sinal. Complete agora o movimento inteiro sem trocar sua pergunta nem suas escolhas.</p>
+
+            <div className="checkout-payment-notice" role="note">
+              <LockKeyhole size={17} />
+              <span>
+                <strong>Pagamento necessário</strong>
+                {salesConfig.devUnlocked
+                  ? " Neste DEV, você percorre a compra inteira sem cobrança."
+                  : " Liberação imediata nesta mesa depois da confirmação."}
+              </span>
+            </div>
 
             {spread.length ? (
               <div className="checkout-reading-context">
@@ -1778,7 +1965,7 @@ function App() {
             ) : null}
 
             <ul>
-              {salesConfig.offer.features.map((feature) => (
+              {salesConfig.offer.features.slice(0, 3).map((feature) => (
                 <li key={feature}><Check size={16} /> {feature}</li>
               ))}
             </ul>
@@ -1788,23 +1975,20 @@ function App() {
               <span>{salesConfig.offer.paymentLabel}<br />sem recorrência</span>
             </div>
 
-            {!checkoutConfigured ? (
-              <div className="checkout-setup-note">
-                <LockKeyhole size={17} />
-                <span><strong>Modo de preparação</strong>Defina <code>VITE_CHECKOUT_URL</code> para ativar o redirecionamento sem alterar o componente.</span>
-              </div>
-            ) : null}
-
             <button
               className="button button-primary button-large checkout-button"
               type="button"
               onClick={proceedToCheckout}
-              disabled={!checkoutConfigured}
+              disabled={checkoutState === "opening" || checkoutState === "verifying"}
+              aria-busy={checkoutState === "opening" || checkoutState === "verifying"}
             >
-              {checkoutConfigured ? "Ir para o pagamento" : "Checkout pronto para conectar"}
+              {salesConfig.devUnlocked
+                ? "Continuar sem cobrança no DEV"
+                : checkoutState === "opening" ? "Abrindo pagamento…" : `Liberar agora · ${salesConfig.offer.price}`}
               <ArrowRight size={18} />
             </button>
-            <small className="checkout-footnote"><ShieldCheck size={14} /> A pergunta não é enviada ao checkout; apenas o identificador da leitura.</small>
+            {checkoutMessage ? <small className="checkout-message" role="status">{checkoutMessage}</small> : null}
+            <small className="checkout-footnote"><ShieldCheck size={14} /> Pagamento único. Sua pergunta não é enviada ao pagamento.</small>
           </article>
         </div>
       ) : null}

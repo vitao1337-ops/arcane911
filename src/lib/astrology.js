@@ -89,9 +89,47 @@ function degreeWithinSign(longitude) {
 }
 
 function formatDegree(value) {
-  const degrees = Math.floor(value);
-  const minutes = Math.round((value - degrees) * 60);
-  return `${degrees}°${String(minutes === 60 ? 0 : minutes).padStart(2, "0")}'`;
+  const totalMinutes = Math.floor(Math.max(0, Number(value) || 0) * 60);
+  const degrees = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${degrees}°${String(minutes).padStart(2, "0")}'`;
+}
+
+function daysInMonth(year, month) {
+  if (month === 2) {
+    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    return leap ? 29 : 28;
+  }
+  return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
+
+function localDateKey(date = new Date()) {
+  return Number(`${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`);
+}
+
+function cleanLocationText(value, maximumLength) {
+  return String(value ?? "").replace(/\s+/gu, " ").trim().slice(0, maximumLength);
+}
+
+function normalizeLocation(location) {
+  const latitude = Number(location?.latitude);
+  const longitude = Number(location?.longitude);
+  const name = cleanLocationText(location?.name, 100);
+  const country = cleanLocationText(location?.country ?? location?.countryCode, 80);
+  if (!name || !country || !Number.isFinite(latitude) || !Number.isFinite(longitude)
+      || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    throw new Error("Escolha uma cidade válida antes de calcular o mapa.");
+  }
+  return {
+    id: cleanLocationText(location?.id, 100) || `${latitude}:${longitude}`,
+    name,
+    admin1: cleanLocationText(location?.admin1, 100),
+    country,
+    countryCode: cleanLocationText(location?.countryCode, 8).toUpperCase(),
+    latitude,
+    longitude,
+    timezone: cleanLocationText(location?.timezone, 100),
+  };
 }
 
 function pointName(key) {
@@ -119,16 +157,27 @@ function astronomyLongitude(body, date) {
 }
 
 export function calculateNatalChart({ name, date, time, location }) {
-  const [year, month, day] = String(date).split("-").map(Number);
-  const [hour, minute] = String(time).split(":").map(Number);
-
-  if (!name?.trim() || !year || !month || !day || !Number.isInteger(hour) || !Number.isInteger(minute)) {
+  const normalizedName = String(name ?? "").replace(/\s+/gu, " ").trim().slice(0, 60);
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(String(date ?? ""));
+  const timeMatch = /^(\d{2}):(\d{2})$/u.exec(String(time ?? ""));
+  if (normalizedName.length < 2 || !dateMatch || !timeMatch) {
     throw new Error("Preencha nome completo, data e horário de nascimento.");
   }
 
-  if (!location || !Number.isFinite(Number(location.latitude)) || !Number.isFinite(Number(location.longitude))) {
-    throw new Error("Escolha uma cidade válida antes de calcular o mapa.");
+  const [, yearText, monthText, dayText] = dateMatch;
+  const [, hourText, minuteText] = timeMatch;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const dateKey = Number(`${yearText}${monthText}${dayText}`);
+  if (year < 1 || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)
+      || hour < 0 || hour > 23 || minute < 0 || minute > 59 || dateKey > localDateKey()) {
+    throw new Error("Informe uma data e um horário de nascimento válidos.");
   }
+
+  const normalizedLocation = normalizeLocation(location);
 
   const origin = new Origin({
     year,
@@ -136,8 +185,8 @@ export function calculateNatalChart({ name, date, time, location }) {
     date: day,
     hour,
     minute,
-    latitude: Number(location.latitude),
-    longitude: Number(location.longitude),
+    latitude: normalizedLocation.latitude,
+    longitude: normalizedLocation.longitude,
   });
 
   const horoscope = new Horoscope({
@@ -180,6 +229,10 @@ export function calculateNatalChart({ name, date, time, location }) {
   const midheavenSign = zodiacByKey[horoscope.Midheaven.Sign.key];
   const sun = planets.find((planet) => planet.key === "sun");
   const moon = planets.find((planet) => planet.key === "moon");
+  if (planets.length !== 10 || !sun || !moon || !ascendantSign || !midheavenSign
+      || planets.some((planet) => !planet.sign || !Number.isFinite(planet.longitude))) {
+    throw new Error("O cálculo do mapa não foi concluído. Confira os dados e tente novamente.");
+  }
 
   const houses = horoscope.Houses.map((house) => {
     const cusp = normalizeDegrees(house.ChartPosition.StartPosition.Ecliptic.DecimalDegrees);
@@ -220,6 +273,10 @@ export function calculateNatalChart({ name, date, time, location }) {
   elementScores[ascendantSign.element] += 2;
   const dominantElement = Object.entries(elementScores).sort(([, first], [, second]) => second - first)[0][0];
   const maximumDelta = Math.max(...planets.map((planet) => planet.precisionDelta));
+  if (houses.length !== 12 || new Set(houses.map((house) => house.number)).size !== 12
+      || aspects.length < 3 || !Number.isFinite(maximumDelta)) {
+    throw new Error("O cálculo do mapa chegou incompleto. Confira os dados e tente novamente.");
+  }
 
   const ascendant = {
     key: "ascendant",
@@ -244,11 +301,11 @@ export function calculateNatalChart({ name, date, time, location }) {
   const chart = {
     id: `astro-${Date.now()}`,
     createdAt: new Date().toISOString(),
-    person: name.trim(),
-    birth: { date, time },
+    person: normalizedName,
+    birth: { date: `${yearText}-${monthText}-${dayText}`, time: `${hourText}:${minuteText}` },
     location: {
-      ...location,
-      timezone: origin.timezone?.name ?? location.timezone,
+      ...normalizedLocation,
+      timezone: origin.timezone?.name ?? normalizedLocation.timezone,
     },
     method: "Zodíaco tropical · Casas Iguais",
     planets,
@@ -301,16 +358,24 @@ export async function searchBirthplaces(query, signal) {
     const response = await fetch(endpoint, { signal });
     if (!response.ok) throw new Error("Falha ao consultar cidades.");
     const payload = await response.json();
-    const remoteMatches = (payload.results ?? []).map((location) => ({
-      id: String(location.id),
-      name: location.name,
-      admin1: location.admin1 ?? "",
-      country: location.country ?? location.country_code,
-      countryCode: location.country_code,
-      latitude: Number(location.latitude),
-      longitude: Number(location.longitude),
-      timezone: location.timezone,
-    }));
+    const remoteMatches = (Array.isArray(payload.results) ? payload.results : [])
+      .map((location) => {
+        try {
+          return normalizeLocation({
+            id: String(location.id ?? ""),
+            name: location.name,
+            admin1: location.admin1 ?? "",
+            country: location.country ?? location.country_code,
+            countryCode: location.country_code,
+            latitude: Number(location.latitude),
+            longitude: Number(location.longitude),
+            timezone: location.timezone,
+          });
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
 
     const seen = new Set();
     return [...remoteMatches, ...localMatches].filter((location) => {

@@ -536,6 +536,27 @@
 .agent911-consultation-complete svg { flex: 0 0 auto; color: #e6c98f; }
 .agent911-consultation-complete p { margin: 0; font-size: 0.62rem; line-height: 1.5; }
 
+.agent911-question-credit {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  border: 1px solid rgba(229, 201, 141, 0.16);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 15px;
+}
+
+.agent911-question-credit > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.agent911-question-credit svg { flex: 0 0 auto; margin-top: 2px; color: #e6c98f; }
+.agent911-question-credit span { color: rgba(255, 250, 242, 0.54); font-size: 0.6rem; line-height: 1.55; }
+.agent911-question-credit strong { display: block; color: rgba(255, 250, 242, 0.82); font-size: 0.63rem; }
+.agent911-question-credit > small { color: rgba(255, 250, 242, 0.42); font-size: 0.52rem; line-height: 1.45; }
+
 @keyframes agent911-breathe {
   0%, 100% { opacity: 0.5; transform: scale(0.9); }
   50% { opacity: 1; transform: scale(1.08); }
@@ -558,6 +579,7 @@
   .agent911-registration .button,
   .agent911-consultation-content > .button,
   .agent911-consultation-composer .button,
+  .agent911-question-credit .button,
   .agent911-reading-retry .button { width: 100%; }
   .agent911-table-verdict { width: 100%; grid-template-columns: 1fr auto; }
 }

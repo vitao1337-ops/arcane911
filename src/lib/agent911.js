@@ -1,6 +1,7 @@
 import { agent911Config } from "../config/agent911.js";
 import { normalizeAgent911ReadingMode } from "../config/agent911ReadingModes.js";
 import { completePositions, positions } from "../data/tarot.js";
+import { buildSpecificLayout, specificReadingsBySlug } from "../data/products.js";
 
 export class Agent911Error extends Error {
   constructor(message, code, cause, retryAfterMs = 0) {
@@ -77,12 +78,19 @@ export function createTarotAgentContext({
   intentLabel,
   question,
   createdAt,
+  spreadId = "",
 }) {
-  if (!Array.isArray(cards) || ![3, 7].includes(cards.length)) {
-    throw new Agent911Error("A leitura precisa conter três ou sete cartas.", "invalid_tarot_context");
+  if (!Array.isArray(cards) || ![3, 5, 7].includes(cards.length)) {
+    throw new Agent911Error("A leitura precisa conter três, cinco ou sete cartas.", "invalid_tarot_context");
   }
 
-  const readingPositions = cards.length === 7 ? completePositions : positions;
+  const specificReading = cards.length === 5 ? specificReadingsBySlug[spreadId] : null;
+  const readingPositions = cards.length === 7
+    ? completePositions
+    : cards.length === 5 ? buildSpecificLayout(specificReading) : positions;
+  if (readingPositions.length !== cards.length) {
+    throw new Agent911Error("A estrutura desta leitura específica é inválida.", "invalid_tarot_context");
+  }
   const uniqueSlugs = new Set(cards.map((card) => card?.slug));
 
   if (uniqueSlugs.size !== cards.length || uniqueSlugs.has(undefined)) {
@@ -91,13 +99,16 @@ export function createTarotAgentContext({
 
   return {
     schemaVersion: agent911Config.contextSchemaVersion,
-    experience: cards.length === 7 ? "tarot.horseshoe.v1" : "tarot.opening.v1",
+    experience: cards.length === 7
+      ? "tarot.horseshoe.v1"
+      : cards.length === 5 ? "tarot.specific.v1" : "tarot.opening.v1",
     reading: {
       id: cleanText(createdAt, 80),
       createdAt: cleanText(createdAt, 80),
       intentId: cleanText(intentId, 40),
       intentLabel: cleanText(intentLabel, 80),
       question: cleanText(question, 800),
+      spreadId: cards.length === 5 ? cleanText(spreadId, 40) : "",
       cards: cards.map((card, index) => ({
         order: index + 1,
         slug: card.slug,

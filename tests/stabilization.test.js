@@ -10,6 +10,8 @@ function source(relativePath) {
 test("DEV não contém target silencioso de produção e exige opt-in de IA real", () => {
   const vite = source("../vite.config.js");
   const config = source("../src/config/agent911.js");
+  const astroConfig = source("../src/config/astro911.js");
+  const astroClient = source("../src/lib/astro911.js");
   const summary = source("../src/components/Agent911Summary.jsx");
   const consultation = source("../src/components/Agent911Consultation.jsx");
 
@@ -18,6 +20,8 @@ test("DEV não contém target silencioso de produção e exige opt-in de IA real
   assert.match(vite, /Sem opt-in não existe proxy/);
   assert.doesNotMatch(vite, /https:\/\/arcane911\.vercel\.app/);
   assert.match(config, /isDevelopment && !devRealAiEnabled \? "mock" : "live"/);
+  assert.match(astroConfig, /isDevelopment && !devRealAiEnabled \? "mock" : "live"/);
+  assert.match(astroClient, /import\("\.\/astro911Fallback"\)/);
   assert.match(summary, /if \(import\.meta\.env\.DEV && agent911Config\.devMockEnabled\)/);
   assert.match(consultation, /if \(import\.meta\.env\.DEV && agent911Config\.devMockEnabled\)/);
 });

@@ -221,9 +221,15 @@ function resolveProviderPlan() {
 
 function outputTokenLimit(normalized) {
   if (normalized.action === "opening_summary") return 4_096;
+  if (normalized.action === "specific_summary") return 4_608;
   if (normalized.action === "complete_summary") return 5_120;
   if (normalized.reading.cardSlugs.length === 7) return 6_144;
   return 4_096;
+}
+
+function spreadLabel(normalized) {
+  const count = normalized.reading.cardSlugs.length;
+  return count === 7 ? "seven_cards" : count === 5 ? "five_cards" : "three_cards";
 }
 
 function repairInstruction(repairReasons) {
@@ -324,7 +330,7 @@ function createMetrics(normalized) {
   const currentRuntimeConfig = runtimeConfig();
   return {
     action: normalized.action,
-    spread: normalized.reading.cardSlugs.length === 7 ? "seven_cards" : "three_cards",
+    spread: spreadLabel(normalized),
     requestId: String(normalized.requestId || `a911-${startedAt}`).replace(/\s+/gu, " ").slice(0, 100),
     startedAt,
     deadlineAt: startedAt + currentRuntimeConfig.totalTimeoutMs,
@@ -400,7 +406,7 @@ async function performProviderRequest(url, options, candidate, metrics, repair) 
 }
 
 async function callOpenAI(normalized, candidate, repairReasons, metrics) {
-  const isSummary = normalized.action === "opening_summary" || normalized.action === "complete_summary";
+  const isSummary = ["opening_summary", "specific_summary", "complete_summary"].includes(normalized.action);
   const payload = await performProviderRequest(
     "https://api.openai.com/v1/responses",
     {
@@ -469,7 +475,7 @@ async function callGemini(normalized, candidate, repairReasons, metrics) {
             includeThoughts: false,
             thinkingLevel: "MINIMAL",
           },
-          temperature: normalized.action === "complete_summary" ? 0.82 : 0.88,
+          temperature: normalized.action === "complete_summary" ? 0.82 : normalized.action === "specific_summary" ? 0.85 : 0.88,
           topP: 0.9,
         },
       }),
@@ -589,7 +595,7 @@ function normalizeProviderReading(providerReading, normalized) {
   );
   if (!reading || typeof reading !== "object" || Array.isArray(reading)) return reading;
 
-  if (["opening_summary", "complete_summary"].includes(normalized.action)) {
+  if (["opening_summary", "specific_summary", "complete_summary"].includes(normalized.action)) {
     reading = { ...reading, suggestedQuestions: [] };
   }
 
@@ -887,7 +893,7 @@ export default async function handler(request, response) {
   if (cached && cached.expiresAt > now) {
     console.info("agent911_request_completed", {
       requestId: normalized.requestId || fingerprint.slice(0, 16),
-      spread: normalized.reading.cardSlugs.length === 7 ? "seven_cards" : "three_cards",
+      spread: spreadLabel(normalized),
       action: normalized.action,
       calls: 0,
       repaired: false,

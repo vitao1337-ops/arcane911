@@ -15,7 +15,7 @@ export function sampleAstroRequest(overrides = {}) {
   return {
     agent: "astro-911",
     requestId: "astro-api-contract-test",
-    schemaVersion: "2026-08-12.1",
+    schemaVersion: "2026-08-13.2",
     context: createAstro911Context(chart),
     ...overrides,
   };
@@ -79,7 +79,7 @@ export function sampleAstroApiPayload() {
     document: sampleAstroDocument(context),
     factLabels: {},
     meta: {
-      schemaVersion: "2026-08-12.1",
+      schemaVersion: "2026-08-13.2",
       grounded: true,
       provider: "gemini",
       model: "gemini-3.5-flash",

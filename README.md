@@ -1,4 +1,4 @@
-# Arcane911 — V14 · estabilização do Agent 911
+# Arcane911 — V20 · Documento Astral e checkout confiável
 
 Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual do Sorriso Marcado e das 22 cartas originais dos Arcanos Maiores.
 
@@ -7,8 +7,8 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - `/`: landing original, com ritual integrado, história e os 22 Arcanos.
 - `/tiragem-gratis`: ritual focado de três cartas.
 - `/tiragem-completa`: segundo ritual e Ferradura de sete cartas em página própria, preservando pergunta e cartas da abertura.
-- `/mapa-astral`: mapa natal completo com cálculo local e Documento Astral Gemini.
-- `/leituras/amor`, `/leituras/caminhos`, `/leituras/trabalho` e `/leituras/decisao`: produtos específicos preparados para a próxima fase, ainda sem cobrança.
+- `/mapa-astral`: mapa natal completo com cálculo local e Documento Astral 911.
+- `/leituras/amor`, `/leituras/caminhos`, `/leituras/trabalho`, `/leituras/decisao` e `/leituras/interior`: leituras completas de cinco cartas com pergunta editável, checkout contextual e síntese 911.
 
 ## O que já funciona
 
@@ -17,7 +17,7 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - Proteção contra mesas consecutivas quase idênticas, sem prender cartas a posições recorrentes.
 - Seleção manual de três cartas, em ordem.
 - Leitura em três posições: A Raiz, O Espelho e O Movimento.
-- Aprofundamento liberado em uma Ferradura clássica de sete cartas.
+- Aprofundamento premium em uma Ferradura clássica de sete cartas por **R$ 19,99**, com acesso integral liberado no DEV.
 - Segundo baralho real: os 19 Arcanos restantes são reorganizados em uma nova mesa e o usuário escolhe manualmente as quatro cartas adicionais.
 - Continuidade real entre as etapas: as três cartas escolhidas ocupam origem, presente e melhor ação; quatro cartas únicas completam influência oculta, nó central, campo externo e direção provável.
 - Mapa visual em Ferradura e leitura organizada em três camadas equilibradas de 2–3–2 cartas.
@@ -33,19 +33,21 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - Painéis noturnos lapidados, com constelações, traços e sigilos em rosé/champagne; somente estrelas pequenas respiram em baixa frequência.
 - Campo místico refeito sem rotação de áreas grandes, blur animado, feixe atravessando o painel ou sombra pulsante.
 - Seções abaixo da dobra usam renderização sob demanda e a entrada da galeria não anima mais o vidro com blur.
-- Transição contextual da abertura de três cartas para a Ferradura completa, liberada nesta versão e sem passagem pelo checkout.
+- Transição contextual da abertura de três cartas para a Ferradura completa, preservando a mesa e encaminhando produção ao Stripe Checkout.
 - Memória de sessão entre as páginas gratuita e completa, sem colocar a pergunta na URL.
 - Página de Mapa Astral com busca de cidade, fuso histórico, Sol, Lua, Ascendente, Meio do Céu, dez planetas, doze casas e aspectos maiores.
 - Cálculo tropical em Casas Iguais com verificação independente das longitudes planetárias pelo Astronomy Engine.
 - Resultado astrológico serializável, compartilhável e guardado somente no navegador.
-- Documento Astral longo e pessoal: essência, afetos, vocação, tensões, integração, cinco práticas e cinco perguntas de reflexão.
-- O Gemini recebe apenas primeiro nome e fatos calculados do mapa; data, horário e cidade não saem do navegador nessa chamada.
-- Structured Output e auditoria recusam posições inventadas, texto raso, âncoras desconhecidas e determinismo.
-- Documento guardado por mapa no aparelho, chamadas simultâneas deduplicadas e botão para imprimir ou salvar como PDF.
-- Produto premium sinalizado como em validação e liberado sem cobrança durante os testes; nenhum preço ou checkout foi ativado.
+- Documento Astral com alvo editorial de aproximadamente 1.800–2.600 palavras: abertura, retrato central, essência, afetos, vocação, tensões, integração, cinco práticas e cinco perguntas de reflexão.
+- O motor interpretativo recebe apenas primeiro nome e fatos calculados do mapa; data, horário e cidade não saem do navegador nessa chamada.
+- Structured Output, normalização local e auditoria recusam posições inventadas e determinismo sem cobrar nova chamada por paráfrase ou ordem diferente dos capítulos.
+- Documento guardado somente na sessão por até 12 horas, chamadas simultâneas deduplicadas no cliente e servidor e botão para imprimir ou salvar como PDF.
+- Gemini permanece principal no Documento Astral; Gemini reserva e OpenAI opcional entram somente em falhas recuperáveis. Há cooldown, `Retry-After`, no máximo um reparo e orçamento global de três chamadas.
+- `astro911_usage` registra tokens, chamadas, fallback, reparo e duração sem registrar dados natais ou conteúdo do documento.
+- O preço próprio do Documento Astral não foi inventado: produto, ID e valor estão no catálogo compartilhado. Um valor positivo ativa automaticamente o bloqueio, o checkout hospedado e a confirmação server-side antes da chamada de IA.
 - Carregamento sob demanda: o motor astral não pesa no JavaScript inicial da landing.
-- Quatro rotas de leituras específicas com estrutura de cinco cartas e produto comercial já modelado, sem ativar preço ou checkout.
-- Os quatro blocos de perguntas específicas também aparecem depois da Ferradura completa.
+- Cinco rotas funcionais de perguntas específicas com embaralhamento, escolha manual, cinco posições, leitura local e síntese 911: R$ 5,00 depois da Tiragem Completa e R$ 10,00 na compra avulsa.
+- Depois da abertura e da Ferradura aparece somente a oferta correspondente à intenção escolhida; Amor não mostra Trabalho, e “Eu por dentro” possui sua própria estrutura.
 - Formulário astral renovado com nome completo e superfícies clicáveis de data e horário.
 - Microtipografia ampliada somente no desktop, preservando fontes, blocos e direção visual.
 - Síntese 911 automática nas leituras de três e sete cartas, pessoal e ancorada na pergunta, sem clique extra nem cadastro.
@@ -63,7 +65,7 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - Uma resposta semanticamente válida e parafraseada não dispara nova geração; somente falha estrutural pode receber um reparo, sem loops.
 - Requisições idênticas são deduplicadas no cliente e no servidor, e a leitura pronta tem cache curto de sessão para evitar cobrança em refresh.
 - Logs de uso registram tokens, chamadas, modelo, fallback, reparo e duração sem registrar pergunta ou conteúdo da leitura.
-- Falha do modo conectado não consome uma das três perguntas da Consulta 911.
+- Falha do modo conectado não consome uma pergunta da Consulta 911. Cada pergunta custa **R$ 5,00**, adquirida individualmente, com até três perguntas ligadas à mesma Ferradura.
 - Uma única síntese por tiragem; o antigo bloco genérico duplicado foi removido.
 - Consulta 911 separada da leitura, com cadastro solicitado somente ao entrar e até três aprofundamentos conectados à Ferradura.
 - Leituras específicas removidas da abertura gratuita e reposicionadas depois da consulta como alternativa direta de menor escopo.
@@ -71,7 +73,9 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - Auditoria automática rejeita cartas inventadas, cartas omitidas, certezas deterministas e afirmações sem sustentação na tiragem.
 - Memória opcional, privada neste dispositivo, com consentimento explícito e exclusão integral em dois passos.
 - Chaves de Gemini ou OpenAI mantidas exclusivamente na função server-side da Vercel; nenhuma credencial é enviada ao navegador.
-- Checkout permanece desacoplado no código para monetização futura, com eventos comerciais prontos para GTM/dataLayer.
+- Catálogo comercial centralizado: Tiragem Completa a **R$ 19,99**, Pergunta ao 911 a **R$ 5,00**, pergunta específica a **R$ 5,00** dentro da Ferradura e **R$ 10,00** fora dela. O servidor cria e valida sessões hospedadas do Stripe sem confiar em preço ou texto vindo do navegador.
+- O CTA da Tiragem Completa sempre abre o modal de acesso, inclusive no DEV; produção exige pagamento confirmado e o DEV apenas oferece um bypass explícito sem cobrança.
+- O modal de compra foi mantido compacto, sem rolagem interna, com adaptação por largura e altura de viewport.
 - Layout responsivo, navegação por teclado e redução de movimento.
 - Zoom de interface bloqueado no mobile, campos com 16 px para evitar aproximação automática no iPhone e regras globais contra quebra de palavras.
 
@@ -91,7 +95,13 @@ ARCANE911_DEV_REAL_AI=true
 ARCANE911_DEV_API_TARGET=https://seu-preview-controlado.vercel.app
 ```
 
-Se o opt-in estiver ativo sem target, o Vite falha de forma explícita. Builds de produção nunca usam o mock.
+O DEV também libera Ferradura, perguntas e qualquer produto pago sem checkout:
+
+```env
+ARCANE911_DEV_UNLOCK_PAID=true
+```
+
+Esse bypass depende simultaneamente de `import.meta.env.DEV`; Preview e produção ignoram a liberação. Se o opt-in de IA real estiver ativo sem target, o Vite falha de forma explícita. Builds de produção nunca usam mock.
 
 Para validar a versão de produção:
 
@@ -106,31 +116,36 @@ npm run preview
 - `src/App.jsx`: navegação, landing, estados do ritual e continuidade entre páginas.
 - `src/styles.css`: direção visual, animações e responsividade.
 - `src/data/tarot.js`: conteúdo dos 22 Arcanos.
-- `src/data/products.js`: estrutura dos produtos específicos futuros.
+- `src/data/products.js`: catálogo editorial e posições das leituras específicas.
 - `src/lib/reading.js`: embaralhamento Fisher–Yates, montagem pelas escolhas manuais, leituras e textos compartilháveis.
 - `src/lib/astrology.js`: cálculo natal, dupla verificação, interpretações e busca de cidades.
 - `src/pages/AstralMapPage.jsx`: formulário, mandala, leitura calculada e entrada do documento.
 - `src/components/Astral911Document.jsx`: estados, capítulos, práticas, cópia e impressão do documento premium.
 - `src/lib/astro911.js`: contexto mínimo, cache, deduplicação e cliente seguro do documento.
+- `src/lib/astro911Fallback.js`: Documento Astral local completo usado somente no DEV gratuito.
 - `src/config/astro911.js`: ativação e endpoint público sem segredo.
-- `src/pages/SpecificReadingPage.jsx`: vitrine das leituras específicas.
+- `src/pages/SpecificReadingPage.jsx`: compra, sorteio manual, revelação e resultado das leituras específicas.
 - `src/components/NatalWheel.jsx`: mandala SVG responsiva.
-- `src/config/sales.js`: produto, preço, benefícios e endereço de checkout.
-- `src/config/agent911.js`: ativação, endpoint e oferta futura oculta do Agente 911.
+- `src/config/productCatalog.js`: IDs e preços confiáveis compartilhados pelo cliente e servidor.
+- `src/config/commerce.js`: apresentação comercial e bypass exclusivo do DEV.
+- `src/config/sales.js`: apresentação comercial da Tiragem Completa.
+- `src/config/agent911.js`: ativação, endpoint e oferta por pergunta do Agente 911.
 - `src/config/agent911ReadingModes.js`: posturas disponíveis, modo padrão e normalização compartilhada entre navegador e servidor.
 - `src/components/Agent911Summary.jsx`: síntese automática, espera ritual, cache conectado e nova tentativa sem texto provisório.
 - `src/components/Agent911Consultation.jsx`: cadastro progressivo e conversa de três perguntas.
 - `src/lib/agent911Fallback.js`: leitura essencial ancorada para indisponibilidade da API.
 - `src/lib/agent911Session.js`: cache curto por leitura/sessão e cadastro beta local.
 - `src/agent911.css`: camada visual isolada do agente, sem alterar o restante do site.
-- `src/lib/checkout.js`: parâmetros de compra e eventos comerciais.
+- `src/lib/checkout.js`: criação, confirmação e autorização comercial de sessão no navegador.
 - `src/lib/agent911.js`: contexto, guardrails e cliente seguro da rota server-side.
 - `src/lib/agent911Memory.js`: módulo de memória consentida preservado para a futura conta server-side; não é acionado na síntese automática.
 - `server/tarot-canon.js`: Bíblia 911 dos 22 Arcanos e relações de pares.
+- `server/checkout-core.js`: catálogo confiável, criação Stripe e verificação server-side da compra.
+- `api/checkout.js` e `api/checkout-session.js`: rotas serverless do pagamento.
 - `server/agent911-core.js`: validação, prompt, Structured Output e auditoria.
 - `api/agent-911.js`: função serverless híbrida que escolhe Gemini ou OpenAI sem expor chaves.
 - `server/astro911-core.js`: validação dos fatos natais, contrato editorial e auditoria do documento.
-- `api/astro-911.js`: função Gemini isolada, com rate limit, fallback de modelo e `store: false`.
+- `api/astro-911.js`: função serverless com Gemini principal, fallback entre modelos/providers, cooldown, dedupe e métricas de uso.
 - `public/cards/`: 22 imagens WebP otimizadas para o site.
 - `tests/`: contratos do baralho, rotas, Ferradura e cálculo astrológico.
 - `vercel.json`: fallback de SPA para abrir todas as rotas diretamente na Vercel.
@@ -139,7 +154,7 @@ npm run preview
 
 O cálculo usa `circular-natal-horoscope-js` para casas, ângulos e aspectos, e confere as longitudes dos dez planetas com `astronomy-engine`. O local é convertido em coordenadas e fuso pela busca do Open-Meteo; se a rede falhar, as principais capitais brasileiras continuam disponíveis localmente.
 
-O texto digitado na busca de cidade é enviado ao serviço de geocodificação. O cálculo e os dados brutos de nascimento ficam no navegador. Para escrever o Documento Astral, `/api/astro-911` envia ao Gemini somente o primeiro nome e um conjunto validado de posições, casas, ângulos, aspectos e equilíbrio elemental — nunca data, horário ou cidade. O resultado fica em cache local por mapa durante 30 dias.
+O texto digitado na busca de cidade é enviado ao serviço de geocodificação. O cálculo e os dados brutos de nascimento ficam no navegador. Para escrever o Documento Astral, `/api/astro-911` envia ao provedor ativo somente o primeiro nome e um conjunto validado de posições, casas, ângulos, aspectos e equilíbrio elemental — nunca data, horário ou cidade. Mapa e documento ficam somente em `sessionStorage`, expiram em até 12 horas e são removidos ao iniciar outro mapa.
 
 A estrutura planeta–signo–casa–aspecto pertence à astrologia horoscópica desenvolvida no mundo helenístico a partir de tradições mesopotâmicas e egípcias anteriores. O Arcane911 separa essa base histórica da interpretação contemporânea e declara que astrologia é uma linguagem simbólica de autoconhecimento, sem validação científica e sem poder de determinar acontecimentos ou substituir orientação profissional.
 
@@ -170,25 +185,30 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.6-terra
 VITE_AGENT911_ENABLED=true
 VITE_ASTRO911_ENABLED=true
+ASTRO911_PROVIDER=gemini
 ```
 
 `GEMINI_API_KEY` é a única variável obrigatória do Gemini. `AGENT911_PROVIDER=gemini` mantém Gemini como cérebro principal; se `OPENAI_API_KEY` também existir, OpenAI fica disponível apenas como paraquedas. `GEMINI_MODEL` e `GEMINI_FALLBACK_MODEL` são opcionais porque os valores acima já são padrão no código.
 
-Nunca use `VITE_GEMINI_API_KEY`: tudo com prefixo `VITE_` entra no JavaScript público. A V14 não registra perguntas nem dados natais nos logs ou analytics e envia somente o contexto necessário. O mock do tarot existe apenas no build de desenvolvimento; produção permanece sempre conectada ou mostra indisponibilidade, sem leitura falsa.
+Nunca use `VITE_GEMINI_API_KEY`: tudo com prefixo `VITE_` entra no JavaScript público. A V20 não registra perguntas nem dados natais nos logs ou analytics e envia somente o contexto necessário. Os mocks do tarot e do Documento Astral existem apenas no build de desenvolvimento; produção permanece conectada ou mostra indisponibilidade, sem leitura falsa.
 
 Para desligar o agente sem remover código, defina `VITE_AGENT911_ENABLED=false` e faça novo deploy. O passo a passo completo está em `AGENTE911-SETUP.md`.
 
-## Preparar a venda futura
+## Cobrança pronta
 
-O CTA da Ferradura está deliberadamente liberado nesta versão. A infraestrutura de checkout foi preservada para a etapa de monetização: copie `.env.example` para `.env.local` e substitua `VITE_CHECKOUT_URL` pelo link HTTPS do produto no provedor escolhido. A integração envia apenas identificadores comerciais — produto, leitura, intenção, cartas e UTMs — sem enviar o texto da pergunta.
+O Stripe Checkout hospedado já está ligado às quatro ofertas com preço aprovado e ao Documento Astral opcional. Para cobrar as ofertas atuais, cadastre a chave secreta na Vercel e faça novo deploy:
 
 ```env
-VITE_CHECKOUT_URL=https://seu-checkout.com/produto/arcane911
-VITE_PRODUCT_ID=arcane911-leitura-profunda
-VITE_OFFER_PRICE=
+STRIPE_SECRET_KEY=sk_live_...
 ```
 
-Preço permanece vazio até decisão comercial explícita.
+Quando decidir o preço do Documento Astral, informe também o valor em centavos. Exemplo meramente técnico — substitua pelo preço comercial aprovado:
+
+```env
+VITE_ASTRO911_PRICE_CENTS=SEU_VALOR_EM_CENTAVOS
+```
+
+O servidor cria a cobrança em BRL usando o catálogo interno e confirma diretamente no Stripe o pagamento, valor, moeda, produto, pedido e leitura antes de liberar acesso. No Documento Astral, nem nome, data, hora, cidade ou conteúdo do mapa entram no pagamento; somente o fingerprint técnico daquela sessão. A pergunta privada e as cartas também nunca são enviadas ao checkout. O fluxo de R$ 5,00 exige uma Tiragem Completa paga da mesma leitura. Configuração e limites estão detalhados em `PAGAMENTOS-SETUP.md`.
 
 Eventos disponíveis em `window.dataLayer` e no evento DOM `arcane911:commercial-event`:
 

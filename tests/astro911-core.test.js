@@ -8,6 +8,8 @@ import {
   normalizeAstro911Document,
   validateAstro911Request,
 } from "../server/astro911-core.js";
+import { buildAstro911MockPayload } from "../src/lib/astro911Fallback.js";
+import { sampleAstroChart } from "./astro911-fixture.js";
 import { sampleAstroDocument, sampleAstroRequest } from "./astro911-fixture.js";
 
 test("o servidor valida dez planetas, doze casas e aspectos sem receber dados brutos de nascimento", () => {
@@ -83,4 +85,16 @@ test("a auditoria impede destino garantido e documento genérico sem fatos sufic
   assert.equal(audit.ok, false);
   assert.ok(audit.reasons.includes("deterministic_claim"));
   assert.ok(audit.reasons.includes("section_anchors_invalid"));
+});
+
+test("o mock DEV é um documento completo, pessoal e válido no mesmo contrato da produção", () => {
+  const normalized = validateAstro911Request(sampleAstroRequest());
+  const payload = buildAstro911MockPayload(sampleAstroChart());
+  const document = normalizeAstro911Document(payload.document);
+
+  assert.equal(payload.meta.provider, "mock");
+  assert.equal(payload.meta.rawBirthDataSent, false);
+  assert.equal(document.sections.length, 5);
+  assert.ok(document.sections.every((section) => section.body.length > 700));
+  assert.deepEqual(auditAstro911Document(document, normalized), { ok: true, reasons: [] });
 });

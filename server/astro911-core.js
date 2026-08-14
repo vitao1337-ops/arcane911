@@ -1,4 +1,4 @@
-export const ASTRO911_SCHEMA_VERSION = "2026-08-12.1";
+export const ASTRO911_SCHEMA_VERSION = "2026-08-13.2";
 
 const planetKeys = Object.freeze([
   "sun",
@@ -410,14 +410,20 @@ LIMITES
 - factualConsistency deve ser true e deterministicClaims deve ser false somente quando isso for verdade.
 
 CONTRATO DO DOCUMENTO
-- opening: 90 a 150 palavras e uma síntese realmente pessoal do mapa inteiro.
-- portrait: três cortes curtos — força central, tensão central e caminho de integração.
-- sections: exatamente cinco, uma para cada id e nesta ordem: essencia, afetos, vocacao, tensoes, integracao. Cada body deve ter 150 a 230 palavras, cruzar fatos e evitar repetição. Cada seção usa de 2 a 4 anchors.
-- practicalDirection: uma aplicação concreta, observável e não prescritiva para a seção.
-- practices: exatamente cinco práticas específicas, realizáveis e diferentes entre si.
+- opening: 140 a 190 palavras e uma síntese realmente pessoal do mapa inteiro. Conecte Sol, Lua, Ascendente, elemento dominante e ao menos um aspecto sem transformar a abertura num inventário.
+- portrait: três cortes substanciais — força central, tensão central e caminho de integração — com 60 a 100 palavras cada.
+- sections: exatamente cinco, uma para cada id e nesta ordem: essencia, afetos, vocacao, tensoes, integracao. Cada body deve ter 230 a 330 palavras, cruzar fatos e evitar repetição. Cada seção usa de 2 a 4 anchors.
+- essencia cruza identidade, necessidades emocionais, modo de presença e elemento dominante.
+- afetos cruza Lua, Vênus, Marte e aspectos relevantes para descrever linguagem afetiva, reciprocidade, desejo, proteção e limites — nunca fidelidade ou intenção de terceiros.
+- vocacao cruza Meio do Céu, Sol, Mercúrio, Júpiter e Saturno quando disponíveis, traduzindo expressão, aprendizado, responsabilidade e ambientes de trabalho.
+- tensoes trabalha principalmente aspectos desafiadores e retrogradações reais, mostrando custo, defesa e recurso possível sem diagnosticar.
+- integracao reúne recursos dos aspectos fluidos, escolhas observáveis e uma maneira concreta de sustentar as contradições do mapa.
+- practicalDirection: 60 a 100 palavras com uma aplicação concreta, observável e não prescritiva para a seção.
+- practices: exatamente cinco práticas específicas e diferentes entre si. Cada action tem 60 a 100 palavras e cada purpose explica por que a prática conversa com este mapa.
 - reflectionQuestions: exatamente cinco perguntas que só façam sentido depois desta leitura.
-- closing: 70 a 110 palavras, sem promessa e sem chamada comercial.
+- closing: 100 a 150 palavras, sem promessa e sem chamada comercial.
 - No conjunto, use pelo menos oito fatos distintos, incluindo cinco planetas e dois aspectos.
+- O documento completo deve ficar aproximadamente entre 1.800 e 2.600 palavras: denso o suficiente para ser premium, mas sem repetir a mesma ideia com palavras diferentes.
 `;
 
 export function buildAstro911ModelInput(normalized, repairReasons = []) {
@@ -438,6 +444,26 @@ export function buildAstro911ModelInput(normalized, repairReasons = []) {
   });
 }
 
+function parseJsonObject(text) {
+  const source = String(text ?? "").trim();
+  if (!source) throw new Error("empty_model_output");
+
+  try {
+    return JSON.parse(source);
+  } catch {
+    const firstBrace = source.indexOf("{");
+    const lastBrace = source.lastIndexOf("}");
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      try {
+        return JSON.parse(source.slice(firstBrace, lastBrace + 1));
+      } catch {
+        // O reparo controlado recebe o erro estrutural abaixo.
+      }
+    }
+    throw new Error("invalid_model_json");
+  }
+}
+
 export function parseGeminiAstroOutput(payload) {
   const candidate = payload?.candidates?.[0];
   const text = candidate?.content?.parts
@@ -446,21 +472,46 @@ export function parseGeminiAstroOutput(payload) {
     .join("")
     .trim();
   if (!text) throw new Error(candidate?.finishReason === "MAX_TOKENS" ? "max_tokens" : "empty_model_output");
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error("invalid_model_json");
+  return parseJsonObject(text);
+}
+
+export function parseOpenAIAstroOutput(payload) {
+  if (payload?.status === "incomplete") {
+    const reason = payload?.incomplete_details?.reason;
+    throw new Error(reason === "max_output_tokens" ? "max_tokens" : "incomplete_model_output");
   }
+
+  const directText = typeof payload?.output_text === "string" ? payload.output_text : "";
+  const outputText = directText || payload?.output
+    ?.flatMap((item) => Array.isArray(item?.content) ? item.content : [])
+    .filter((item) => item?.type === "output_text" && typeof item?.text === "string")
+    .map((item) => item.text)
+    .join("");
+  return parseJsonObject(outputText);
 }
 
 function cleanStringArray(value, maximumItems, maximumLength) {
-  return Array.isArray(value)
-    ? value.map((item) => cleanText(item, maximumLength)).filter(Boolean).slice(0, maximumItems)
-    : [];
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => cleanText(item, maximumLength)).filter(Boolean))]
+    .slice(0, maximumItems);
 }
 
 export function normalizeAstro911Document(rawDocument) {
   const raw = rawDocument && typeof rawDocument === "object" ? rawDocument : {};
+  const normalizedSections = Array.isArray(raw.sections) ? raw.sections.slice(0, 8).map((section) => ({
+    id: cleanText(section?.id, 30),
+    title: cleanText(section?.title, 140),
+    body: cleanText(section?.body, 5_600),
+    anchors: cleanStringArray(section?.anchors, 6, 100),
+    practicalDirection: cleanText(section?.practicalDirection, 1_600),
+  })) : [];
+  const sectionsById = new Map();
+  normalizedSections.forEach((section) => {
+    if (ASTRO911_SECTION_IDS.includes(section.id) && !sectionsById.has(section.id)) {
+      sectionsById.set(section.id, section);
+    }
+  });
+
   return {
     title: cleanText(raw.title, 140),
     subtitle: cleanText(raw.subtitle, 220),
@@ -470,17 +521,13 @@ export function normalizeAstro911Document(rawDocument) {
       centralTension: cleanText(raw.portrait?.centralTension, 700),
       integration: cleanText(raw.portrait?.integration, 700),
     },
-    sections: Array.isArray(raw.sections) ? raw.sections.slice(0, 8).map((section) => ({
-      id: cleanText(section?.id, 30),
-      title: cleanText(section?.title, 140),
-      body: cleanText(section?.body, 3_600),
-      anchors: cleanStringArray(section?.anchors, 6, 100),
-      practicalDirection: cleanText(section?.practicalDirection, 900),
-    })) : [],
+    // A ordem dos capítulos é apresentação, não semântica: normalizamos localmente
+    // para que uma resposta válida em outra ordem nunca custe uma nova chamada.
+    sections: ASTRO911_SECTION_IDS.map((id) => sectionsById.get(id)).filter(Boolean),
     practices: Array.isArray(raw.practices) ? raw.practices.slice(0, 8).map((practice) => ({
       title: cleanText(practice?.title, 120),
-      action: cleanText(practice?.action, 700),
-      purpose: cleanText(practice?.purpose, 500),
+      action: cleanText(practice?.action, 1_600),
+      purpose: cleanText(practice?.purpose, 900),
     })) : [],
     reflectionQuestions: cleanStringArray(raw.reflectionQuestions, 8, 300),
     closing: cleanText(raw.closing, 1_800),

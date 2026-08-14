@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { completePositions, positions, tarotCards } from "../src/data/tarot.js";
+import { buildSpecificLayout, specificReadings } from "../src/data/products.js";
 import { buildAgent911Fallback } from "../src/lib/agent911Fallback.js";
 import { buildCompleteSpreadFromSelections } from "../src/lib/reading.js";
 import {
@@ -16,8 +17,10 @@ const complete = buildCompleteSpreadFromSelections(
   [tarotCards[2], tarotCards[8], tarotCards[16], tarotCards[19]],
 );
 
-function summaryRequest(cards, action) {
-  const layout = cards.length === 7 ? completePositions : positions;
+function summaryRequest(cards, action, spreadId = "") {
+  const layout = cards.length === 7
+    ? completePositions
+    : cards.length === 5 ? buildSpecificLayout(specificReadings[0]) : positions;
   return {
     agent: "agent-911",
     requestId: "summary-test",
@@ -30,6 +33,7 @@ function summaryRequest(cards, action) {
         intentId: "amor",
         intentLabel: "Amor",
         question: "Por que continuo evitando essa conversa?",
+        spreadId,
         cards: cards.map((card, index) => ({
           slug: card.slug,
           position: { id: layout[index].id },
@@ -98,6 +102,27 @@ test("ações compactas exigem o número certo de cartas e passam pela auditoria
   );
 });
 
+test("a leitura específica aceita cinco cartas e usa uma única síntese 911", () => {
+  const specificCards = tarotCards.slice(3, 8);
+  const spread = specificReadings[0];
+  const normalized = validateAgent911Request(summaryRequest(specificCards, "specific_summary", spread.slug));
+  const response = buildAgent911Fallback({
+    cards: specificCards,
+    intentId: spread.intentId,
+    question: normalized.reading.question,
+    variant: "specific",
+    spreadId: spread.slug,
+  });
+
+  assert.equal(normalized.action, "specific_summary");
+  assert.equal(normalized.reading.cardSlugs.length, 5);
+  assert.equal(auditAgent911Response(response, normalized).ok, true);
+  assert.throws(
+    () => validateAgent911Request(summaryRequest(opening, "specific_summary", spread.slug)),
+    /exige cinco cartas/,
+  );
+});
+
 test("o funil entrega uma síntese automática e só pede cadastro na consulta", () => {
   const app = readFileSync(fileURLToPath(new URL("../src/App.jsx", import.meta.url)), "utf8");
   const summary = readFileSync(fileURLToPath(new URL("../src/components/Agent911Summary.jsx", import.meta.url)), "utf8");
@@ -106,7 +131,7 @@ test("o funil entrega uma síntese automática e só pede cadastro na consulta",
   const vite = readFileSync(fileURLToPath(new URL("../vite.config.js", import.meta.url)), "utf8");
 
   const openingStart = app.indexOf("function renderReadingPhase");
-  const openingEnd = app.indexOf("function renderCompleteSpecificTeasers");
+  const openingEnd = app.indexOf("function renderSpecificQuestionOffer");
   const openingFlow = app.slice(openingStart, openingEnd);
   const completeStart = app.indexOf("function renderCompleteReadingPhase");
   const completeEnd = app.indexOf("function renderRitualSection");
@@ -114,17 +139,18 @@ test("o funil entrega uma síntese automática e só pede cadastro na consulta",
 
   assert.ok(openingFlow.indexOf('renderAgent911Summary("opening")') >= 0);
   assert.ok(openingFlow.indexOf('renderAgent911Summary("opening")') < openingFlow.indexOf("conversion-gate"));
-  assert.doesNotMatch(openingFlow, /specific-teasers/);
+  assert.ok(openingFlow.indexOf('renderSpecificQuestionOffer("standalone")') > openingFlow.indexOf("conversion-gate"));
   assert.doesNotMatch(openingFlow, /Ouvir a leitura do 911/);
 
   const fullSummary = completeFlow.indexOf('renderAgent911Summary("complete")');
   const consultationOffer = completeFlow.indexOf("renderAgent911Consultation()");
-  const focusedOffers = completeFlow.indexOf("renderCompleteSpecificTeasers()");
+  const focusedOffers = completeFlow.indexOf('renderSpecificQuestionOffer("complete")');
   assert.ok(fullSummary >= 0 && fullSummary < consultationOffer && consultationOffer < focusedOffers);
 
   assert.match(summary, /useEffect/);
   assert.match(summary, /opening_summary/);
   assert.match(summary, /complete_summary/);
+  assert.match(summary, /specific_summary/);
   assert.match(summary, /catch\(\([^)]*\) =>/);
   assert.match(summary, /Nenhum texto automático foi colocado no lugar/);
   assert.doesNotMatch(summary, /setResult\(fallback\)/);

@@ -31,7 +31,14 @@ export default function Astral911Document({ chart, onStatus }) {
   const [payload, setPayload] = useState(initialCache);
   const [phase, setPhase] = useState(initialCache ? "ready" : "loading");
   const [error, setError] = useState("");
+  const [retryDelayMs, setRetryDelayMs] = useState(0);
   const activeRef = useRef(true);
+
+  useEffect(() => {
+    if (retryDelayMs <= 0) return undefined;
+    const timeout = globalThis.setTimeout(() => setRetryDelayMs(0), retryDelayMs);
+    return () => globalThis.clearTimeout(timeout);
+  }, [retryDelayMs]);
 
   useEffect(() => {
     const cached = readCachedAstro911Document(chart);
@@ -47,19 +54,21 @@ export default function Astral911Document({ chart, onStatus }) {
     setPayload(null);
     setPhase("loading");
     setError("");
-    onStatus?.("O Gemini está cruzando posições, casas e aspectos do mapa…");
+    onStatus?.("O 911 está cruzando posições, casas e aspectos do mapa…");
     requestAstro911Document(chart)
       .then((nextPayload) => {
         if (!active) return;
         setPayload(nextPayload);
         setPhase("ready");
-        onStatus?.("Documento Astral concluído e guardado neste dispositivo.");
+        setRetryDelayMs(0);
+        onStatus?.("Documento Astral concluído e guardado temporariamente nesta sessão.");
       })
       .catch((requestError) => {
         if (!active) return;
         setPhase("error");
         setError(requestError.message);
-        onStatus?.("O mapa calculado continua disponível. O texto do Gemini pode ser tentado novamente.");
+        setRetryDelayMs(requestError?.retryAfterMs ?? 0);
+        onStatus?.("O mapa calculado continua disponível. O documento pode ser tentado novamente.");
       });
 
     return () => {
@@ -69,6 +78,7 @@ export default function Astral911Document({ chart, onStatus }) {
   }, [chart, onStatus]);
 
   function retry() {
+    if (retryDelayMs > 0) return;
     activeRef.current = true;
     setPhase("loading");
     setError("");
@@ -77,12 +87,14 @@ export default function Astral911Document({ chart, onStatus }) {
         if (!activeRef.current) return;
         setPayload(nextPayload);
         setPhase("ready");
-        onStatus?.("Documento Astral concluído e guardado neste dispositivo.");
+        setRetryDelayMs(0);
+        onStatus?.("Documento Astral concluído e guardado temporariamente nesta sessão.");
       })
       .catch((requestError) => {
         if (!activeRef.current) return;
         setPhase("error");
         setError(requestError.message);
+        setRetryDelayMs(requestError?.retryAfterMs ?? 0);
       });
   }
 
@@ -109,7 +121,7 @@ export default function Astral911Document({ chart, onStatus }) {
           <span className="section-kicker">03 · Documento Astral 911</span>
           <h3 id="astro-document-loading-title">O mapa já foi calculado.<br />Agora ele está sendo lido.</h3>
           <p>
-            O Gemini cruza o seu trio central, planetas, casas e aspectos. Nada aparece como
+            O 911 cruza o seu trio central, planetas, casas e aspectos. Nada aparece como
             provisório: a leitura só abre depois de passar pela auditoria das posições reais.
           </p>
           <div className="astro-document-progress" aria-label="Etapas da geração">
@@ -130,8 +142,8 @@ export default function Astral911Document({ chart, onStatus }) {
           <span className="section-kicker">03 · Seu mapa continua seguro</span>
           <h3 id="astro-document-error-title">O texto conectado não abriu.</h3>
           <p>{error}</p>
-          <button className="button button-primary" type="button" onClick={retry}>
-            <RefreshCw size={16} /> Tentar o Gemini novamente
+          <button className="button button-primary" type="button" onClick={retry} disabled={retryDelayMs > 0}>
+            <RefreshCw size={16} /> {retryDelayMs > 0 ? "Aguarde para tentar novamente" : "Tentar leitura novamente"}
           </button>
           <small>O cálculo do mapa não foi perdido e uma tentativa falha não cria documento genérico.</small>
         </div>
@@ -150,14 +162,14 @@ export default function Astral911Document({ chart, onStatus }) {
         <div className="astro-document-cover-copy">
           <div className="astro-document-meta">
             <span>Documento Astral · {name}</span>
-            <span><Check size={14} /> Gemini auditado</span>
+            <span><Check size={14} /> Estrutura auditada</span>
           </div>
           <h3 id="astro-document-title">{document.title}</h3>
           <p className="astro-document-subtitle">{document.subtitle}</p>
           <p className="astro-document-opening">{document.opening}</p>
           <div className="astro-document-badges">
-            <span><FileText size={15} /> Documento premium em validação</span>
-            <span><Sparkles size={15} /> Acesso aberto durante os testes</span>
+            <span><FileText size={15} /> Documento premium completo</span>
+            <span><Sparkles size={15} /> {payload.meta.provider === "mock" ? "Modo DEV local · custo zero" : "Leitura ancorada no seu mapa"}</span>
           </div>
         </div>
       </header>
@@ -231,8 +243,9 @@ export default function Astral911Document({ chart, onStatus }) {
         <div>
           <strong>Como este documento foi feito</strong>
           <p>
-            Zodíaco tropical e Casas Iguais, com posições calculadas no seu aparelho. O Gemini
-            recebeu apenas o primeiro nome e os fatos do mapa — não recebeu data, hora nem cidade.
+            Zodíaco tropical e Casas Iguais, com posições calculadas no seu aparelho. O motor
+            interpretativo recebeu apenas o primeiro nome e os fatos do mapa — não recebeu data,
+            hora nem cidade.
           </p>
           <p className="astro-history-note">
             A estrutura planeta–signo–casa–aspecto segue a astrologia horoscópica desenvolvida no

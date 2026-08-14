@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  cacheAstro911Document,
+  clearCachedAstro911Document,
   createAstro911Context,
+  readCachedAstro911Document,
   requestAstro911Document,
 } from "../src/lib/astro911.js";
 import { sampleAstroApiPayload, sampleAstroChart } from "./astro911-fixture.js";
@@ -25,7 +28,7 @@ test("pedidos simultâneos do mesmo mapa são deduplicados para economizar chama
     calls += 1;
     const body = JSON.parse(options.body);
     assert.equal(body.agent, "astro-911");
-    assert.equal(body.schemaVersion, "2026-08-12.1");
+    assert.equal(body.schemaVersion, "2026-08-13.2");
     await new Promise((resolve) => setTimeout(resolve, 8));
     return { ok: true, status: 200, json: async () => payload };
   };
@@ -37,4 +40,37 @@ test("pedidos simultâneos do mesmo mapa são deduplicados para economizar chama
   assert.equal(calls, 1);
   assert.equal(first.document.title, payload.document.title);
   assert.equal(second.document.title, payload.document.title);
+});
+
+test("Documento Astral fica somente na sessão curta e pode ser limpo ao trocar de mapa", () => {
+  const values = new Map();
+  const sessionStorage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: (key) => values.delete(key),
+  };
+  const localValues = new Map();
+  const localStorage = {
+    getItem: (key) => localValues.get(key) ?? null,
+    setItem: (key, value) => localValues.set(key, String(value)),
+    removeItem: (key) => localValues.delete(key),
+  };
+  const previousWindow = globalThis.window;
+  globalThis.window = { sessionStorage, localStorage, location: { origin: "https://arcane911.test" } };
+
+  try {
+    const chart = sampleAstroChart();
+    const payload = sampleAstroApiPayload();
+    cacheAstro911Document(chart, payload);
+    assert.equal(readCachedAstro911Document(chart)?.document.title, payload.document.title);
+    assert.equal(values.has("arcane911.astral-document.v3"), true);
+    assert.equal(localValues.size, 0);
+
+    clearCachedAstro911Document(chart);
+    assert.equal(readCachedAstro911Document(chart), null);
+    assert.equal(values.size, 0);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
 });
