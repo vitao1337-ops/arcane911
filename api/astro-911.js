@@ -12,6 +12,12 @@ import {
   parseOpenAIAstroOutput,
   validateAstro911Request,
 } from "../server/astro911-core.js";
+import { createProductCatalog } from "../src/config/productCatalog.js";
+import {
+  PaymentLedgerError,
+  claimPaymentEntitlement,
+  settlePaymentEntitlement,
+} from "../server/payment-ledger.js";
 
 export const config = { maxDuration: 60 };
 
@@ -770,8 +776,62 @@ async function executeAstro911(normalized, providerPlan) {
   }
 }
 
-function requestFingerprint(normalized, ip) {
-  return createHash("sha256").update(JSON.stringify({ ip, chart: normalized.chart })).digest("hex");
+function hashString(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function normalizePaidAccess(body) {
+  const catalog = createProductCatalog(process.env);
+  if (catalog.astralDocument.priceCents <= 0) return null;
+  const payment = body?.payment;
+  const sessionId = String(payment?.sessionId ?? "").trim();
+  const productId = String(payment?.productId ?? "").trim();
+  const readingId = String(payment?.readingId ?? "").trim();
+  const expectedReadingId = `astro-v1-${hashString(JSON.stringify(body?.context?.chart ?? {}))}`;
+  if (!/^cs_(?:test_|live_)?[a-zA-Z0-9]{10,220}$/u.test(sessionId)
+      || productId !== catalog.astralDocument.id
+      || readingId !== expectedReadingId) {
+    throw new PaymentLedgerError("payment_required", 402);
+  }
+  return { sessionId, productId, readingId, questionNumber: 0 };
+}
+
+function requestFingerprint(normalized, ip, paidAccess = null) {
+  return createHash("sha256").update(JSON.stringify({
+    ip,
+    paymentSessionId: paidAccess?.sessionId ?? "",
+    chart: normalized.chart,
+  })).digest("hex");
+}
+
+async function executePaidAstro911(normalized, providerPlan, paidAccess, fingerprint) {
+  const claim = {
+    ...paidAccess,
+    claimId: createHash("sha256")
+      .update(`${paidAccess.sessionId}:${fingerprint}`)
+      .digest("hex"),
+  };
+  await claimPaymentEntitlement(claim);
+  try {
+    const payload = await executeAstro911(normalized, providerPlan);
+    await settlePaymentEntitlement(claim, "consumed");
+    return payload;
+  } catch (error) {
+    try {
+      await settlePaymentEntitlement(claim, "released");
+    } catch (releaseError) {
+      console.error("payment_entitlement_release_failed", {
+        document: "natal_complete",
+        type: releaseError?.code ?? "payment_ledger_unavailable",
+      });
+    }
+    throw error;
+  }
 }
 
 function cleanTransientStores(now) {
@@ -788,6 +848,13 @@ function cleanTransientStores(now) {
 }
 
 function publicProviderError(error) {
+  if (error instanceof PaymentLedgerError) {
+    return {
+      status: error.status,
+      code: error.code,
+      retryAfterMs: error.retryAfterMs,
+    };
+  }
   if (error?.kind === "quota") {
     return { status: 503, code: "provider_quota", retryAfterMs: error.retryAfterMs || 0 };
   }
@@ -817,10 +884,17 @@ export default async function handler(request, response) {
   }
   if (!originIsAllowed(request)) return sendJson(response, 403, { error: "origin_not_allowed" });
 
+  let body;
   let normalized;
+  let paidAccess;
   try {
-    normalized = validateAstro911Request(parseBody(request));
-  } catch {
+    body = parseBody(request);
+    normalized = validateAstro911Request(body);
+    paidAccess = normalizePaidAccess(body);
+  } catch (error) {
+    if (error instanceof PaymentLedgerError) {
+      return sendJson(response, error.status, { error: error.code });
+    }
     console.warn("astro911_request_failed", {
       requestId: "invalid",
       type: "invalid_payload",
@@ -831,7 +905,7 @@ export default async function handler(request, response) {
   }
 
   const ip = requestIp(request);
-  const fingerprint = requestFingerprint(normalized, ip);
+  const fingerprint = requestFingerprint(normalized, ip, paidAccess);
   const now = Date.now();
   cleanTransientStores(now);
 
@@ -893,7 +967,9 @@ export default async function handler(request, response) {
     return sendJson(response, 503, { error: "provider_unavailable" }, currentRateHeaders);
   }
 
-  const operation = executeAstro911(normalized, providerPlan);
+  const operation = paidAccess
+    ? executePaidAstro911(normalized, providerPlan, paidAccess, fingerprint)
+    : executeAstro911(normalized, providerPlan);
   inFlightStore.set(fingerprint, operation);
   try {
     const payload = await operation;

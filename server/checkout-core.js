@@ -15,6 +15,16 @@ export class CheckoutError extends Error {
   }
 }
 
+export function checkoutProductNeedsLedger(productIdValue, env = process.env) {
+  const product = findCatalogProduct(createProductCatalog(env), cleanIdentifier(productIdValue, 80));
+  return Boolean(product && Number.isInteger(product.priceCents) && product.priceCents > 0);
+}
+
+export function checkoutProductAllowsConsumedAccess(productIdValue, env = process.env) {
+  const product = findCatalogProduct(createProductCatalog(env), cleanIdentifier(productIdValue, 80));
+  return ["complete_reading", "specific_complete", "specific_standalone"].includes(product?.kind);
+}
+
 function cleanIdentifier(value, maximumLength = 120) {
   const normalized = String(value ?? "").trim().slice(0, maximumLength);
   return /^[a-zA-Z0-9:._-]+$/u.test(normalized) ? normalized : "";
@@ -180,6 +190,9 @@ function assertPaidSession(session, expected) {
   if (expected.questionNumber && Number(session.metadata?.question_number) !== expected.questionNumber) {
     throw new CheckoutError("payment_mismatch", 409);
   }
+  if (expected.parentSessionId && session.metadata?.parent_session_id !== expected.parentSessionId) {
+    throw new CheckoutError("payment_mismatch", 409);
+  }
 }
 
 async function assertCompleteEntitlement(order, options) {
@@ -201,6 +214,7 @@ function addMetadata(form, order) {
     reading_slug: order.readingSlug,
     offer_context: order.offerContext,
     question_number: order.questionNumber || "",
+    parent_session_id: order.parentSessionId || "",
   };
   Object.entries(metadata).forEach(([key, value]) => {
     if (value !== "") form.set(`metadata[${key}]`, String(value));
@@ -231,13 +245,20 @@ export async function createStripeCheckout(raw, {
     "line_items[0][price_data][currency]": "brl",
     "line_items[0][price_data][unit_amount]": String(order.product.priceCents),
     "line_items[0][price_data][product_data][name]": order.product.name,
+    "line_items[0][price_data][product_data][description]": `Código do pedido: ${order.orderId}. Guarde para recuperar o acesso.`,
     "line_items[0][quantity]": "1",
+    "payment_intent_data[description]": `Arcane911 · ${order.orderId}`,
+    "payment_intent_data[metadata][order_id]": order.orderId,
     client_reference_id: order.orderId,
     success_url: successUrl.toString(),
     cancel_url: cancelUrl.toString(),
     locale: "pt-BR",
     submit_type: "pay",
+    "custom_text[submit][message]": `Entrega digital vinculada ao código ${order.orderId}. O conteúdo é simbólico e não substitui orientação profissional.`,
   });
+  if (String(env.STRIPE_REQUIRE_TERMS_ACCEPTANCE ?? "").trim().toLowerCase() === "true") {
+    form.set("consent_collection[terms_of_service]", "required");
+  }
   addMetadata(form, order);
 
   const session = await stripeRequest("/checkout/sessions", {
@@ -273,12 +294,58 @@ export async function verifyStripeCheckout(raw, {
     paid: true,
     entitlement: {
       sessionId,
+      paymentIntentId: cleanIdentifier(session.payment_intent, 240),
       orderId: order.orderId,
       productId: order.product.id,
       readingId: order.readingId,
       readingSlug: order.readingSlug,
       offerContext: order.offerContext,
       questionNumber: order.questionNumber || 0,
+      amountTotal: Number(session.amount_total) || order.product.priceCents,
+      currency: String(session.currency ?? "brl").toLowerCase(),
+      livemode: session.livemode === true,
+      verifiedAt: new Date().toISOString(),
+    },
+  };
+}
+
+export async function fulfillStripeCheckoutSession(sessionIdValue, {
+  env = process.env,
+  fetchImplementation = globalThis.fetch,
+} = {}) {
+  const sessionId = checkoutSessionId(sessionIdValue);
+  if (!sessionId) throw new CheckoutError("invalid_checkout_session", 400);
+
+  const session = await retrieveStripeSession(sessionId, { env, fetchImplementation });
+  const metadata = session?.metadata ?? {};
+  const raw = {
+    sessionId,
+    orderId: session?.client_reference_id ?? metadata.order_id,
+    productId: metadata.product_id,
+    readingId: metadata.reading_id,
+    readingSlug: metadata.reading_slug,
+    offerContext: metadata.offer_context,
+    questionNumber: Number(metadata.question_number) || 0,
+    parentSessionId: metadata.parent_session_id,
+    returnPath: "/tiragem-completa",
+  };
+  const order = normalizeOrder(raw, env);
+  assertPaidSession(session, order);
+
+  return {
+    paid: true,
+    entitlement: {
+      sessionId,
+      paymentIntentId: cleanIdentifier(session.payment_intent, 240),
+      orderId: order.orderId,
+      productId: order.product.id,
+      readingId: order.readingId,
+      readingSlug: order.readingSlug,
+      offerContext: order.offerContext,
+      questionNumber: order.questionNumber || 0,
+      amountTotal: Number(session.amount_total) || order.product.priceCents,
+      currency: String(session.currency ?? "brl").toLowerCase(),
+      livemode: session.livemode === true,
       verifiedAt: new Date().toISOString(),
     },
   };

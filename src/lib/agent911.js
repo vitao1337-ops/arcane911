@@ -24,6 +24,12 @@ const publicErrorMessages = Object.freeze({
   provider_unavailable: "O 911 está temporariamente indisponível. Tente novamente em alguns instantes.",
   rate_limit: "Muitas leituras foram pedidas em sequência. Aguarde um instante e tente novamente.",
   question_limit: "O ciclo de três aprofundamentos desta leitura foi concluído.",
+  payment_required: "Esta pergunta precisa de um crédito pago válido.",
+  payment_credit_unavailable: "Este crédito já foi usado ou não pertence a esta pergunta.",
+  payment_ledger_not_configured: "A liberação segura das perguntas ainda não está configurada.",
+  payment_ledger_not_ready: "A liberação segura está sendo preparada. Tente novamente em instantes.",
+  payment_ledger_unavailable: "Não foi possível validar o crédito agora. Ele não foi consumido; tente novamente.",
+  payment_ledger_conflict: "Não foi possível concluir o consumo deste crédito. Tente novamente.",
   unknown: "O 911 não conseguiu concluir esta leitura agora. Tente novamente.",
 });
 
@@ -162,13 +168,21 @@ export async function requestAgent911(context, options = {}) {
   const requestPayload = {
     agent: agent911Config.id,
     schemaVersion: agent911Config.contextSchemaVersion,
-    action: options.action ?? "initial_reading",
+    action: options.action ?? (context?.reading?.cards?.length === 7
+      ? "complete_summary"
+      : context?.reading?.cards?.length === 5 ? "specific_summary" : "opening_summary"),
     readingMode: normalizeAgent911ReadingMode(options.readingMode),
     message: cleanText(options.message, 1_200),
     history: Array.isArray(options.history) ? options.history.slice(-8) : [],
     memoryConsent: options.memoryConsent === true,
     memory: options.memoryConsent === true ? options.memory ?? {} : {},
     questionsUsed: Number.isInteger(options.questionsUsed) ? options.questionsUsed : 0,
+    payment: options.payment ? {
+      sessionId: cleanText(options.payment.sessionId, 240),
+      productId: cleanText(options.payment.productId, 80),
+      readingId: cleanText(options.payment.readingId, 120),
+      questionNumber: Number(options.payment.questionNumber) || 0,
+    } : null,
     context,
   };
   const basePendingKey = `${endpoint}:${JSON.stringify(requestPayload)}`;

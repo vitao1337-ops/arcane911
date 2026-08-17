@@ -29,7 +29,7 @@ function requestBody(overrides = {}) {
   return {
     agent: "agent-911",
     requestId: "request-test",
-    action: "initial_reading",
+    action: "complete_summary",
     memoryConsent: true,
     memory: { summary: "A pessoa está decidindo um vínculo.", themes: ["limites"] },
     context: {
@@ -38,7 +38,7 @@ function requestBody(overrides = {}) {
         createdAt: "2026-08-11T12:00:00.000Z",
         intentId: "amor",
         intentLabel: "Amor",
-        question: "O que preciso reconhecer nesta relação?",
+        question: "Como separar desejo, medo e fatos nesta relação?",
         cards: selectedCards.map((card, index) => ({
           slug: card.slug,
           name: "NOME ENVIADO PELO CLIENTE NÃO É CONFIÁVEL",

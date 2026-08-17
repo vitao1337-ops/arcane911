@@ -1,17 +1,28 @@
 const PENDING_CHECKOUT_KEY = "arcane911.checkout.pending.v1";
 const ENTITLEMENTS_KEY = "arcane911.checkout.entitlements.v1";
+const PENDING_CHECKOUT_TTL_MS = 24 * 60 * 60 * 1_000;
 
 const checkoutMessages = Object.freeze({
   checkout_not_configured: "O pagamento está temporariamente indisponível. Tente novamente em breve.",
+  webhook_not_configured: "A confirmação automática do pagamento ainda não está configurada. Nenhuma cobrança foi aberta.",
   checkout_provider_error: "O pagamento não pôde ser aberto agora. Tente novamente.",
   checkout_timeout: "O pagamento demorou mais do que o esperado. Tente novamente.",
   checkout_unavailable: "O pagamento está temporariamente indisponível. Tente novamente.",
   checkout_invalid_response: "O pagamento não pôde ser aberto agora. Tente novamente.",
   payment_not_confirmed: "O pagamento ainda não foi confirmado. Aguarde um instante e tente novamente.",
   payment_mismatch: "Não foi possível vincular este pagamento à leitura. O acesso não foi liberado.",
+  payment_ledger_not_configured: "A liberação segura ainda não está configurada. Nenhuma cobrança foi aberta.",
+  payment_ledger_not_ready: "O pagamento foi confirmado, mas a liberação ainda está sendo preparada. Tente confirmar novamente.",
+  payment_ledger_unavailable: "O pagamento foi confirmado, mas a liberação está temporariamente indisponível. Tente novamente.",
+  payment_ledger_conflict: "Este pagamento já está ligado a outra liberação e não foi reutilizado.",
+  payment_credit_unavailable: "Este pagamento já liberou o conteúdo contratado e não criou um novo crédito.",
   complete_entitlement_required: "O valor de R$ 5,00 é exclusivo para esta Tiragem Completa.",
   invalid_checkout_session: "Não foi possível confirmar este pagamento.",
   invalid_payload: "Não foi possível preparar esta compra. Reabra a oferta e tente novamente.",
+  invalid_order: "Confira o código do pedido e tente novamente.",
+  purchase_not_found: "Nenhuma compra confirmada foi encontrada com este código.",
+  purchase_processing: "A compra ainda está sendo processada. Aguarde um instante e tente novamente.",
+  rate_limit: "Muitas tentativas foram feitas em sequência. Aguarde um pouco e tente novamente.",
   unknown: "O pagamento não pôde ser concluído agora. Tente novamente.",
 });
 
@@ -26,6 +37,10 @@ export class CheckoutClientError extends Error {
 
 function safeSession() {
   return typeof window === "object" ? window.sessionStorage : null;
+}
+
+function safeLocal() {
+  return typeof window === "object" ? window.localStorage : null;
 }
 
 function cleanText(value, maximumLength = 120) {
@@ -60,7 +75,7 @@ function normalizedOrder(order) {
 export function savePendingCheckout(order) {
   const normalized = normalizedOrder(order);
   try {
-    safeSession()?.setItem(PENDING_CHECKOUT_KEY, JSON.stringify(normalized));
+    safeLocal()?.setItem(PENDING_CHECKOUT_KEY, JSON.stringify(normalized));
   } catch {
     // A compra ainda pode ser aberta; a volta exibirá uma mensagem segura.
   }
@@ -69,9 +84,15 @@ export function savePendingCheckout(order) {
 
 export function loadPendingCheckout() {
   try {
-    const pending = JSON.parse(safeSession()?.getItem(PENDING_CHECKOUT_KEY) ?? "null");
+    const pending = JSON.parse(safeLocal()?.getItem(PENDING_CHECKOUT_KEY) ?? "null");
     if (!pending?.orderId || !pending?.productId || !pending?.readingId) return null;
-    return normalizedOrder(pending);
+    const normalized = normalizedOrder(pending);
+    const createdAt = Date.parse(normalized.createdAt);
+    if (!Number.isFinite(createdAt) || Date.now() - createdAt > PENDING_CHECKOUT_TTL_MS) {
+      safeLocal()?.removeItem(PENDING_CHECKOUT_KEY);
+      return null;
+    }
+    return normalized;
   } catch {
     return null;
   }
@@ -79,7 +100,7 @@ export function loadPendingCheckout() {
 
 export function clearPendingCheckout(orderId = "") {
   const pending = loadPendingCheckout();
-  if (!orderId || pending?.orderId === orderId) safeSession()?.removeItem(PENDING_CHECKOUT_KEY);
+  if (!orderId || pending?.orderId === orderId) safeLocal()?.removeItem(PENDING_CHECKOUT_KEY);
 }
 
 async function requestJson(url, body, fetchImplementation = globalThis.fetch) {
@@ -117,6 +138,18 @@ export async function verifyHostedCheckout(sessionId, order, options = {}) {
   }, options.fetchImplementation);
 }
 
+export async function recoverHostedOrder(orderId, options = {}) {
+  const normalizedOrderId = cleanText(orderId, 120);
+  if (!/^order-[A-Za-z0-9:._-]{12,114}$/u.test(normalizedOrderId)) {
+    throw new CheckoutClientError("invalid_order", 400);
+  }
+  return requestJson(
+    options.endpoint ?? "/api/order-status",
+    { orderId: normalizedOrderId },
+    options.fetchImplementation,
+  );
+}
+
 export function loadPaymentEntitlements() {
   try {
     const entitlements = JSON.parse(safeSession()?.getItem(ENTITLEMENTS_KEY) ?? "[]");
@@ -137,6 +170,11 @@ export function savePaymentEntitlement(entitlement) {
     readingSlug: cleanText(entitlement?.readingSlug, 40),
     offerContext: cleanText(entitlement?.offerContext, 40),
     questionNumber: Number(entitlement?.questionNumber) || 0,
+    amountTotal: Number(entitlement?.amountTotal) || 0,
+    currency: cleanText(entitlement?.currency, 8).toLowerCase(),
+    livemode: entitlement?.livemode === true,
+    state: cleanText(entitlement?.state, 24) || "active",
+    creditAvailable: entitlement?.creditAvailable !== false,
     verifiedAt: cleanText(entitlement?.verifiedAt, 40) || new Date().toISOString(),
     consumedAt: cleanText(entitlement?.consumedAt, 40),
   };

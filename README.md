@@ -1,4 +1,4 @@
-# Arcane911 — V20 · Documento Astral e checkout confiável
+# Arcane911 — V22 · entrega comercial recuperável
 
 Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual do Sorriso Marcado e das 22 cartas originais dos Arcanos Maiores.
 
@@ -9,6 +9,8 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - `/tiragem-completa`: segundo ritual e Ferradura de sete cartas em página própria, preservando pergunta e cartas da abertura.
 - `/mapa-astral`: mapa natal completo com cálculo local e Documento Astral 911.
 - `/leituras/amor`, `/leituras/caminhos`, `/leituras/trabalho`, `/leituras/decisao` e `/leituras/interior`: leituras completas de cinco cartas com pergunta editável, checkout contextual e síntese 911.
+- `/recuperar-compra`: restaura a autorização pelo código `order-…`, sem conta e sem guardar a pergunta.
+- `/termos`, `/privacidade` e `/reembolsos`: documentos públicos para a operação comercial.
 
 ## O que já funciona
 
@@ -74,6 +76,15 @@ Primeira versão multipágina do Projeto Arcano, criada a partir do DNA visual d
 - Memória opcional, privada neste dispositivo, com consentimento explícito e exclusão integral em dois passos.
 - Chaves de Gemini ou OpenAI mantidas exclusivamente na função server-side da Vercel; nenhuma credencial é enviada ao navegador.
 - Catálogo comercial centralizado: Tiragem Completa a **R$ 19,99**, Pergunta ao 911 a **R$ 5,00**, pergunta específica a **R$ 5,00** dentro da Ferradura e **R$ 10,00** fora dela. O servidor cria e valida sessões hospedadas do Stripe sem confiar em preço ou texto vindo do navegador.
+- Livro-caixa privado no Supabase; nos produtos com IA, o crédito é reivindicado atomicamente, consumido após sucesso e liberado novamente quando o provider falha.
+- Livro-caixa V22 para **todos** os produtos pagos, com valor, moeda, modo teste/real e Payment Intent conferidos.
+- Webhook Stripe assinado com corpo bruto e tolerância contra replay; a entrega não depende de o cliente voltar à página de sucesso.
+- Recuperação por código de pedido e armazenamento técnico do pedido pendente por até 24 horas.
+- Sínteses de sete e cinco cartas agora também exigem crédito server-side; a antiga ação técnica de sete cartas não abre bypass gratuito.
+- Teto conservador configurável de **R$ 1,00 por consulta do Agent 911**, com custo estimado por chamada nos logs.
+- Contraste corrigido no bloco claro da resposta específica, sem redesign e sem `!important`.
+- Chamadas diretas a aprofundamentos pagos são recusadas sem crédito; reapresentar uma sessão Stripe consumida não recria autorização.
+- Pré-voo do banco antes do Stripe: pergunta 911 e Documento Astral pago não abrem cobrança se as funções do ledger não estiverem instaladas.
 - O CTA da Tiragem Completa sempre abre o modal de acesso, inclusive no DEV; produção exige pagamento confirmado e o DEV apenas oferece um bypass explícito sem cobrança.
 - O modal de compra foi mantido compacto, sem rolagem interna, com adaptação por largura e altura de viewport.
 - Layout responsivo, navegação por teclado e redução de movimento.
@@ -125,6 +136,8 @@ npm run preview
 - `src/lib/astro911Fallback.js`: Documento Astral local completo usado somente no DEV gratuito.
 - `src/config/astro911.js`: ativação e endpoint público sem segredo.
 - `src/pages/SpecificReadingPage.jsx`: compra, sorteio manual, revelação e resultado das leituras específicas.
+- `src/pages/PurchaseRecoveryPage.jsx`: recuperação de compra por código técnico.
+- `src/pages/LegalPage.jsx`: Termos, Privacidade e Reembolsos.
 - `src/components/NatalWheel.jsx`: mandala SVG responsiva.
 - `src/config/productCatalog.js`: IDs e preços confiáveis compartilhados pelo cliente e servidor.
 - `src/config/commerce.js`: apresentação comercial e bypass exclusivo do DEV.
@@ -141,7 +154,10 @@ npm run preview
 - `src/lib/agent911Memory.js`: módulo de memória consentida preservado para a futura conta server-side; não é acionado na síntese automática.
 - `server/tarot-canon.js`: Bíblia 911 dos 22 Arcanos e relações de pares.
 - `server/checkout-core.js`: catálogo confiável, criação Stripe e verificação server-side da compra.
-- `api/checkout.js` e `api/checkout-session.js`: rotas serverless do pagamento.
+- `server/payment-ledger.js`: registro, reivindicação e consumo atômico de créditos pagos pelo backend.
+- `server/stripe-webhook.js`: verificação criptográfica do webhook Stripe.
+- `database/arcane911-payment-ledger.sql`: schema privado, RLS, privilégios mínimos e RPCs do livro-caixa.
+- `api/checkout.js`, `api/checkout-session.js`, `api/stripe-webhook.js` e `api/order-status.js`: criação, confirmação, entrega assíncrona e recuperação da compra.
 - `server/agent911-core.js`: validação, prompt, Structured Output e auditoria.
 - `api/agent-911.js`: função serverless híbrida que escolhe Gemini ou OpenAI sem expor chaves.
 - `server/astro911-core.js`: validação dos fatos natais, contrato editorial e auditoria do documento.
@@ -190,16 +206,19 @@ ASTRO911_PROVIDER=gemini
 
 `GEMINI_API_KEY` é a única variável obrigatória do Gemini. `AGENT911_PROVIDER=gemini` mantém Gemini como cérebro principal; se `OPENAI_API_KEY` também existir, OpenAI fica disponível apenas como paraquedas. `GEMINI_MODEL` e `GEMINI_FALLBACK_MODEL` são opcionais porque os valores acima já são padrão no código.
 
-Nunca use `VITE_GEMINI_API_KEY`: tudo com prefixo `VITE_` entra no JavaScript público. A V20 não registra perguntas nem dados natais nos logs ou analytics e envia somente o contexto necessário. Os mocks do tarot e do Documento Astral existem apenas no build de desenvolvimento; produção permanece conectada ou mostra indisponibilidade, sem leitura falsa.
+Nunca use `VITE_GEMINI_API_KEY`: tudo com prefixo `VITE_` entra no JavaScript público. A V22 não registra perguntas nem dados natais nos logs ou analytics e envia somente o contexto necessário. Os mocks do tarot e do Documento Astral existem apenas no build de desenvolvimento; produção permanece conectada ou mostra indisponibilidade, sem leitura falsa.
 
 Para desligar o agente sem remover código, defina `VITE_AGENT911_ENABLED=false` e faça novo deploy. O passo a passo completo está em `AGENTE911-SETUP.md`.
 
 ## Cobrança pronta
 
-O Stripe Checkout hospedado já está ligado às quatro ofertas com preço aprovado e ao Documento Astral opcional. Para cobrar as ofertas atuais, cadastre a chave secreta na Vercel e faça novo deploy:
+O Stripe Checkout hospedado já está ligado às quatro ofertas com preço aprovado e ao Documento Astral opcional. Antes de cobrar qualquer produto, execute `database/arcane911-payment-ledger.sql` em um Supabase exclusivo do Arcane911 e cadastre as quatro variáveis server-side na Vercel:
 
 ```env
 STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+SUPABASE_URL=https://SEU-PROJETO.supabase.co
+SUPABASE_SECRET_KEY=sb_secret_...
 ```
 
 Quando decidir o preço do Documento Astral, informe também o valor em centavos. Exemplo meramente técnico — substitua pelo preço comercial aprovado:
@@ -208,7 +227,7 @@ Quando decidir o preço do Documento Astral, informe também o valor em centavos
 VITE_ASTRO911_PRICE_CENTS=SEU_VALOR_EM_CENTAVOS
 ```
 
-O servidor cria a cobrança em BRL usando o catálogo interno e confirma diretamente no Stripe o pagamento, valor, moeda, produto, pedido e leitura antes de liberar acesso. No Documento Astral, nem nome, data, hora, cidade ou conteúdo do mapa entram no pagamento; somente o fingerprint técnico daquela sessão. A pergunta privada e as cartas também nunca são enviadas ao checkout. O fluxo de R$ 5,00 exige uma Tiragem Completa paga da mesma leitura. Configuração e limites estão detalhados em `PAGAMENTOS-SETUP.md`.
+O servidor só abre produtos pagos depois que ledger e webhook respondem prontos. Em seguida cria a cobrança em BRL, confirma diretamente no Stripe pagamento, valor, moeda, produto, pedido e leitura, registra a autorização e controla créditos de IA no servidor. No Documento Astral, nome, data, hora, cidade e conteúdo do mapa não entram no pagamento nem no ledger; somente o fingerprint técnico. A pergunta privada e as cartas também nunca são enviadas ao checkout. O fluxo de R$ 5,00 exige uma Tiragem Completa paga da mesma leitura. A ordem exata está em `PAGAMENTOS-SETUP.md`.
 
 Eventos disponíveis em `window.dataLayer` e no evento DOM `arcane911:commercial-event`:
 

@@ -67,3 +67,18 @@ test("a limpeza preserva infraestrutura futura e remove somente candidatos sem u
   assert.match(app, /deck-order/);
   assert.match(styles, /\.deck-order strong/);
 });
+
+test("a resposta específica usa contraste escuro na página clara e as rotas de confiança existem", () => {
+  const agentStyles = source("../src/agent911.css");
+  const app = source("../src/App.jsx");
+  const checkout = source("../src/lib/checkout.js");
+
+  assert.match(agentStyles, /agent911-summary\.is-specific \.agent911-summary-copy > p[\s\S]*color: #44384a/);
+  assert.match(agentStyles, /agent911-summary\.is-specific h3 \{ color: #261f2a; \}/);
+  assert.doesNotMatch(agentStyles, /!important/);
+  ["/recuperar-compra", "/termos", "/privacidade", "/reembolsos"].forEach((route) => {
+    assert.match(app, new RegExp(route.replace("/", "\\/")));
+  });
+  assert.match(checkout, /PENDING_CHECKOUT_TTL_MS = 24 \* 60 \* 60 \* 1_000/);
+  assert.match(checkout, /recoverHostedOrder/);
+});

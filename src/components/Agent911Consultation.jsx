@@ -93,7 +93,7 @@ export default function Agent911Consultation({
       ));
       if (!entitlement) return;
       setActiveEntitlement(entitlement);
-      setPaymentMessage("Pagamento confirmado. Uma pergunta foi liberada.");
+      setPaymentMessage(`Pagamento confirmado. Uma pergunta foi liberada. Código: ${entitlement.orderId}.`);
       setPaymentState("paid");
       setStage(profile ? "conversation" : "register");
     };
@@ -236,6 +236,12 @@ export default function Agent911Consultation({
         questionsUsed: responses.length,
         readingMode: normalizedReadingMode,
         memoryConsent: false,
+        payment: activeEntitlement ? {
+          sessionId: activeEntitlement.sessionId,
+          productId: activeEntitlement.productId,
+          readingId: activeEntitlement.readingId,
+          questionNumber: activeEntitlement.questionNumber,
+        } : null,
       });
       commitResponse({ ...result, source: "live" }, baseHistory, currentMessage);
       answerWasCommitted = true;
@@ -248,6 +254,12 @@ export default function Agent911Consultation({
         reading_mode: normalizedReadingMode,
       });
     } catch (requestError) {
+      if (requestError?.code === "payment_credit_unavailable" && activeEntitlement) {
+        consumePaymentEntitlement(activeEntitlement.sessionId);
+        setActiveEntitlement(null);
+        setPaymentState("idle");
+        setPaymentMessage("Este crédito já foi usado. Uma nova pergunta exige outro pagamento.");
+      }
       setConnectionError(requestError?.code ?? "unknown");
       setRetryDelayMs(requestError?.retryAfterMs ?? 0);
       trackCommercialEvent("agent911_consultation_question_unavailable", {

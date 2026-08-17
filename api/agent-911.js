@@ -14,6 +14,12 @@ import {
   parseOpenAIOutput,
   validateAgent911Request,
 } from "../server/agent911-core.js";
+import { createProductCatalog } from "../src/config/productCatalog.js";
+import {
+  PaymentLedgerError,
+  claimPaymentEntitlement,
+  settlePaymentEntitlement,
+} from "../server/payment-ledger.js";
 
 export const config = { maxDuration: 60 };
 
@@ -24,6 +30,9 @@ const DEFAULT_TOTAL_TIMEOUT_MS = 50_000;
 const DEFAULT_QUOTA_COOLDOWN_MS = 60_000;
 const DEFAULT_PROVIDER_COOLDOWN_MS = 12_000;
 const DEFAULT_DEDUPE_TTL_MS = 2 * 60 * 1_000;
+const DEFAULT_MAX_COST_BRL = 1;
+const DEFAULT_USD_BRL_BUDGET_RATE = 6;
+const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
 const MAX_PROVIDER_CALLS = 3;
 const GEMINI_DEFAULT_MODEL = "gemini-3.5-flash";
 const GEMINI_DEFAULT_FALLBACK_MODEL = "gemini-3.5-flash-lite";
@@ -73,6 +82,11 @@ function integerEnv(name, fallback, minimum, maximum) {
   return Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
 }
 
+function decimalEnv(name, fallback, minimum, maximum) {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
+}
+
 function rateLimitConfig() {
   return {
     limit: integerEnv("ARCANE911_RATE_LIMIT", DEFAULT_RATE_LIMIT, 1, 1_000),
@@ -87,6 +101,8 @@ function runtimeConfig() {
     quotaCooldownMs: integerEnv("AGENT911_QUOTA_COOLDOWN_MS", DEFAULT_QUOTA_COOLDOWN_MS, 1_000, 60 * 60 * 1_000),
     providerCooldownMs: integerEnv("AGENT911_PROVIDER_COOLDOWN_MS", DEFAULT_PROVIDER_COOLDOWN_MS, 1_000, 10 * 60 * 1_000),
     dedupeTtlMs: integerEnv("AGENT911_DEDUPE_TTL_MS", DEFAULT_DEDUPE_TTL_MS, 1_000, 10 * 60 * 1_000),
+    maxCostBrl: decimalEnv("AGENT911_MAX_COST_BRL", DEFAULT_MAX_COST_BRL, 0.1, 10),
+    usdBrlBudgetRate: decimalEnv("AGENT911_USD_BRL_BUDGET_RATE", DEFAULT_USD_BRL_BUDGET_RATE, 1, 20),
   };
 }
 
@@ -220,11 +236,55 @@ function resolveProviderPlan() {
 }
 
 function outputTokenLimit(normalized) {
-  if (normalized.action === "opening_summary") return 4_096;
-  if (normalized.action === "specific_summary") return 4_608;
-  if (normalized.action === "complete_summary") return 5_120;
-  if (normalized.reading.cardSlugs.length === 7) return 6_144;
-  return 4_096;
+  const configuredMaximum = integerEnv(
+    "AGENT911_MAX_OUTPUT_TOKENS",
+    DEFAULT_MAX_OUTPUT_TOKENS,
+    1_024,
+    DEFAULT_MAX_OUTPUT_TOKENS,
+  );
+  if (normalized.action === "opening_summary") return Math.min(3_072, configuredMaximum);
+  if (normalized.action === "specific_summary") return Math.min(3_584, configuredMaximum);
+  if (normalized.action === "complete_summary") return configuredMaximum;
+  return Math.min(3_584, configuredMaximum);
+}
+
+function providerPrices(candidate) {
+  if (candidate.id === "openai") {
+    return {
+      inputUsdPerMillion: decimalEnv("AGENT911_OPENAI_INPUT_USD_PER_M", 2, 0, 100),
+      outputUsdPerMillion: decimalEnv("AGENT911_OPENAI_OUTPUT_USD_PER_M", 12, 0, 200),
+    };
+  }
+  return {
+    inputUsdPerMillion: decimalEnv("AGENT911_GEMINI_INPUT_USD_PER_M", 1.5, 0, 100),
+    outputUsdPerMillion: decimalEnv("AGENT911_GEMINI_OUTPUT_USD_PER_M", 9, 0, 200),
+  };
+}
+
+function estimatedCostBrl(candidate, inputTokens, outputTokens, exchangeRate) {
+  const prices = providerPrices(candidate);
+  const usd = ((Math.max(0, inputTokens) * prices.inputUsdPerMillion)
+    + (Math.max(0, outputTokens) * prices.outputUsdPerMillion)) / 1_000_000;
+  return usd * exchangeRate;
+}
+
+function projectedProviderCost(options, candidate, metrics) {
+  const body = String(options?.body ?? "");
+  let outputTokens = DEFAULT_MAX_OUTPUT_TOKENS;
+  try {
+    const parsed = JSON.parse(body);
+    outputTokens = Number(parsed.max_output_tokens ?? parsed.generationConfig?.maxOutputTokens)
+      || DEFAULT_MAX_OUTPUT_TOKENS;
+  } catch {
+    // O teto conservador permanece quando o corpo não puder ser inspecionado.
+  }
+  const inputTokens = Math.ceil(body.length / 3);
+  return estimatedCostBrl(
+    candidate,
+    inputTokens,
+    outputTokens,
+    metrics.runtimeConfig.usdBrlBudgetRate,
+  );
 }
 
 function spreadLabel(normalized) {
@@ -340,6 +400,7 @@ function createMetrics(normalized) {
     providerFallback: false,
     repaired: false,
     usage: [],
+    projectedCostBrl: 0,
     lastProvider: "unknown",
     lastModel: "unknown",
   };
@@ -359,6 +420,22 @@ async function performProviderRequest(url, options, candidate, metrics, repair) 
       repairable: false,
     });
   }
+
+  const projectedCallCostBrl = projectedProviderCost(options, candidate, metrics);
+  if (metrics.projectedCostBrl + projectedCallCostBrl > metrics.runtimeConfig.maxCostBrl) {
+    throw new Agent911ProviderError("cost_budget_exhausted", {
+      kind: "unavailable",
+      status: 503,
+      provider: candidate.id,
+      model: candidate.model,
+      candidate,
+      providerCode: "cost_budget_exhausted",
+      providerType: "budget",
+      recoverableFallback: false,
+      repairable: false,
+    });
+  }
+  metrics.projectedCostBrl += projectedCallCostBrl;
 
   const remainingMs = metrics.deadlineAt - Date.now();
   if (remainingMs < 500) throw networkProviderError(new Error("total_timeout"), candidate, true);
@@ -393,6 +470,12 @@ async function performProviderRequest(url, options, candidate, metrics, repair) 
         model: candidate.model,
         call: callNumber,
         durationMs: Date.now() - callStartedAt,
+        estimatedCostBrl: estimatedCostBrl(
+          candidate,
+          usage.inputTokens,
+          Math.max(usage.outputTokens, usage.totalTokens - usage.inputTokens),
+          metrics.runtimeConfig.usdBrlBudgetRate,
+        ),
         ...usage,
       });
     }
@@ -706,6 +789,10 @@ function usageTotals(metrics) {
 
 function logUsage(metrics) {
   const totals = usageTotals(metrics);
+  const estimatedCostBrlTotal = metrics.usage.reduce(
+    (total, usage) => total + (Number(usage.estimatedCostBrl) || 0),
+    0,
+  );
   console.info("agent911_usage", {
     provider: metrics.lastProvider,
     model: metrics.lastModel,
@@ -721,6 +808,9 @@ function logUsage(metrics) {
     providerFallback: metrics.providerFallback,
     durationMs: Date.now() - metrics.startedAt,
     usageByCall: metrics.usage,
+    estimatedCostBrl: Number(estimatedCostBrlTotal.toFixed(4)),
+    projectedCostBrl: Number(metrics.projectedCostBrl.toFixed(4)),
+    maxCostBrl: metrics.runtimeConfig.maxCostBrl,
   });
 }
 
@@ -793,9 +883,35 @@ async function executeAgent911(normalized, providerPlan) {
   }
 }
 
-function requestFingerprint(normalized, ip) {
+function normalizePaidAccess(body, normalized) {
+  if (normalized.action === "opening_summary") return null;
+  const payment = body?.payment;
+  const sessionId = String(payment?.sessionId ?? "").trim();
+  const productId = String(payment?.productId ?? "").trim();
+  const readingId = String(payment?.readingId ?? "").trim();
+  const questionNumber = Number(payment?.questionNumber) || 0;
+  const catalog = createProductCatalog(process.env);
+  const acceptedProducts = normalized.action === "complete_summary"
+    ? new Set([catalog.completeReading.id])
+    : normalized.action === "specific_summary"
+      ? new Set([catalog.specificQuestionComplete.id, catalog.specificQuestionStandalone.id])
+      : normalized.action === "follow_up" ? new Set([catalog.agentQuestion.id]) : new Set();
+  const expectedQuestionNumber = normalized.action === "follow_up"
+    ? normalized.questionsUsed + 1
+    : 0;
+  if (!/^cs_(?:test_|live_)?[a-zA-Z0-9]{10,220}$/u.test(sessionId)
+      || !acceptedProducts.has(productId)
+      || readingId !== normalized.reading.createdAt
+      || questionNumber !== expectedQuestionNumber) {
+    throw new PaymentLedgerError("payment_required", 402);
+  }
+  return { sessionId, productId, readingId, questionNumber };
+}
+
+function requestFingerprint(normalized, ip, paidAccess = null) {
   const source = JSON.stringify({
     ip,
+    paymentSessionId: paidAccess?.sessionId ?? "",
     action: normalized.action,
     readingMode: normalized.readingMode,
     questionsUsed: normalized.questionsUsed,
@@ -814,6 +930,31 @@ function requestFingerprint(normalized, ip) {
   return createHash("sha256").update(source).digest("hex");
 }
 
+async function executePaidAgent911(normalized, providerPlan, paidAccess, fingerprint) {
+  const claim = {
+    ...paidAccess,
+    claimId: createHash("sha256")
+      .update(`${paidAccess.sessionId}:${fingerprint}`)
+      .digest("hex"),
+  };
+  await claimPaymentEntitlement(claim);
+  try {
+    const payload = await executeAgent911(normalized, providerPlan);
+    await settlePaymentEntitlement(claim, "consumed");
+    return payload;
+  } catch (error) {
+    try {
+      await settlePaymentEntitlement(claim, "released");
+    } catch (releaseError) {
+      console.error("payment_entitlement_release_failed", {
+        action: normalized.action,
+        type: releaseError?.code ?? "payment_ledger_unavailable",
+      });
+    }
+    throw error;
+  }
+}
+
 function cleanTransientStores(now) {
   for (const [key, value] of responseStore.entries()) {
     if (value.expiresAt <= now) responseStore.delete(key);
@@ -830,6 +971,13 @@ function cleanTransientStores(now) {
 }
 
 function publicProviderError(error) {
+  if (error instanceof PaymentLedgerError) {
+    return {
+      status: error.status,
+      code: error.code,
+      retryAfterMs: error.retryAfterMs,
+    };
+  }
   if (error?.kind === "quota") {
     return { status: 503, code: "provider_quota", retryAfterMs: error.retryAfterMs || 0 };
   }
@@ -861,10 +1009,17 @@ export default async function handler(request, response) {
     return sendJson(response, 403, { error: "origin_not_allowed" });
   }
 
+  let body;
   let normalized;
+  let paidAccess;
   try {
-    normalized = validateAgent911Request(parseBody(request));
+    body = parseBody(request);
+    normalized = validateAgent911Request(body);
+    paidAccess = normalizePaidAccess(body, normalized);
   } catch (error) {
+    if (error instanceof PaymentLedgerError) {
+      return sendJson(response, error.status, { error: error.code });
+    }
     if (error instanceof Agent911ValidationError) {
       const code = error.code === "question_limit" ? "question_limit" : "invalid_payload";
       console.warn("agent911_request_failed", {
@@ -885,7 +1040,7 @@ export default async function handler(request, response) {
   }
 
   const ip = requestIp(request);
-  const fingerprint = requestFingerprint(normalized, ip);
+  const fingerprint = requestFingerprint(normalized, ip, paidAccess);
   const now = Date.now();
   cleanTransientStores(now);
 
@@ -948,7 +1103,9 @@ export default async function handler(request, response) {
     return sendJson(response, 503, { error: "provider_unavailable" }, currentRateHeaders);
   }
 
-  const operation = executeAgent911(normalized, providerPlan);
+  const operation = paidAccess
+    ? executePaidAgent911(normalized, providerPlan, paidAccess, fingerprint)
+    : executeAgent911(normalized, providerPlan);
   inFlightStore.set(fingerprint, operation);
   try {
     const payload = await operation;

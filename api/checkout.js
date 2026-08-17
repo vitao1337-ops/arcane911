@@ -1,7 +1,14 @@
 import {
+  CheckoutError,
   checkoutErrorPayload,
+  checkoutProductNeedsLedger,
   createStripeCheckout,
 } from "../server/checkout-core.js";
+import {
+  assertPaymentLedgerReady,
+  paymentLedgerConfigured,
+} from "../server/payment-ledger.js";
+import { stripeWebhookConfigured } from "../server/stripe-webhook.js";
 
 function sendJson(response, status, payload) {
   response.setHeader("Cache-Control", "no-store, max-age=0");
@@ -69,6 +76,19 @@ export default async function handler(request, response) {
   });
 
   try {
+    if (!stripeWebhookConfigured()) {
+      throw new CheckoutError("webhook_not_configured", 503);
+    }
+    if (checkoutProductNeedsLedger(body.productId) && !paymentLedgerConfigured()) {
+      throw new CheckoutError("payment_ledger_not_configured", 503);
+    }
+    if (checkoutProductNeedsLedger(body.productId)) {
+      try {
+        await assertPaymentLedgerReady();
+      } catch (error) {
+        throw new CheckoutError(error?.code ?? "payment_ledger_unavailable", error?.status ?? 503);
+      }
+    }
     const result = await createStripeCheckout(body, { origin: requestOrigin(request) });
     console.info("checkout_request_completed", {
       productId: result.productId,

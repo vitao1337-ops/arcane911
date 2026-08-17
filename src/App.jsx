@@ -52,6 +52,8 @@ import {
 
 const AstralMapPage = lazy(() => import("./pages/AstralMapPage"));
 const SpecificReadingPage = lazy(() => import("./pages/SpecificReadingPage"));
+const LegalPage = lazy(() => import("./pages/LegalPage"));
+const PurchaseRecoveryPage = lazy(() => import("./pages/PurchaseRecoveryPage"));
 
 const STORAGE_KEY = "arcane911.readings.v1";
 const READING_SESSION_KEY = "arcane911.active-reading.v1";
@@ -361,6 +363,11 @@ function App() {
   const isCompleteRoute = route === "/tiragem-completa";
   const isAstroRoute = route === "/mapa-astral";
   const isSpecificRoute = route.startsWith("/leituras/");
+  const legalRouteType = route === "/termos"
+    ? "terms"
+    : route === "/privacidade" ? "privacy" : route === "/reembolsos" ? "refunds" : "";
+  const isLegalRoute = Boolean(legalRouteType);
+  const isRecoveryRoute = route === "/recuperar-compra";
   const featuredSpecificReading = getReadingForIntent(intentId);
   const specificReadingOrigin = new URLSearchParams(location.search).get("origem");
   const specificReadingHasCompleteContext = specificReadingOrigin === "tiragem-completa"
@@ -468,16 +475,16 @@ function App() {
         const entitlement = savePaymentEntitlement(result.entitlement);
         clearPendingCheckout(pending.orderId);
         setCheckoutState("paid");
-        setCheckoutMessage("Pagamento confirmado.");
+        setCheckoutMessage(`Pagamento confirmado. Código do pedido: ${pending.orderId}`);
 
         if (pending.productId === salesConfig.productId) {
           setCompleteEntitlement(entitlement);
           setCompleteAccessGranted(true);
           setCheckoutOpen(false);
           startCompleteReading(true);
-          setStatus("Pagamento confirmado. Continue na mesma mesa.");
+          setStatus(`Pagamento confirmado. Continue na mesma mesa e guarde o código ${pending.orderId}.`);
         } else {
-          setStatus("Pagamento confirmado. Uma pergunta ao 911 foi liberada nesta Ferradura.");
+          setStatus(`Pagamento confirmado. Uma pergunta ao 911 foi liberada. Guarde ${pending.orderId}.`);
         }
 
         trackCommercialEvent("checkout_payment_confirmed", {
@@ -501,6 +508,10 @@ function App() {
       "/tiragem-gratis": "Tiragem gratuita · Arcane911",
       "/tiragem-completa": "Ferradura completa · Arcane911",
       "/mapa-astral": "Mapa Astral · Arcane911",
+      "/recuperar-compra": "Recuperar compra · Arcane911",
+      "/termos": "Termos de Uso · Arcane911",
+      "/privacidade": "Privacidade · Arcane911",
+      "/reembolsos": "Reembolsos · Arcane911",
     };
     document.title = titles[route]
       ?? (isSpecificRoute ? "Leitura específica · Arcane911" : "Arcane911");
@@ -1195,6 +1206,7 @@ function App() {
         readingMode={readingMode}
         createdAt={createdAt}
         variant={variant}
+        entitlement={variant === "complete" ? completeEntitlement : null}
         onResult={(result) => setAgentSummaries((current) => (
           current[variant] === result ? current : { ...current, [variant]: result }
         ))}
@@ -1653,8 +1665,8 @@ function App() {
 
   return (
     <div className="app-shell" data-agent911-ready="true">
-      <a className="skip-link" href={isAstroRoute ? "#criar-mapa" : isCompleteRoute ? "#complete-reading-top" : isSpecificRoute ? "#specific-reading-top" : "#ritual"}>
-        {isAstroRoute ? "Pular para criar o mapa" : isSpecificRoute ? "Pular para o conteúdo" : "Pular para a leitura"}
+      <a className="skip-link" href={isLegalRoute ? "#legal-content" : isRecoveryRoute ? "#recovery-content" : isAstroRoute ? "#criar-mapa" : isCompleteRoute ? "#complete-reading-top" : isSpecificRoute ? "#specific-reading-top" : "#ritual"}>
+        {isLegalRoute || isRecoveryRoute ? "Pular para o conteúdo" : isAstroRoute ? "Pular para criar o mapa" : isSpecificRoute ? "Pular para o conteúdo" : "Pular para a leitura"}
       </a>
       <div className="ambient ambient-one" aria-hidden="true" />
       <div className="ambient ambient-two" aria-hidden="true" />
@@ -1864,7 +1876,17 @@ function App() {
           />
         </Suspense>
       ) : null}
-      {!["/", "/tiragem-gratis", "/tiragem-completa", "/mapa-astral"].includes(route) && !isSpecificRoute ? <Navigate to="/" replace /> : null}
+      {isRecoveryRoute ? (
+        <Suspense fallback={<div className="route-loading"><span>✦</span><p>Localizando o pedido…</p></div>}>
+          <PurchaseRecoveryPage />
+        </Suspense>
+      ) : null}
+      {isLegalRoute ? (
+        <Suspense fallback={<div className="route-loading"><span>✦</span><p>Abrindo o documento…</p></div>}>
+          <LegalPage type={legalRouteType} />
+        </Suspense>
+      ) : null}
+      {!["/", "/tiragem-gratis", "/tiragem-completa", "/mapa-astral", "/recuperar-compra", "/termos", "/privacidade", "/reembolsos"].includes(route) && !isSpecificRoute ? <Navigate to="/" replace /> : null}
 
       <footer>
         <Link className="brand footer-brand" to="/">
@@ -1875,6 +1897,10 @@ function App() {
         <div className="footer-links">
           <Link to="/tiragem-gratis">Tarot gratuito</Link>
           <Link to="/mapa-astral">Mapa Astral</Link>
+          <Link to="/recuperar-compra">Recuperar compra</Link>
+          <Link to="/termos">Termos</Link>
+          <Link to="/privacidade">Privacidade</Link>
+          <Link to="/reembolsos">Reembolsos</Link>
           <span>© 2026 · Arcane911</span>
         </div>
       </footer>
@@ -1885,6 +1911,7 @@ function App() {
             <button type="button" onClick={() => setMobileNavOpen(false)} aria-label="Fechar menu"><X /></button>
             <Link to="/tiragem-gratis" onClick={() => setMobileNavOpen(false)}>Tarot gratuito <ArrowRight size={18} /></Link>
             <Link to="/mapa-astral" onClick={() => setMobileNavOpen(false)}>Mapa Astral <ArrowRight size={18} /></Link>
+            <Link to="/recuperar-compra" onClick={() => setMobileNavOpen(false)}>Recuperar compra <ArrowRight size={18} /></Link>
             <a href="/#metodo" onClick={() => setMobileNavOpen(false)}>A origem <ArrowRight size={18} /></a>
             <a href="/#baralho" onClick={() => setMobileNavOpen(false)}>Os 22 Arcanos <ArrowRight size={18} /></a>
           </nav>

@@ -26,8 +26,16 @@ function firstName(value) {
   return String(value ?? "").trim().split(/\s+/u)[0] || "você";
 }
 
-export default function Astral911Document({ chart, onStatus }) {
+export default function Astral911Document({ chart, entitlement, onStatus }) {
   const initialCache = useMemo(() => readCachedAstro911Document(chart), [chart]);
+  const paymentSessionId = entitlement?.sessionId ?? "";
+  const paymentProductId = entitlement?.productId ?? "";
+  const paymentReadingId = entitlement?.readingId ?? "";
+  const payment = useMemo(() => paymentSessionId ? {
+    sessionId: paymentSessionId,
+    productId: paymentProductId,
+    readingId: paymentReadingId,
+  } : null, [paymentProductId, paymentReadingId, paymentSessionId]);
   const [payload, setPayload] = useState(initialCache);
   const [phase, setPhase] = useState(initialCache ? "ready" : "loading");
   const [error, setError] = useState("");
@@ -55,7 +63,7 @@ export default function Astral911Document({ chart, onStatus }) {
     setPhase("loading");
     setError("");
     onStatus?.("O 911 está cruzando posições, casas e aspectos do mapa…");
-    requestAstro911Document(chart)
+    requestAstro911Document(chart, { payment })
       .then((nextPayload) => {
         if (!active) return;
         setPayload(nextPayload);
@@ -75,14 +83,14 @@ export default function Astral911Document({ chart, onStatus }) {
       active = false;
       activeRef.current = false;
     };
-  }, [chart, onStatus]);
+  }, [chart, onStatus, payment]);
 
   function retry() {
     if (retryDelayMs > 0) return;
     activeRef.current = true;
     setPhase("loading");
     setError("");
-    requestAstro911Document(chart)
+    requestAstro911Document(chart, { payment })
       .then((nextPayload) => {
         if (!activeRef.current) return;
         setPayload(nextPayload);

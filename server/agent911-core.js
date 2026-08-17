@@ -13,7 +13,7 @@ import {
 export const AGENT911_SCHEMA_VERSION = "2026-08-13.1";
 export const AGENT911_MAX_FOLLOW_UPS = 3;
 
-const actionIds = new Set(["opening_summary", "specific_summary", "complete_summary", "initial_reading", "follow_up"]);
+const actionIds = new Set(["opening_summary", "specific_summary", "complete_summary", "follow_up"]);
 const intentIds = new Set(intents.map((intent) => intent.id));
 
 export class Agent911ValidationError extends Error {
@@ -115,7 +115,7 @@ export function validateAgent911Request(body) {
 
   const intentId = intentIds.has(reading.intentId) ? reading.intentId : "caminhos";
   const intent = intents.find((item) => item.id === intentId) ?? intents[0];
-  const action = actionIds.has(body.action) ? body.action : "initial_reading";
+  const action = actionIds.has(body.action) ? body.action : "opening_summary";
   if (action === "opening_summary" && slugs.length !== 3) {
     throw new Agent911ValidationError("A síntese de abertura exige três cartas.", "invalid_summary_layout");
   }
@@ -252,7 +252,6 @@ FORMATO POR TAREFA
 - opening_summary: devolva uma única seção que use as três cartas. O texto da seção deve conter a leitura relacional; a síntese deve responder ao conflito concreto em 80 a 130 palavras. Termine com um gesto curto. Não ofereça perguntas sugeridas.
 - specific_summary: devolva uma única seção que use as cinco cartas e respeite as cinco posições da pergunta específica. Responda ao conflito concreto em 110 a 180 palavras, sem transformar as posições em cinco verbetes. Termine com um gesto observável. Não ofereça perguntas sugeridas.
 - complete_summary: devolva uma única seção que use as sete cartas como narrativa. O texto da seção deve condensar as relações mais importantes; a síntese deve responder ao conflito concreto em 140 a 220 palavras. Não repita sete verbetes e não ofereça perguntas sugeridas.
-- initial_reading: faça a leitura estruturada e devolva três perguntas sugeridas.
 - follow_up: responda somente ao aprofundamento atual, mantendo o contexto, e devolva três possíveis continuidades.
 - Em opening_summary, specific_summary e complete_summary, title, opening, synthesis e groundedAction formam uma única entrega concisa; não anuncie recursos, cadastro, preço ou funcionamento da IA.
 `;

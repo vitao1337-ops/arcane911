@@ -295,8 +295,8 @@ export default function AstralMapPage() {
         clearPendingCheckout(pending.orderId);
         setAstralEntitlement(entitlement);
         setPaymentState("paid");
-        setPaymentMessage("Pagamento confirmado. Documento liberado nesta sessão.");
-        setStatus("Pagamento confirmado. O Documento Astral está sendo preparado.");
+        setPaymentMessage(`Pagamento confirmado. Código do pedido: ${pending.orderId}`);
+        setStatus(`O Documento Astral está sendo preparado. Guarde o código ${pending.orderId}.`);
         trackCommercialEvent("astral_document_payment_confirmed", {
           product_id: pending.productId,
           reading_id: pending.readingId,
@@ -634,7 +634,7 @@ export default function AstralMapPage() {
           </div>
 
           {astralAccessGranted ? (
-            <Astral911Document chart={chart} onStatus={updateStatus} />
+            <Astral911Document chart={chart} entitlement={astralEntitlement} onStatus={updateStatus} />
           ) : (
             <AstralDocumentGate
               product={astralProduct}

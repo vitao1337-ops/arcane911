@@ -54,6 +54,7 @@ export default function Agent911Summary({
   createdAt,
   variant = "opening",
   spreadId = "",
+  entitlement = null,
   onResult,
 }) {
   const normalizedReadingMode = normalizeAgent911ReadingMode(readingMode);
@@ -134,6 +135,7 @@ export default function Agent911Summary({
         : variant === "specific" ? "specific_summary" : "opening_summary",
       readingMode: normalizedReadingMode,
       memoryConsent: false,
+      payment: variant === "opening" ? null : entitlement,
     });
 
     currentRequest
@@ -169,7 +171,18 @@ export default function Agent911Summary({
       });
 
     return () => { active = false; };
-  }, [attempt, cacheKey, cards, context, intentId, normalizedReadingMode, question, spreadId, variant]);
+  }, [
+    attempt,
+    cacheKey,
+    cards,
+    context,
+    entitlement?.productId,
+    entitlement?.questionNumber,
+    entitlement?.readingId,
+    entitlement?.sessionId,
+    normalizedReadingMode,
+    variant,
+  ]);
 
   useEffect(() => {
     if (retryDelayMs <= 0) return undefined;

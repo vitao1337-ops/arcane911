@@ -217,7 +217,8 @@ function SpecificReadingExperience({
         setSpecificEntitlement(entitlement);
         setPhase("deck");
         setPaymentState("paid");
-        setPaymentMessage("Pagamento confirmado. Sua mesa está liberada.");
+        setPaymentMessage(`Pagamento confirmado. Código do pedido: ${pending.orderId}`);
+        setStatus(`Sua mesa está liberada. Guarde o código ${pending.orderId}.`);
         saveDraft(reading.slug, discounted ? parentReadingId : "", {
           readingId,
           question,
@@ -488,6 +489,7 @@ function SpecificReadingExperience({
           createdAt={readingId}
           variant="specific"
           spreadId={reading.slug}
+          entitlement={specificEntitlement}
         />
 
         <div className="specific-result-actions">

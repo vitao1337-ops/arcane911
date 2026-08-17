@@ -1,25 +1,24 @@
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import handler, { resetAgent911RuntimeStateForTests } from "../api/agent-911.js";
-import { completePositions, tarotCards } from "../src/data/tarot.js";
+import { positions, tarotCards } from "../src/data/tarot.js";
 
 const selected = [
   tarotCards[0],
   tarotCards[11],
   tarotCards[2],
-  tarotCards[15],
-  tarotCards[18],
-  tarotCards[8],
-  tarotCards[19],
 ];
 
-beforeEach(() => resetAgent911RuntimeStateForTests());
+beforeEach(() => {
+  resetAgent911RuntimeStateForTests();
+  process.env.AGENT911_MAX_COST_BRL = "10";
+});
 
 function requestBody() {
   return {
     agent: "agent-911",
     requestId: "api-contract-test",
-    action: "initial_reading",
+    action: "opening_summary",
     memoryConsent: false,
     questionsUsed: 0,
     context: {
@@ -31,7 +30,7 @@ function requestBody() {
         question: "Que movimento pede verdade agora?",
         cards: selected.map((card, index) => ({
           slug: card.slug,
-          position: { id: completePositions[index].id },
+          position: { id: positions[index].id },
         })),
       },
     },
@@ -238,7 +237,8 @@ test("Gemini é o provedor principal, recebe schema compatível e mantém a chav
     assert.equal(providerCall.options.headers.Authorization, undefined);
     assert.equal(providerCall.body.store, false);
     assert.equal(providerCall.body.generationConfig.responseMimeType, "application/json");
-    assert.ok(providerCall.body.generationConfig.maxOutputTokens >= 4_096);
+    assert.ok(providerCall.body.generationConfig.maxOutputTokens >= 3_072);
+    assert.ok(providerCall.body.generationConfig.maxOutputTokens <= 4_096);
     assert.deepEqual(providerCall.body.generationConfig.thinkingConfig, {
       includeThoughts: false,
       thinkingLevel: "MINIMAL",
@@ -456,7 +456,7 @@ test("uma paráfrase pessoal não vira 502 quando só a checagem lexical da perg
 
   try {
     const body = requestBody();
-    body.action = "complete_summary";
+    body.action = "opening_summary";
     body.context.reading.question = "Que movimento pede verdade agora?";
     const response = mockResponse();
     await handler({

@@ -1,7 +1,14 @@
 import {
+  CheckoutError,
+  checkoutProductAllowsConsumedAccess,
   checkoutErrorPayload,
+  checkoutProductNeedsLedger,
   verifyStripeCheckout,
 } from "../server/checkout-core.js";
+import {
+  PaymentLedgerError,
+  registerPaymentEntitlement,
+} from "../server/payment-ledger.js";
 
 function sendJson(response, status, payload) {
   response.setHeader("Cache-Control", "no-store, max-age=0");
@@ -55,6 +62,24 @@ export default async function handler(request, response) {
 
   try {
     const result = await verifyStripeCheckout(body);
+    if (checkoutProductNeedsLedger(result.entitlement.productId)) {
+      try {
+        const ledger = await registerPaymentEntitlement(result.entitlement);
+        const reusableContentAccess = ledger.state === "consumed"
+          && checkoutProductAllowsConsumedAccess(result.entitlement.productId);
+        if (ledger.state !== "active" && !reusableContentAccess) {
+          throw new CheckoutError("payment_credit_unavailable", 409);
+        }
+        result.entitlement.state = ledger.state;
+        result.entitlement.creditAvailable = ledger.state === "active";
+      } catch (error) {
+        if (error instanceof CheckoutError) throw error;
+        if (error instanceof PaymentLedgerError) {
+          throw new CheckoutError(error.code, error.status);
+        }
+        throw error;
+      }
+    }
     console.info("checkout_payment_verified", {
       productId: result.entitlement.productId,
       orderId: result.entitlement.orderId,

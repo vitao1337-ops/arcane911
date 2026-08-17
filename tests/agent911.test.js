@@ -114,7 +114,7 @@ test("a futura chamada usa endpoint próprio sem chave de provedor no navegador"
   assert.equal(captured.options.headers.Authorization, undefined);
   const requestBody = JSON.parse(captured.options.body);
   assert.equal(requestBody.context.reading.cards.length, 7);
-  assert.equal(requestBody.action, "initial_reading");
+  assert.equal(requestBody.action, "complete_summary");
   assert.equal(requestBody.readingMode, "sem_rodeios");
   assert.equal(requestBody.memoryConsent, false);
   assert.match(response.answer, /Ferradura/);

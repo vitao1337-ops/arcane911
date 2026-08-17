@@ -248,6 +248,11 @@ async function performRequest(chart, options) {
         agent: astro911Config.id,
         requestId: createRequestId(),
         schemaVersion: astro911Config.contextSchemaVersion,
+        payment: options.payment ? {
+          sessionId: cleanText(options.payment.sessionId, 240),
+          productId: cleanText(options.payment.productId, 80),
+          readingId: cleanText(options.payment.readingId, 120),
+        } : null,
         context: createAstro911Context(chart),
       }),
       signal: controller.signal,
@@ -268,6 +273,12 @@ async function performRequest(chart, options) {
         provider_unavailable: "O Documento Astral está temporariamente indisponível. Tente novamente em alguns instantes.",
         provider_invalid_response: "A leitura conectada chegou incompleta. Tente novamente.",
         rate_limit: "Muitos documentos foram pedidos em sequência. Aguarde alguns minutos.",
+        payment_required: "Este documento precisa de uma autorização paga válida.",
+        payment_credit_unavailable: "Esta autorização já foi usada para gerar o documento.",
+        payment_ledger_not_configured: "A liberação segura do documento ainda não está configurada.",
+        payment_ledger_not_ready: "A liberação segura está sendo preparada. Tente novamente em instantes.",
+        payment_ledger_unavailable: "Não foi possível validar o acesso agora. Tente novamente; seu crédito não foi consumido.",
+        payment_ledger_conflict: "Não foi possível concluir a liberação deste documento. Tente novamente.",
         unknown: "O Documento Astral não pôde ser concluído agora.",
       };
       throw new Astro911Error(

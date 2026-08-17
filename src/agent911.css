@@ -262,6 +262,74 @@
   margin-top: 16px;
 }
 
+/* A resposta específica vive sobre a página clara. Mantemos a composição do
+   911, mas usamos a paleta de leitura da rota para garantir contraste real. */
+.synthesis-card.agent911-summary.is-specific {
+  border-color: rgba(74, 51, 82, 0.14);
+  background:
+    radial-gradient(circle at 7% 35%, rgba(124, 58, 237, 0.16), transparent 24rem),
+    radial-gradient(circle at 94% 100%, rgba(185, 126, 154, 0.1), transparent 22rem),
+    linear-gradient(145deg, rgba(255, 253, 249, 0.78), rgba(247, 239, 229, 0.62));
+  box-shadow: 0 28px 62px rgba(54, 39, 57, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.76);
+}
+
+.synthesis-card.agent911-summary.is-specific::after {
+  border-color: rgba(123, 84, 136, 0.12);
+  box-shadow: inset 0 0 0 38px rgba(124, 58, 237, 0.035), inset 0 0 0 78px rgba(150, 105, 58, 0.025);
+}
+
+.agent911-summary.is-specific .section-kicker { color: #7c3aed; }
+
+.agent911-summary.is-specific .agent911-summary-meta > span:last-child {
+  color: rgba(49, 38, 53, 0.64);
+}
+
+.agent911-summary.is-specific .agent911-summary-meta > span:last-child svg,
+.agent911-summary.is-specific .agent911-summary-action > svg {
+  color: #946819;
+}
+
+.agent911-summary.is-specific .agent911-card-anchors span {
+  border-color: rgba(126, 91, 33, 0.28);
+  background: rgba(255, 250, 239, 0.62);
+  color: #604669;
+}
+
+.synthesis-card.agent911-summary.is-specific h3 { color: #261f2a; }
+
+.agent911-summary.is-specific .agent911-summary-copy > q {
+  color: rgba(49, 38, 53, 0.72);
+}
+
+.synthesis-card.agent911-summary.is-specific .agent911-summary-copy > p,
+.synthesis-card.agent911-summary.is-specific .agent911-summary-copy > p.agent911-summary-reading {
+  color: #44384a;
+}
+
+.agent911-summary.is-specific .agent911-summary-action {
+  border-top-color: rgba(126, 91, 33, 0.24);
+}
+
+.agent911-summary.is-specific .agent911-summary-action span { color: #7b581d; }
+
+.synthesis-card.agent911-summary.is-specific .agent911-summary-action p {
+  color: #493c4e;
+}
+
+.synthesis-card.agent911-summary.is-specific small { color: rgba(58, 47, 63, 0.68); }
+
+.agent911-summary.is-specific .agent911-reading-stage span {
+  border-color: rgba(92, 66, 101, 0.18);
+  background: rgba(255, 255, 255, 0.44);
+  color: rgba(54, 42, 59, 0.72);
+}
+
+.agent911-summary.is-specific .agent911-reading-retry {
+  border-top-color: rgba(126, 91, 33, 0.22);
+}
+
+.agent911-summary.is-specific .agent911-reading-retry > p { color: #493c4e; }
+
 .agent911-consultation {
   position: relative;
   display: grid;
