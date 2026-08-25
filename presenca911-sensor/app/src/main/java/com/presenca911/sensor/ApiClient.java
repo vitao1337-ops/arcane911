@@ -14,6 +14,7 @@ final class ApiClient {
     static final String KEY_SENSOR_TOKEN = "sensor_token";
     static final String KEY_CONTACT_NAME = "contact_name";
     static final String KEY_CONSENT = "consent";
+    static final String KEY_CAPTURE_ACTIVE = "capture_active";
 
     private ApiClient() {}
 

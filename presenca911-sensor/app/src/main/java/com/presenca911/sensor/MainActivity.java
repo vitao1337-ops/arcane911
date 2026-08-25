@@ -1,9 +1,7 @@
 package com.presenca911.sensor;
 
 import android.Manifest;
-import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Activity;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -11,14 +9,13 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.media.projection.MediaProjectionManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.accessibility.AccessibilityManager;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -26,11 +23,11 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
+    private static final int REQUEST_CAPTURE = 912;
     private static final int COLOR_CREAM = Color.rgb(246, 239, 227);
     private static final int COLOR_INK = Color.rgb(33, 26, 36);
     private static final int COLOR_MUTED = Color.rgb(102, 91, 105);
@@ -87,7 +84,7 @@ public class MainActivity extends Activity {
         root.addView(title);
 
         TextView intro = text(
-                "Este celular observará somente o nome do contato e o indicador “online” no topo do WhatsApp.",
+                "Com sua autorização visível, este celular recorta a imagem compartilhada e procura somente o nome do contato e o indicador “online” no topo do WhatsApp.",
                 15,
                 COLOR_MUTED
         );
@@ -133,11 +130,20 @@ public class MainActivity extends Activity {
         statusParams.setMargins(0, dp(16), 0, dp(10));
         card.addView(serviceStatus, statusParams);
 
-        Button accessibilityButton = secondaryButton("ATIVAR SENSOR NO ANDROID");
-        accessibilityButton.setOnClickListener(view ->
-                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        );
-        card.addView(accessibilityButton, matchWrap());
+        Button captureButton = secondaryButton("INICIAR LEITURA DA TELA");
+        captureButton.setOnClickListener(view -> requestScreenCapture());
+        card.addView(captureButton, matchWrap());
+
+        Button stopButton = secondaryButton("PARAR LEITURA");
+        stopButton.setOnClickListener(view -> {
+            Intent stopIntent = new Intent(this, ScreenCaptureService.class)
+                    .setAction(ScreenCaptureService.ACTION_STOP);
+            startService(stopIntent);
+            showStatus("Leitura interrompida.", false);
+        });
+        LinearLayout.LayoutParams stopParams = matchWrap();
+        stopParams.setMargins(0, dp(10), 0, 0);
+        card.addView(stopButton, stopParams);
 
         LinearLayout notice = horizontal();
         notice.setGravity(Gravity.TOP);
@@ -150,7 +156,7 @@ public class MainActivity extends Activity {
         TextView star = text("✦", 20, COLOR_GOLD);
         notice.addView(star, new LinearLayout.LayoutParams(dp(30), ViewGroup.LayoutParams.WRAP_CONTENT));
         TextView noticeText = text(
-                "Mantenha o chat correto aberto e a tela ligada. Tela apagada será mostrada como “sem leitura”; aparelho desligado ficará “desconectado”.",
+                "Quando o Android perguntar, compartilhe somente o WhatsApp (ou a tela inteira em aparelhos antigos). Depois mantenha o chat correto aberto e a tela ligada. Uma notificação fixa mostra enquanto a leitura estiver ativa.",
                 13,
                 COLOR_MUTED
         );
@@ -264,33 +270,48 @@ public class MainActivity extends Activity {
 
     private void updateServiceStatus() {
         if (serviceStatus == null) return;
-        if (isServiceEnabled()) {
-            showStatus(
-                    ApiClient.hasConfiguration(this)
-                            ? "Sensor Android ativo e configurado."
-                            : "Sensor ativo; falta salvar a configuração.",
-                    !ApiClient.hasConfiguration(this)
-            );
+        boolean captureActive = getSharedPreferences(ApiClient.PREFS, MODE_PRIVATE)
+                .getBoolean(ApiClient.KEY_CAPTURE_ACTIVE, false);
+        if (captureActive) {
+            showStatus("Leitura consentida ativa. Agora abra o chat correto.", false);
+        } else if (ApiClient.hasConfiguration(this)) {
+            showStatus("Configuração pronta. Toque em iniciar leitura.", false);
         } else {
-            showStatus("Sensor Android ainda desativado.", false);
+            showStatus("Preencha, confirme a autorização e salve.", false);
         }
     }
 
-    private boolean isServiceEnabled() {
-        AccessibilityManager manager =
-                (AccessibilityManager) getSystemService(Context.ACCESSIBILITY_SERVICE);
-        List<AccessibilityServiceInfo> services =
-                manager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
-        ComponentName expected = new ComponentName(this, PresenceAccessibilityService.class);
-        for (AccessibilityServiceInfo service : services) {
-            if (service.getResolveInfo() == null || service.getResolveInfo().serviceInfo == null) continue;
-            ComponentName current = new ComponentName(
-                    service.getResolveInfo().serviceInfo.packageName,
-                    service.getResolveInfo().serviceInfo.name
-            );
-            if (expected.equals(current)) return true;
+    private void requestScreenCapture() {
+        if (!ApiClient.hasConfiguration(this)) {
+            showStatus("Primeiro salve e teste a configuração.", true);
+            return;
         }
-        return false;
+
+        MediaProjectionManager manager =
+                (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+        startActivityForResult(manager.createScreenCaptureIntent(), REQUEST_CAPTURE);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_CAPTURE) return;
+
+        if (resultCode != RESULT_OK || data == null) {
+            showStatus("Compartilhamento cancelado. Nada foi lido.", true);
+            return;
+        }
+
+        Intent serviceIntent = new Intent(this, ScreenCaptureService.class)
+                .setAction(ScreenCaptureService.ACTION_START)
+                .putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, resultCode)
+                .putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, data);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent);
+        } else {
+            startService(serviceIntent);
+        }
+        showStatus("Leitura iniciada. Agora abra o chat correto.", false);
     }
 
     private void showStatus(String message, boolean error) {

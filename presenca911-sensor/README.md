@@ -5,12 +5,13 @@ Aplicativo Android auxiliar do painel **Presença 911**.
 ## O que ele faz
 
 - Observa exclusivamente o cabeçalho do WhatsApp ou WhatsApp Business.
+- Usa o compartilhamento de tela visível e consentido do próprio Android, sem serviço de Acessibilidade.
 - Confirma que o chat aberto é o contato configurado.
 - Compara se o texto exato **online** está visível.
 - Envia ao painel somente os estados online, offline, waiting, screen_on, screen_off ou heartbeat.
 - Avisa localmente quando o contato passa a aparecer online.
 
-Ele não lê, envia ou armazena mensagens, fotos, áudios, listas de contatos ou senhas.
+O reconhecimento de texto roda no próprio aparelho. O aplicativo recorta a faixa superior da imagem antes da análise e não envia, lê ou armazena mensagens, fotos, áudios, listas de contatos, capturas ou senhas.
 
 ## Instalação pelo Android Studio
 
@@ -29,14 +30,15 @@ Também existe um fluxo em .github/workflows/build-apk.yml: ao enviar este proje
 3. Cole o código correspondente ao Celular 1 ou Celular 2, disponível em CODIGOS-PRIVADOS.txt.
 4. Digite o nome do contato exatamente como aparece no cabeçalho do WhatsApp.
 5. Confirme o consentimento e toque em **Salvar e testar conexão**.
-6. Toque em **Ativar sensor no Android** e habilite **Sensor Presença 911**.
-7. Volte ao WhatsApp e deixe o chat configurado aberto.
+6. Toque em **Iniciar leitura da tela**.
+7. Na tela oficial do Android, selecione **WhatsApp** (ou **Tela inteira** em aparelhos antigos) e confirme **Iniciar agora**.
+8. Deixe o chat configurado aberto. A notificação fixa confirma que a leitura está ativa.
 
 ## Limites honestos
 
 - Se a pessoa ocultar o indicador online, o sensor não consegue contornar isso.
 - offline significa “o texto online não aparece no chat”; não confirma tecnicamente que o aparelho remoto está desconectado.
-- Com a tela apagada, o painel mostra **Tela desligada** enquanto o Android mantém o sensor respondendo.
+- O Android pode encerrar o compartilhamento quando a tela é bloqueada. Depois de desbloquear, abra o Presença 911 e inicie a leitura novamente.
 - Se o celular for desligado, ficar sem internet ou o Android suspender o sensor, após aproximadamente 45 segundos o painel mostra **Sensor desconectado**.
 - Mudanças na interface do WhatsApp podem exigir atualização do sensor.
 
