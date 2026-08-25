@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Presença 911</string>
+    <string name="service_name">Sensor Presença 911</string>
+    <string name="accessibility_description">Com autorização, compara somente o nome do contato e o indicador online no cabeçalho do WhatsApp. Não lê nem armazena mensagens.</string>
+</resources>
