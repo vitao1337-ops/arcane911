@@ -29,6 +29,8 @@ const DEFAULT_QUOTA_COOLDOWN_MS = 60_000;
 const DEFAULT_PROVIDER_COOLDOWN_MS = 15_000;
 const DEFAULT_DEDUPE_TTL_MS = 10 * 60 * 1_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 8_192;
+const DEFAULT_MAX_COST_BRL = 2;
+const DEFAULT_USD_BRL_BUDGET_RATE = 6;
 const MAX_PROVIDER_CALLS = 3;
 const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash";
 const DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-3.5-flash-lite";
@@ -66,6 +68,11 @@ class Astro911ProviderError extends Error {
 function integerEnv(name, fallback, minimum, maximum) {
   const parsed = Number(process.env[name]);
   return Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
+}
+
+function decimalEnv(name, fallback, minimum, maximum) {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
 }
 
 function rateLimitConfig() {
@@ -112,6 +119,13 @@ function runtimeConfig() {
       DEFAULT_MAX_OUTPUT_TOKENS,
       4_096,
       12_288,
+    ),
+    maxCostBrl: decimalEnv("ASTRO911_MAX_COST_BRL", DEFAULT_MAX_COST_BRL, 0.1, 20),
+    usdBrlBudgetRate: decimalEnv(
+      "ASTRO911_USD_BRL_BUDGET_RATE",
+      DEFAULT_USD_BRL_BUDGET_RATE,
+      1,
+      20,
     ),
   };
 }
@@ -339,6 +353,46 @@ function extractUsage(payload, provider) {
   return null;
 }
 
+function providerPrices(candidate) {
+  if (candidate.id === "openai") {
+    return {
+      inputUsdPerMillion: decimalEnv("ASTRO911_OPENAI_INPUT_USD_PER_M", 2, 0, 100),
+      outputUsdPerMillion: decimalEnv("ASTRO911_OPENAI_OUTPUT_USD_PER_M", 12, 0, 200),
+    };
+  }
+  return {
+    // O fallback Flash-Lite usa esta mesma reserva maior de propósito: o gate
+    // permanece conservador mesmo quando o modelo barato entra.
+    inputUsdPerMillion: decimalEnv("ASTRO911_GEMINI_INPUT_USD_PER_M", 1.5, 0, 100),
+    outputUsdPerMillion: decimalEnv("ASTRO911_GEMINI_OUTPUT_USD_PER_M", 9, 0, 200),
+  };
+}
+
+function estimatedCostBrl(candidate, inputTokens, outputTokens, exchangeRate) {
+  const prices = providerPrices(candidate);
+  const usd = ((Math.max(0, inputTokens) * prices.inputUsdPerMillion)
+    + (Math.max(0, outputTokens) * prices.outputUsdPerMillion)) / 1_000_000;
+  return usd * exchangeRate;
+}
+
+function projectedProviderCost(options, candidate, metrics) {
+  const body = String(options?.body ?? "");
+  let outputTokens = metrics.runtimeConfig.maxOutputTokens;
+  try {
+    const parsed = JSON.parse(body);
+    outputTokens = Number(parsed.max_output_tokens ?? parsed.generationConfig?.maxOutputTokens)
+      || metrics.runtimeConfig.maxOutputTokens;
+  } catch {
+    // Mantém o teto configurado quando o corpo não puder ser inspecionado.
+  }
+  return estimatedCostBrl(
+    candidate,
+    Math.ceil(body.length / 3),
+    outputTokens,
+    metrics.runtimeConfig.usdBrlBudgetRate,
+  );
+}
+
 function createMetrics(normalized) {
   const startedAt = Date.now();
   const currentRuntimeConfig = runtimeConfig();
@@ -352,6 +406,7 @@ function createMetrics(normalized) {
     providerFallback: false,
     repaired: false,
     usage: [],
+    projectedCostBrl: 0,
     lastProvider: "unknown",
     lastModel: "unknown",
   };
@@ -371,6 +426,22 @@ async function performProviderRequest(url, options, candidate, metrics, repair) 
       repairable: false,
     });
   }
+
+  const projectedCallCostBrl = projectedProviderCost(options, candidate, metrics);
+  if (metrics.projectedCostBrl + projectedCallCostBrl > metrics.runtimeConfig.maxCostBrl) {
+    throw new Astro911ProviderError("cost_budget_exhausted", {
+      kind: "unavailable",
+      status: 503,
+      provider: candidate.id,
+      model: candidate.model,
+      candidate,
+      providerCode: "cost_budget_exhausted",
+      providerType: "budget",
+      recoverableFallback: false,
+      repairable: false,
+    });
+  }
+  metrics.projectedCostBrl += projectedCallCostBrl;
 
   const remainingMs = metrics.deadlineAt - Date.now();
   if (remainingMs < 500) throw networkProviderError(new Error("total_timeout"), candidate, true);
@@ -405,6 +476,12 @@ async function performProviderRequest(url, options, candidate, metrics, repair) 
         model: candidate.model,
         call: callNumber,
         durationMs: Date.now() - callStartedAt,
+        estimatedCostBrl: estimatedCostBrl(
+          candidate,
+          usage.inputTokens,
+          usage.outputTokens,
+          metrics.runtimeConfig.usdBrlBudgetRate,
+        ),
         ...usage,
       });
     }
@@ -693,6 +770,10 @@ function usageTotals(metrics) {
 
 function logUsage(metrics) {
   const totals = usageTotals(metrics);
+  const estimatedCostBrlTotal = metrics.usage.reduce(
+    (total, usage) => total + (Number(usage.estimatedCostBrl) || 0),
+    0,
+  );
   console.info("astro911_usage", {
     provider: metrics.lastProvider,
     model: metrics.lastModel,
@@ -707,6 +788,9 @@ function logUsage(metrics) {
     providerFallback: metrics.providerFallback,
     durationMs: Date.now() - metrics.startedAt,
     usageByCall: metrics.usage,
+    estimatedCostBrl: Number(estimatedCostBrlTotal.toFixed(4)),
+    projectedCostBrl: Number(metrics.projectedCostBrl.toFixed(4)),
+    maxCostBrl: metrics.runtimeConfig.maxCostBrl,
   });
 }
 
@@ -787,13 +871,19 @@ function hashString(value) {
 
 function normalizePaidAccess(body) {
   const catalog = createProductCatalog(process.env);
-  if (catalog.astralDocument.priceCents <= 0) return null;
+  if (catalog.astralDocument.priceCents <= 0) {
+    const freeProduction = String(
+      process.env.VITE_ASTRO911_ALLOW_FREE_PRODUCTION ?? "false",
+    ).trim().toLowerCase() === "true";
+    if (!freeProduction) throw new PaymentLedgerError("astral_not_configured", 503);
+    return null;
+  }
   const payment = body?.payment;
   const sessionId = String(payment?.sessionId ?? "").trim();
   const productId = String(payment?.productId ?? "").trim();
   const readingId = String(payment?.readingId ?? "").trim();
   const expectedReadingId = `astro-v1-${hashString(JSON.stringify(body?.context?.chart ?? {}))}`;
-  if (!/^cs_(?:test_|live_)?[a-zA-Z0-9]{10,220}$/u.test(sessionId)
+  if (!/^mp-\d{5,30}$/u.test(sessionId)
       || productId !== catalog.astralDocument.id
       || readingId !== expectedReadingId) {
     throw new PaymentLedgerError("payment_required", 402);

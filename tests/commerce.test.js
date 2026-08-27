@@ -27,6 +27,7 @@ test("Documento Astral fica preparado sem inventar preço ainda não decidido", 
   assert.equal(commerceConfig.products.astralDocument.priceCents, 0);
   assert.equal(commerceConfig.products.astralDocument.price, "A definir");
   assert.equal(commerceConfig.products.astralDocument.accessRequired, false);
+  assert.equal(commerceConfig.products.astralDocument.available, false);
   assert.equal(commerceConfig.products.astralDocument.kind, "astral_document");
 });
 
@@ -36,12 +37,12 @@ test("Documento Astral usa o mesmo catálogo confiável no cliente e no servidor
   const page = source("../src/pages/AstralMapPage.jsx");
 
   assert.match(catalog, /kind:\s*"astral_document"/u);
-  assert.match(checkout, /parsed\.pathname === "\/mapa-astral"/u);
+  assert.match(checkout, /product\.kind === "astral_document"/u);
   assert.match(checkout, /product\.priceCents <= 0/u);
   assert.match(page, /offerContext:\s*ASTRAL_OFFER_CONTEXT/u);
   assert.match(page, /readingId:\s*chartFingerprint/u);
   assert.match(page, /verifyHostedCheckout/u);
-  assert.match(page, /astralAccessGranted \? \(/u);
+  assert.match(page, /!astralProduct\.available \? \(/u);
 });
 
 test("bypass comercial só pode existir em import.meta.env.DEV", () => {
@@ -63,7 +64,7 @@ test("produção depende de confirmação server-side e não possui bypass comer
 
   assert.equal(salesConfig.devUnlocked, false);
   assert.match(checkout, /\/api\/checkout/u);
-  assert.match(checkout, /\/api\/checkout-session/u);
+  assert.match(checkout, /\/api\/payment-status/u);
   assert.match(app, /verifyHostedCheckout/u);
   assert.match(app, /savePaymentEntitlement/u);
 });
@@ -109,7 +110,9 @@ test("cada intenção oferece somente a pergunta específica correspondente", ()
   });
   assert.match(app, /data-specific-intent=\{selectedIntent\.id\}/u);
   assert.match(app, /featuredSpecificReading\.positions\.map/u);
-  assert.match(app, /Abrir pergunta de \{selectedIntent\.label\}/u);
+  assert.match(app, /Fazer pergunta incluída de \$\{selectedIntent\.label\}/u);
+  assert.equal(commerceConfig.products.completeReading.includedSpecificQuestions, 5);
+  assert.match(app, /includedRemaining/u);
   assert.doesNotMatch(app, /specificReadings\.filter/u);
   assert.doesNotMatch(app, /specific-teasers/u);
 });

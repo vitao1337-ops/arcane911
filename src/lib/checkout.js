@@ -17,7 +17,10 @@ const checkoutMessages = Object.freeze({
   payment_ledger_conflict: "Este pagamento já está ligado a outra liberação e não foi reutilizado.",
   payment_credit_unavailable: "Este pagamento já liberou o conteúdo contratado e não criou um novo crédito.",
   complete_entitlement_required: "O valor de R$ 5,00 é exclusivo para esta Tiragem Completa.",
-  invalid_checkout_session: "Não foi possível confirmar este pagamento.",
+  invalid_payment_id: "Não foi possível confirmar este pagamento.",
+  invalid_payment_method: "Esse meio de pagamento não está disponível.",
+  invalid_card_data: "Confira os dados do cartão e tente novamente.",
+  invalid_payer: "Confira o e-mail e o documento informados no pagamento.",
   invalid_payload: "Não foi possível preparar esta compra. Reabra a oferta e tente novamente.",
   invalid_order: "Confira o código do pedido e tente novamente.",
   purchase_not_found: "Nenhuma compra confirmada foi encontrada com este código.",
@@ -47,6 +50,14 @@ function cleanText(value, maximumLength = 120) {
   return String(value ?? "").trim().slice(0, maximumLength);
 }
 
+
+function safeReturnPath(value) {
+  const normalized = cleanText(value, 240);
+  if (["/", "/tiragem-completa", "/mapa-astral"].includes(normalized)) return normalized;
+  if (/^\/leituras\/(amor|caminhos|trabalho|decisao|interior)(?:\?origem=tiragem-completa)?$/u.test(normalized)) return normalized;
+  return "/";
+}
+
 export function checkoutErrorMessage(code) {
   return checkoutMessages[code] ?? checkoutMessages.unknown;
 }
@@ -67,7 +78,7 @@ function normalizedOrder(order) {
     offerContext: cleanText(order?.offerContext, 40),
     questionNumber: Number(order?.questionNumber) || 0,
     parentSessionId: cleanText(order?.parentSessionId, 240),
-    returnPath: cleanText(order?.returnPath, 240),
+    returnPath: safeReturnPath(order?.returnPath),
     createdAt: cleanText(order?.createdAt, 40) || new Date().toISOString(),
   };
 }
@@ -124,17 +135,18 @@ async function requestJson(url, body, fetchImplementation = globalThis.fetch) {
 export async function createHostedCheckout(order, options = {}) {
   const normalized = normalizedOrder(order);
   const payload = await requestJson(options.endpoint ?? "/api/checkout", normalized, options.fetchImplementation);
-  if (!/^https:\/\/checkout\.stripe\.com\//iu.test(String(payload?.checkoutUrl ?? ""))) {
+  const checkoutUrl = String(payload?.checkoutUrl ?? "");
+  if (!/^https?:\/\/[^/]+\/pagamento(?:[?#]|$)/iu.test(checkoutUrl)) {
     throw new CheckoutClientError("checkout_invalid_response");
   }
   return payload;
 }
 
-export async function verifyHostedCheckout(sessionId, order, options = {}) {
+export async function verifyHostedCheckout(paymentId, order, options = {}) {
   const normalized = normalizedOrder(order);
-  return requestJson(options.endpoint ?? "/api/checkout-session", {
+  return requestJson(options.endpoint ?? "/api/payment-status", {
     ...normalized,
-    sessionId: cleanText(sessionId, 240),
+    paymentId: cleanText(paymentId, 80),
   }, options.fetchImplementation);
 }
 
@@ -175,6 +187,8 @@ export function savePaymentEntitlement(entitlement) {
     livemode: entitlement?.livemode === true,
     state: cleanText(entitlement?.state, 24) || "active",
     creditAvailable: entitlement?.creditAvailable !== false,
+    completeSummaryUsed: entitlement?.completeSummaryUsed === true,
+    includedQuestionsUsed: Math.max(0, Math.min(10, Number(entitlement?.includedQuestionsUsed) || 0)),
     verifiedAt: cleanText(entitlement?.verifiedAt, 40) || new Date().toISOString(),
     consumedAt: cleanText(entitlement?.consumedAt, 40),
   };
@@ -197,6 +211,49 @@ export function findPaymentEntitlement(criteria = {}) {
   return loadPaymentEntitlements().find((item) => Object.entries(criteria).every(
     ([key, value]) => value === undefined || value === "" || item[key] === value,
   )) ?? null;
+}
+
+export function removePaymentEntitlement(sessionId) {
+  const normalizedSessionId = cleanText(sessionId, 240);
+  if (!normalizedSessionId) return false;
+  const current = loadPaymentEntitlements();
+  const next = current.filter((item) => item.sessionId !== normalizedSessionId);
+  if (next.length === current.length) return false;
+  try {
+    safeSession()?.setItem(ENTITLEMENTS_KEY, JSON.stringify(next));
+    if (typeof window === "object") {
+      window.dispatchEvent(new CustomEvent("arcane911:entitlements-changed"));
+    }
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+export async function verifyStoredPaymentEntitlement(candidate, criteria = {}, options = {}) {
+  if (!candidate?.sessionId || !candidate?.orderId || !candidate?.productId) {
+    throw new CheckoutClientError("payment_mismatch", 409);
+  }
+
+  const payload = await recoverHostedOrder(candidate.orderId, options);
+  const entitlement = payload?.entitlement;
+  const expected = { ...candidate, ...criteria };
+  const identityFields = [
+    "sessionId",
+    "orderId",
+    "productId",
+    "readingId",
+    "readingSlug",
+    "offerContext",
+    "questionNumber",
+  ];
+  const matches = entitlement && identityFields.every((field) => {
+    const expectedValue = expected[field];
+    if (expectedValue === undefined || expectedValue === "" || expectedValue === 0) return true;
+    return entitlement[field] === expectedValue;
+  });
+  if (!matches) throw new CheckoutClientError("payment_mismatch", 409);
+  return entitlement;
 }
 
 export function consumePaymentEntitlement(sessionId) {

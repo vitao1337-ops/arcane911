@@ -158,6 +158,7 @@ export function validateAgent911Request(body) {
       question,
       cardSlugs: slugs,
       spreadId,
+      parentReadingId: slugs.length === 5 ? cleanText(reading.parentReadingId, 120) : "",
       experience,
       canonical,
     },

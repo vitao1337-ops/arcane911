@@ -13,14 +13,7 @@ import {
   readCachedAstro911Document,
   requestAstro911Document,
 } from "../lib/astro911";
-
-const sectionEyebrows = Object.freeze({
-  essencia: "I · Essência e presença",
-  afetos: "II · Vínculos e afetos",
-  vocacao: "III · Vocação e expressão",
-  tensoes: "IV · Tensões e recursos",
-  integracao: "V · Integração consciente",
-});
+import { astro911SectionEyebrows } from "../config/astro911Sections";
 
 function firstName(value) {
   return String(value ?? "").trim().split(/\s+/u)[0] || "você";
@@ -200,7 +193,7 @@ export default function Astral911Document({ chart, entitlement, onStatus }) {
       <div className="astro-document-chapters">
         {document.sections.map((section) => (
           <article className="astro-document-chapter" key={section.id}>
-            <span className="section-kicker">{sectionEyebrows[section.id]}</span>
+            <span className="section-kicker">{astro911SectionEyebrows[section.id]}</span>
             <h4>{section.title}</h4>
             <p>{section.body}</p>
             <div className="astro-document-anchors" aria-label="Posições usadas nesta interpretação">

@@ -1,4 +1,4 @@
-# Arcane911 V22 — operação segura do Agent 911 e Documento Astral
+# Arcane911 V23 — operação segura do Agent 911 e Documento Astral
 
 O tarot usa `POST /api/agent-911` e o Documento Astral usa `POST /api/astro-911`. Nos dois, Gemini continua principal; o segundo modelo Gemini e a OpenAI são paraquedas para falhas recuperáveis. Chaves nunca entram no React.
 
@@ -41,7 +41,7 @@ Nunca configure `VITE_GEMINI_API_KEY`, `VITE_OPENAI_API_KEY` ou outra credencial
 
 ## Créditos pagos
 
-Antes de abrir qualquer cobrança, execute `database/arcane911-payment-ledger.sql` no Supabase e configure o webhook Stripe. A rota de checkout faz um healthcheck antes de chamar o Stripe. Sínteses completas, respostas específicas, aprofundamentos e Documento Astral pago sem sessão válida são recusados antes do provider; uma resposta concluída consome o crédito, enquanto falha ou timeout tenta liberá-lo novamente. A mesma sessão Stripe consumida não cria outro crédito.
+Antes de abrir qualquer cobrança, execute `database/arcane911-payment-ledger.sql` no Supabase e configure o webhook do Mercado Pago. A rota de checkout faz um healthcheck antes de abrir o Brick. Sínteses completas, respostas específicas, aprofundamentos e Documento Astral pago sem pagamento válido são recusados antes do provider; uma resposta concluída consome o crédito, enquanto falha ou timeout tenta liberá-lo novamente. O mesmo pagamento consumido não cria outro crédito.
 
 O ledger guarda somente sessão, pedido, produto, leitura, número da pergunta e timestamps técnicos. Pergunta, cartas, resposta, nome e dados natais não são persistidos.
 
@@ -70,7 +70,7 @@ Para habilitar as rotas reais em DEV, as duas escolhas abaixo precisam ser expl�
 
 ```env
 ARCANE911_DEV_REAL_AI=true
-ARCANE911_DEV_API_TARGET=https://seu-preview-controlado.vercel.app
+ARCANE911_DEV_API_TARGET=https://arcane911.vercel.app
 ```
 
 Também é permitido um servidor local HTTP:
@@ -110,6 +110,12 @@ ASTRO911_QUOTA_COOLDOWN_MS=60000
 ASTRO911_PROVIDER_COOLDOWN_MS=15000
 ASTRO911_DEDUPE_TTL_MS=600000
 ASTRO911_MAX_OUTPUT_TOKENS=8192
+ASTRO911_MAX_COST_BRL=2.00
+ASTRO911_USD_BRL_BUDGET_RATE=6.00
+ASTRO911_GEMINI_INPUT_USD_PER_M=1.50
+ASTRO911_GEMINI_OUTPUT_USD_PER_M=9.00
+ASTRO911_OPENAI_INPUT_USD_PER_M=2.00
+ASTRO911_OPENAI_OUTPUT_USD_PER_M=12.00
 ```
 
 - O rate limit interno devolve `429 rate_limit` e `Retry-After`.
@@ -132,7 +138,7 @@ ASTRO911_MAX_OUTPUT_TOKENS=8192
 
 Não há retry automático de rede nem loop de reparo. Só existe um reparo estrutural, no mesmo candidato, e o orçamento global nunca ultrapassa três chamadas. Antes de cada chamada, a rota reserva um custo conservador; se a soma projetada ultrapassar `AGENT911_MAX_COST_BRL`, ela encerra sem chamar o próximo provider.
 
-O Documento Astral segue o mesmo teto: normalmente uma chamada; duas quando o Gemini principal cai no modelo reserva ou quando um JSON realmente incompleto exige reparo; três apenas quando os dois modelos Gemini falham de modo recuperável e a OpenAI assume. Capítulos fora de ordem e diferenças naturais de redação são normalizados localmente.
+O Documento Astral segue o mesmo orçamento de três chamadas e possui teto próprio de R$ 2,00 por geração: normalmente uma chamada; duas quando o Gemini principal cai no modelo reserva ou quando um JSON realmente incompleto exige reparo; três apenas quando os dois modelos Gemini falham de modo recuperável e a OpenAI assume. Capítulos fora de ordem e diferenças naturais de redação são normalizados localmente. Sem preço, a produção recusa a geração antes do provider; uma campanha gratuita precisa de `VITE_ASTRO911_ALLOW_FREE_PRODUCTION=true` explícito.
 
 ## Logs e custo
 
@@ -156,7 +162,7 @@ E, no Documento Astral:
 - `astro911_request_completed`
 - `astro911_request_failed`
 
-`agent911_usage` e `astro911_usage` registram provider, modelo, tipo da leitura, tokens de entrada/saída/raciocínio/total quando fornecidos pelo provider, chamadas, fallback, reparo e duração. No tarot, também entram `estimatedCostBrl`, `projectedCostBrl` e `maxCostBrl`. `usageByCall` preserva a divisão entre candidatos. Não são registrados pergunta, resposta, documento, dados natais, nome, e-mail ou chave.
+`agent911_usage` e `astro911_usage` registram provider, modelo, tipo da leitura, tokens de entrada/saída/raciocínio/total quando fornecidos pelo provider, chamadas, fallback, reparo, duração, `estimatedCostBrl`, `projectedCostBrl` e `maxCostBrl`. `usageByCall` preserva a divisão entre candidatos. Não são registrados pergunta, resposta, documento, dados natais, nome, e-mail ou chave.
 
 Os preços unitários e o câmbio usados no teto são variáveis de ambiente. Atualize-os quando a tabela dos provedores mudar. A estimativa é um freio técnico, não substitui conferir a fatura real nem provar margem.
 
@@ -164,7 +170,8 @@ Os preços unitários e o câmbio usados no teto são variáveis de ambiente. At
 
 - Tiragem Completa: R$ 19,99 e modal obrigatório antes de seguir. Em produção, o modal encaminha ao checkout configurado; no DEV, o mesmo modal explica o pagamento e oferece bypass sem cobrança.
 - Consulta 911 ligada à Ferradura: R$ 5,00 por pergunta, conforme o limite configurado.
-- Pergunta específica de cinco cartas depois da Tiragem Completa: R$ 5,00.
+- As cinco primeiras perguntas específicas de cinco cartas depois da Tiragem Completa estão incluídas; cada resposta ocupa um slot atômico da compra.
+- Pergunta específica adicional depois dos cinco slots: R$ 5,00.
 - Pergunta específica avulsa, acessada pela primeira página da tiragem: R$ 10,00.
 
 Os dois valores das perguntas específicas possuem IDs e URLs de checkout separados. O valor de R$ 5,00 exige uma Tiragem Completa paga e essa elegibilidade deve ser confirmada no servidor; o parâmetro de origem do navegador serve apenas para apresentação da oferta.
@@ -178,12 +185,12 @@ O backend distingue `rate_limit`, `provider_quota`, `provider_timeout`, `provide
 1. Faça uma abertura de três cartas e confirme um único `agent911_provider_call` quando Gemini responde normalmente.
 2. Continue para a Ferradura e confirme uma única chamada para a síntese de sete cartas.
 3. Recarregue a leitura pronta e confirme que o cache de sessão evita nova cobrança.
-4. Em Preview, simule 429 no Gemini e confirme a sequência principal → modelo fallback → OpenAI, se configurada.
+4. Em teste controlado local, simule 429 no Gemini e confirme a sequência principal → modelo fallback → OpenAI, se configurada.
 5. Confirme que 429 interno mostra `rate_limit`, enquanto quota termina em `provider_quota`.
 6. Confirme `agent911_usage` sem conteúdo privado.
 7. Abra o Documento Astral e confirme um único `astro911_provider_call` no sucesso normal.
 8. Confira `astro911_usage`, cache, dedupe e mensagens neutras de quota/timeout.
 9. Em DEV padrão, confira Network sem chamadas para Vercel, Gemini ou OpenAI e atravesse todos os produtos pagos com `ARCANE911_DEV_UNLOCK_PAID=true`.
-10. Em Preview, conclua uma Pergunta 911 paga e confirme o consumo único no ledger.
+10. Antes da abertura comercial, conclua uma Pergunta 911 paga em Production controlada e confirme o consumo único no ledger.
 11. Reapresente a URL antiga de sucesso e confirme que nenhum crédito novo é criado.
 12. Antes de cobrar em produção, siga a ordem completa de `PAGAMENTOS-SETUP.md`.

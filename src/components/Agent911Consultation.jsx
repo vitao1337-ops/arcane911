@@ -22,8 +22,11 @@ import {
   createCheckoutOrderId,
   createHostedCheckout,
   loadPaymentEntitlements,
+  removePaymentEntitlement,
+  savePaymentEntitlement,
   savePendingCheckout,
   trackCommercialEvent,
+  verifyStoredPaymentEntitlement,
 } from "../lib/checkout";
 
 function resultFromFallback(reading, index, source = "mock") {
@@ -67,6 +70,7 @@ export default function Agent911Consultation({
   const [retryDelayMs, setRetryDelayMs] = useState(0);
   const [loading, setLoading] = useState(false);
   const requestInFlight = useRef(false);
+  const creditVerificationRef = useRef({ sessionId: "", promise: null, verified: false, failed: false });
   const questionsRemaining = agent911Config.offer.questionLimit - responses.length;
 
   const context = useMemo(() => createTarotAgentContext({
@@ -86,16 +90,57 @@ export default function Agent911Consultation({
   useEffect(() => {
     const synchronizeCredit = () => {
       if (agent911Config.offer.devUnlocked) return;
-      const entitlement = loadPaymentEntitlements().find((item) => (
+      const candidate = loadPaymentEntitlements().find((item) => (
         item.productId === agent911Config.offer.productId
         && item.readingId === createdAt
         && !item.consumedAt
       ));
-      if (!entitlement) return;
-      setActiveEntitlement(entitlement);
-      setPaymentMessage(`Pagamento confirmado. Uma pergunta foi liberada. Código: ${entitlement.orderId}.`);
-      setPaymentState("paid");
-      setStage(profile ? "conversation" : "register");
+      if (!candidate) {
+        creditVerificationRef.current = { sessionId: "", promise: null, verified: false, failed: false };
+        setActiveEntitlement(null);
+        return;
+      }
+
+      if (creditVerificationRef.current.sessionId !== candidate.sessionId) {
+        creditVerificationRef.current = {
+          sessionId: candidate.sessionId,
+          promise: verifyStoredPaymentEntitlement(candidate, {
+            productId: agent911Config.offer.productId,
+            readingId: createdAt,
+            questionNumber: candidate.questionNumber,
+          }),
+          verified: false,
+          failed: false,
+        };
+      }
+      const verification = creditVerificationRef.current;
+      if (verification.verified || verification.failed || !verification.promise) return;
+
+      verification.promise
+        .then((serverEntitlement) => {
+          if (creditVerificationRef.current.sessionId !== candidate.sessionId
+              || creditVerificationRef.current.verified) return;
+          if (serverEntitlement.creditAvailable === false) {
+            creditVerificationRef.current.failed = true;
+            removePaymentEntitlement(candidate.sessionId);
+            return;
+          }
+          creditVerificationRef.current.verified = true;
+          const entitlement = savePaymentEntitlement(serverEntitlement);
+          if (!entitlement) return;
+          setActiveEntitlement(entitlement);
+          setPaymentMessage(`Pagamento confirmado. Uma pergunta foi liberada. Código: ${entitlement.orderId}.`);
+          setPaymentState("paid");
+          setStage(profile ? "conversation" : "register");
+        })
+        .catch((error) => {
+          if (creditVerificationRef.current.sessionId !== candidate.sessionId) return;
+          creditVerificationRef.current.failed = true;
+          setActiveEntitlement(null);
+          if (["invalid_order", "payment_credit_unavailable", "payment_mismatch", "purchase_not_found"].includes(error?.code)) {
+            removePaymentEntitlement(candidate.sessionId);
+          }
+        });
     };
     synchronizeCredit();
     window.addEventListener("arcane911:entitlements-changed", synchronizeCredit);

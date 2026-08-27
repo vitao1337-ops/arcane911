@@ -2,13 +2,10 @@ import {
   CheckoutError,
   checkoutErrorPayload,
   checkoutProductNeedsLedger,
-  createStripeCheckout,
+  mercadoPagoConfigured,
+  prepareMercadoPagoCheckout,
 } from "../server/checkout-core.js";
-import {
-  assertPaymentLedgerReady,
-  paymentLedgerConfigured,
-} from "../server/payment-ledger.js";
-import { stripeWebhookConfigured } from "../server/stripe-webhook.js";
+import { assertPaymentLedgerReady, paymentLedgerConfigured } from "../server/payment-ledger.js";
 
 function sendJson(response, status, payload) {
   response.setHeader("Cache-Control", "no-store, max-age=0");
@@ -21,16 +18,12 @@ function parseBody(request) {
   const body = request.body && typeof request.body === "object"
     ? request.body
     : typeof request.body === "string" ? JSON.parse(request.body) : null;
-  if (!body || Array.isArray(body) || JSON.stringify(body).length > 12_000) {
-    throw new Error("invalid_payload");
-  }
+  if (!body || Array.isArray(body) || JSON.stringify(body).length > 12_000) throw new Error("invalid_payload");
   return body;
 }
 
 function requestHost(request) {
-  return String(request.headers["x-forwarded-host"] ?? request.headers.host ?? "")
-    .split(",")[0]
-    .trim();
+  return String(request.headers["x-forwarded-host"] ?? request.headers.host ?? "").split(",")[0].trim();
 }
 
 function requestOrigin(request) {
@@ -46,11 +39,7 @@ function originIsAllowed(request) {
   try {
     const originUrl = new URL(origin);
     if (originUrl.host === requestHost(request)) return true;
-    return String(process.env.ARCANE911_ALLOWED_ORIGINS ?? "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean)
-      .includes(originUrl.origin);
+    return String(process.env.ARCANE911_ALLOWED_ORIGINS ?? "").split(",").map((value) => value.trim()).filter(Boolean).includes(originUrl.origin);
   } catch {
     return false;
   }
@@ -64,45 +53,19 @@ export default async function handler(request, response) {
   if (!originIsAllowed(request)) return sendJson(response, 403, { error: "origin_not_allowed" });
 
   let body;
-  try {
-    body = parseBody(request);
-  } catch {
-    return sendJson(response, 400, { error: "invalid_payload" });
-  }
-
-  console.info("checkout_request_started", {
-    productId: String(body.productId ?? "").slice(0, 80),
-    orderId: String(body.orderId ?? "").slice(0, 120),
-  });
+  try { body = parseBody(request); } catch { return sendJson(response, 400, { error: "invalid_payload" }); }
 
   try {
-    if (!stripeWebhookConfigured()) {
-      throw new CheckoutError("webhook_not_configured", 503);
-    }
-    if (checkoutProductNeedsLedger(body.productId) && !paymentLedgerConfigured()) {
-      throw new CheckoutError("payment_ledger_not_configured", 503);
-    }
+    if (!mercadoPagoConfigured()) throw new CheckoutError("checkout_not_configured", 503);
+    if (checkoutProductNeedsLedger(body.productId) && !paymentLedgerConfigured()) throw new CheckoutError("payment_ledger_not_configured", 503);
     if (checkoutProductNeedsLedger(body.productId)) {
-      try {
-        await assertPaymentLedgerReady();
-      } catch (error) {
-        throw new CheckoutError(error?.code ?? "payment_ledger_unavailable", error?.status ?? 503);
-      }
+      try { await assertPaymentLedgerReady(); }
+      catch (error) { throw new CheckoutError(error?.code ?? "payment_ledger_unavailable", error?.status ?? 503); }
     }
-    const result = await createStripeCheckout(body, { origin: requestOrigin(request) });
-    console.info("checkout_request_completed", {
-      productId: result.productId,
-      orderId: result.orderId,
-    });
+    const result = await prepareMercadoPagoCheckout(body, { origin: requestOrigin(request) });
     return sendJson(response, 200, result);
   } catch (error) {
     const failure = checkoutErrorPayload(error);
-    console.error("checkout_request_failed", {
-      productId: String(body.productId ?? "").slice(0, 80),
-      orderId: String(body.orderId ?? "").slice(0, 120),
-      type: failure.body.error,
-      status: failure.status,
-    });
     return sendJson(response, failure.status, failure.body);
   }
 }

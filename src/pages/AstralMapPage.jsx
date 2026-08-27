@@ -32,10 +32,12 @@ import {
   createHostedCheckout,
   findPaymentEntitlement,
   loadPendingCheckout,
+  removePaymentEntitlement,
   savePaymentEntitlement,
   savePendingCheckout,
   trackCommercialEvent,
   verifyHostedCheckout,
+  verifyStoredPaymentEntitlement,
 } from "../lib/checkout";
 
 const ASTRO_STORAGE_KEY = "arcane911.astral.v2";
@@ -177,11 +179,11 @@ function AstralDocumentGate({ product, paymentState, paymentMessage, onCheckout 
         <span className="section-kicker">03 · Documento Astral 911</span>
         <h3 id="astro-access-title">Seu céu está calculado.<br />O documento completo está protegido.</h3>
         <p>
-          A compra libera a leitura longa ancorada neste mapa, com cinco capítulos,
+          A compra libera a leitura longa ancorada neste mapa, com oito capítulos,
           retrato central, práticas de integração, perguntas de reflexão e versão para PDF.
         </p>
         <div className="astro-document-progress" aria-label="Conteúdo do Documento Astral">
-          <span><FileText size={15} /> Cinco capítulos pessoais</span>
+          <span><FileText size={15} /> Oito capítulos pessoais</span>
           <span><Sparkles size={15} /> Posições reais do mapa</span>
           <span><ShieldCheck size={15} /> Confirmação segura no servidor</span>
         </div>
@@ -191,6 +193,23 @@ function AstralDocumentGate({ product, paymentState, paymentMessage, onCheckout 
         </button>
         {paymentMessage ? <small className={`astro-payment-message is-${paymentState}`} role={paymentState === "error" ? "alert" : "status"}>{paymentMessage}</small> : null}
         <small>O cálculo básico permanece disponível. Dados de nascimento e texto do documento não são enviados ao pagamento.</small>
+      </div>
+    </section>
+  );
+}
+
+function AstralDocumentUnavailable() {
+  return (
+    <section className="astro-document astro-document-loading astro-document-access" aria-labelledby="astro-unavailable-title">
+      <div className="astro-document-seal" aria-hidden="true"><span>✦</span><strong>911</strong></div>
+      <div>
+        <span className="section-kicker">03 · Documento Astral 911</span>
+        <h3 id="astro-unavailable-title">Seu céu está calculado.<br />A leitura premium abre quando o preço for publicado.</h3>
+        <p>
+          O mapa natal completo abaixo continua disponível. A geração conectada fica pausada
+          para não criar custo de IA sem uma oferta comercial definida.
+        </p>
+        <small>Nenhuma cobrança foi iniciada e nenhuma chamada de interpretação foi realizada.</small>
       </div>
     </section>
   );
@@ -212,6 +231,7 @@ export default function AstralMapPage() {
   const controllerRef = useRef(null);
   const resultRef = useRef(null);
   const checkoutVerificationRef = useRef("");
+  const entitlementRestoreRef = useRef({ key: "", promise: null });
   const updateStatus = useMemo(() => (message) => setStatus(message), []);
 
   const maxDate = useMemo(() => {
@@ -227,28 +247,64 @@ export default function AstralMapPage() {
       return "";
     }
   }, [chart]);
-  const astralAccessGranted = !astralProduct.accessRequired
+  const astralAccessGranted = astralProduct.available && (
+    !astralProduct.accessRequired
     || commerceConfig.devUnlocked
     || Boolean(
       astralEntitlement
       && astralEntitlement.productId === astralProduct.id
       && astralEntitlement.readingId === chartFingerprint
       && astralEntitlement.offerContext === ASTRAL_OFFER_CONTEXT,
-    );
+    )
+  );
 
   useEffect(() => () => controllerRef.current?.abort(), []);
 
   useEffect(() => {
     if (!chartFingerprint) {
       setAstralEntitlement(null);
-      return;
+      return undefined;
     }
-    setAstralEntitlement(findPaymentEntitlement({
+    if (!astralProduct.accessRequired || commerceConfig.devUnlocked) return undefined;
+
+    const candidate = findPaymentEntitlement({
       productId: astralProduct.id,
       readingId: chartFingerprint,
       offerContext: ASTRAL_OFFER_CONTEXT,
-    }));
-  }, [astralProduct.id, chartFingerprint]);
+    });
+    setAstralEntitlement(null);
+    if (!candidate) return undefined;
+
+    const restoreKey = `${candidate.sessionId}:${chartFingerprint}`;
+    if (entitlementRestoreRef.current.key !== restoreKey) {
+      entitlementRestoreRef.current = {
+        key: restoreKey,
+        promise: verifyStoredPaymentEntitlement(candidate, {
+          productId: astralProduct.id,
+          readingId: chartFingerprint,
+          offerContext: ASTRAL_OFFER_CONTEXT,
+        }),
+      };
+    }
+
+    let subscribed = true;
+    entitlementRestoreRef.current.promise
+      .then((serverEntitlement) => {
+        if (!subscribed) return;
+        const entitlement = savePaymentEntitlement(serverEntitlement);
+        if (entitlement) setAstralEntitlement(entitlement);
+      })
+      .catch((restoreError) => {
+        if (!subscribed) return;
+        setAstralEntitlement(null);
+        if (["invalid_order", "payment_credit_unavailable", "payment_mismatch", "purchase_not_found"].includes(restoreError?.code)) {
+          removePaymentEntitlement(candidate.sessionId);
+        }
+      });
+    return () => {
+      subscribed = false;
+    };
+  }, [astralProduct.accessRequired, astralProduct.id, chartFingerprint]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -264,7 +320,7 @@ export default function AstralMapPage() {
       return;
     }
 
-    const sessionId = params.get("session_id") ?? "";
+    const sessionId = params.get("payment_id") ?? "";
     if (checkoutState !== "success" || !sessionId || checkoutVerificationRef.current === sessionId) return;
     if (!chartFingerprint) {
       clearPendingCheckout();
@@ -457,12 +513,14 @@ export default function AstralMapPage() {
           <div className="astro-test-access">
             <FileText size={17} />
             <span>
-              <strong>{commerceConfig.devUnlocked ? "Modo DEV completo e gratuito." : "Documento premium em validação."}</strong>
+              <strong>{commerceConfig.devUnlocked ? "Modo DEV completo e gratuito." : "Documento premium preparado."}</strong>
               {commerceConfig.devUnlocked && astro911Config.devMockEnabled
                 ? " Leitura local com o mesmo contrato, sem chamadas pagas."
                 : astralProduct.accessRequired
                   ? ` O cálculo abre primeiro; o documento completo custa ${astralProduct.price}.`
-                  : " Acesso aberto enquanto o preço próprio do Documento Astral é definido."}
+                  : astralProduct.available
+                    ? " Acesso gratuito em produção foi habilitado explicitamente."
+                    : " O cálculo abre; a interpretação conectada aguarda preço e não gera custo."}
             </span>
           </div>
           <div className="astro-hero-notes">
@@ -633,7 +691,9 @@ export default function AstralMapPage() {
             </article>
           </div>
 
-          {astralAccessGranted ? (
+          {!astralProduct.available ? (
+            <AstralDocumentUnavailable />
+          ) : astralAccessGranted ? (
             <Astral911Document chart={chart} entitlement={astralEntitlement} onStatus={updateStatus} />
           ) : (
             <AstralDocumentGate

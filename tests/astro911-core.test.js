@@ -94,7 +94,7 @@ test("o mock DEV é um documento completo, pessoal e válido no mesmo contrato d
 
   assert.equal(payload.meta.provider, "mock");
   assert.equal(payload.meta.rawBirthDataSent, false);
-  assert.equal(document.sections.length, 5);
+  assert.equal(document.sections.length, 8);
   assert.ok(document.sections.every((section) => section.body.length > 700));
   assert.deepEqual(auditAstro911Document(document, normalized), { ok: true, reasons: [] });
 });

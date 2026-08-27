@@ -8,6 +8,11 @@ function optionalCents(value) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
 }
 
+function boundedInteger(value, fallback, minimum, maximum) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
+}
+
 function productId(value, fallback) {
   const normalized = String(value ?? fallback).trim();
   return /^[a-z0-9][a-z0-9._-]{2,79}$/iu.test(normalized) ? normalized : fallback;
@@ -20,6 +25,7 @@ export function createProductCatalog(env = {}) {
       name: "Tiragem Completa",
       priceCents: positiveCents(env.VITE_COMPLETE_READING_PRICE_CENTS, 1_999),
       kind: "complete_reading",
+      includedSpecificQuestions: boundedInteger(env.VITE_COMPLETE_INCLUDED_QUESTIONS, 5, 1, 5),
     }),
     agentQuestion: Object.freeze({
       id: productId(env.VITE_AGENT911_QUESTION_PRODUCT_ID, "agent911-pergunta"),
@@ -49,7 +55,7 @@ export function createProductCatalog(env = {}) {
       id: productId(env.VITE_ASTRO911_PRODUCT_ID, "astro911-documento-completo"),
       name: "Documento Astral 911",
       // O produto só fecha quando o valor for deliberadamente configurado.
-      // Zero mantém a validação aberta e impede o servidor de criar cobrança acidental.
+      // Zero mantém somente o mapa calculado aberto e impede cobrança ou IA acidental.
       priceCents: optionalCents(env.VITE_ASTRO911_PRICE_CENTS),
       kind: "astral_document",
     }),

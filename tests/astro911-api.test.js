@@ -3,6 +3,10 @@ import test, { beforeEach } from "node:test";
 import handler, { resetAstro911RuntimeStateForTests } from "../api/astro-911.js";
 import { sampleAstroDocument, sampleAstroRequest } from "./astro911-fixture.js";
 
+// A suíte ativa deliberadamente o modo gratuito. Sem este opt-in, produção
+// sem preço recusa a geração antes de qualquer chamada ao provedor.
+process.env.VITE_ASTRO911_ALLOW_FREE_PRODUCTION = "true";
+
 beforeEach(() => resetAstro911RuntimeStateForTests());
 
 function mockResponse() {
@@ -136,6 +140,30 @@ test("a rota astral recusa método diferente de POST sem chamar o provedor", asy
   }
 });
 
+test("produção sem preço ou campanha gratuita recusa o documento antes do provedor", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  try {
+    await withEnvironment({
+      VITE_ASTRO911_PRICE_CENTS: undefined,
+      VITE_ASTRO911_ALLOW_FREE_PRODUCTION: "false",
+      GEMINI_API_KEY: "must-not-run",
+    }, async () => {
+      globalThis.fetch = async () => {
+        calls += 1;
+        throw new Error("não deveria chamar");
+      };
+      const response = mockResponse();
+      await handler(mockRequest(), response);
+      assert.equal(response.statusCode, 503);
+      assert.equal(response.payload.error, "astral_not_configured");
+      assert.equal(calls, 0);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Gemini principal entrega documento válido em uma chamada e registra tokens reais", async () => {
   const originalFetch = globalThis.fetch;
   const originalInfo = console.info;
@@ -176,10 +204,41 @@ test("Gemini principal entrega documento válido em uma chamada e registra token
         },
         { inputTokens: 1_240, outputTokens: 3_180, totalTokens: 4_420, calls: 1 },
       );
+      assert.equal(usageLogs[0].estimatedCostBrl, 0.1829);
+      assert.equal(usageLogs[0].maxCostBrl, 2);
     });
   } finally {
     globalThis.fetch = originalFetch;
     console.info = originalInfo;
+  }
+});
+
+test("o teto de custo astral bloqueia antes de qualquer chamada externa", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalError = console.error;
+  let calls = 0;
+  console.error = () => {};
+  try {
+    await withEnvironment({
+      ASTRO911_PROVIDER: "gemini",
+      GEMINI_API_KEY: "gemini-budget",
+      ASTRO911_MODEL: "gemini-3.5-flash",
+      ASTRO911_FALLBACK_MODEL: "off",
+      ASTRO911_MAX_COST_BRL: "0.10",
+    }, async () => {
+      globalThis.fetch = async () => {
+        calls += 1;
+        return geminiSuccess();
+      };
+      const response = mockResponse();
+      await handler(mockRequest(), response);
+      assert.equal(response.statusCode, 503);
+      assert.equal(response.payload.error, "provider_unavailable");
+      assert.equal(calls, 0);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalError;
   }
 });
 
@@ -339,7 +398,7 @@ test("capítulos parafraseados e fora de ordem são normalizados localmente em u
       assert.equal(calls, 1);
       assert.deepEqual(
         response.payload.document.sections.map((section) => section.id),
-        ["essencia", "afetos", "vocacao", "tensoes", "integracao"],
+        ["essencia", "personalidade", "afetos", "vocacao", "dinheiro", "potenciais", "tensoes", "integracao"],
       );
     });
   } finally {

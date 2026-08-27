@@ -1,4 +1,4 @@
-const sectionIds = Object.freeze(["essencia", "afetos", "vocacao", "tensoes", "integracao"]);
+import { astro911SectionIds as sectionIds } from "../config/astro911Sections.js";
 
 function firstName(value) {
   return String(value ?? "").trim().split(/\s+/u)[0] || "Você";
@@ -44,6 +44,8 @@ export function buildAstro911MockPayload(chart) {
   const mars = planet(chart, "mars");
   const jupiter = planet(chart, "jupiter");
   const saturn = planet(chart, "saturn");
+  const uranus = planet(chart, "uranus");
+  const neptune = planet(chart, "neptune");
   const aspects = chart.aspects.slice(0, 5);
   const firstAspect = aspects[0];
   const secondAspect = aspects[1] ?? aspects[0];
@@ -68,6 +70,13 @@ export function buildAstro911MockPayload(chart) {
         practicalDirection: "Durante uma semana, escolha uma decisão por dia e registre três linhas separadas: o que você quer construir, o que precisa emocionalmente e como está apresentando isso ao mundo. Compare as três antes de agir.",
       },
       {
+        id: "personalidade",
+        title: "A forma de chegar, pensar e se fazer entender",
+        body: `O Ascendente em ${chart.ascendant.sign.name} descreve o modo como você tende a entrar nas situações, captar o clima e organizar a primeira resposta. Isso não resume sua identidade: ${placement(sun)} indica uma direção consciente que se revela com o tempo, enquanto ${placement(mercury)} mostra como pensamento, linguagem e curiosidade participam da expressão dessa direção. ${aspectSentence(firstAspect)} acrescenta uma relação concreta entre funções do mapa e pode fazer sua presença variar conforme o contexto exige rapidez, cautela, exposição ou escuta. A impressão inicial que alguém recebe não é uma sentença sobre você, e o mapa tampouco prova como os outros o enxergam. Ele ajuda a observar a distância possível entre o que você pretende comunicar, o modo como formula a mensagem e o gesto que chega primeiro. Quando essas camadas divergem, explicar mais nem sempre resolve; às vezes é preciso mudar ritmo, exemplo ou limite. Quando cooperam, sua personalidade aparece menos como rótulo e mais como uma assinatura reconhecível de presença e comunicação.`,
+        anchors: ["angle:ascendant", "planet:sun", "planet:mercury", aspectId(firstAspect)],
+        practicalDirection: "Escolha uma conversa importante e prepare três frases: a intenção que deseja deixar clara, um exemplo concreto e o limite que precisa preservar. Depois observe se seu tom, seu tempo de resposta e suas palavras levaram a mesma mensagem.",
+      },
+      {
         id: "afetos",
         title: "Afeto, desejo e reciprocidade precisam de tradução",
         body: `${placement(moon)} descreve necessidades emocionais e a maneira mais instintiva de buscar proteção. ${placement(venus)} mostra como prazer, valor e vínculo ganham forma, enquanto ${placement(mars)} acrescenta desejo, iniciativa e reação diante de obstáculos. Essas três funções não são sinônimas: você pode sentir de um jeito, demonstrar de outro e agir sob pressão por uma terceira via. ${aspectSentence(secondAspect)} amplia essa dinâmica e indica um ponto em que facilidade ou tensão precisa ser usada conscientemente, em vez de virar automatismo. O mapa não revela o pensamento de outra pessoa nem prova reciprocidade; ele ajuda a reconhecer o que você oferece, o que espera e como reage quando não recebe uma resposta clara. Relações ficam mais legíveis quando expectativa, acordo e comportamento observável deixam de ocupar a mesma frase.`,
@@ -80,6 +89,20 @@ export function buildAstro911MockPayload(chart) {
         body: `O Meio do Céu em ${chart.midheaven.sign.name} descreve a direção simbólica da sua presença pública e dos papéis em que você deseja ser reconhecido. ${placement(mercury)} mostra como pensamento e linguagem entram na construção desse caminho; ${placement(jupiter)} fala de expansão, confiança e aprendizado; e ${placement(saturn)} revela onde tempo, limite e responsabilidade exigem consistência. O conjunto não determina uma profissão. Ele oferece critérios para perceber em quais ambientes você tende a produzir melhor: aqueles que permitem transformar conhecimento em entrega, sustentar desenvolvimento e reconhecer o custo real de cada ambição. Quando crescimento e estrutura se escutam, autoridade não precisa virar rigidez e liberdade não precisa virar dispersão. A assinatura profissional nasce do modo como você repete escolhas de qualidade, não de um único momento de inspiração.`,
         anchors: ["angle:midheaven", "planet:mercury", "planet:jupiter", "planet:saturn"],
         practicalDirection: "Escolha um projeto atual e escreva qual competência ele expande, qual responsabilidade ele exige e qual evidência concreta mostrará progresso em trinta dias. Se nenhum dos três pontos estiver claro, reduza o projeto até caber numa ação verificável.",
+      },
+      {
+        id: "dinheiro",
+        title: "Valor, expansão e limite nas escolhas materiais",
+        body: `${placement(venus)} fala daquilo a que você atribui valor e das condições em que prazer, troca e escolha parecem valer o investimento de energia. ${placement(jupiter)} amplia a busca por experiência e oportunidade, enquanto ${placement(saturn)} lembra que todo crescimento encontra tempo, responsabilidade e limite. ${aspectSentence(secondAspect)} acrescenta uma dinâmica que pode facilitar ou tensionar a passagem entre desejo e critério. Nada disso prevê renda, riqueza ou perda, nem substitui planejamento financeiro. O uso simbólico do mapa está em perguntar como você decide: por impulso, segurança, reconhecimento, liberdade, pertencimento ou construção de longo prazo. Uma escolha material pode atender mais de uma dessas necessidades, mas elas não têm o mesmo custo nem o mesmo prazo. Quando valor pessoal e preço se confundem, gastar, guardar ou recusar pode carregar um peso emocional maior do que a situação exige. Separar desejo, recurso disponível e consequência concreta permite que expansão e prudência trabalhem juntas, sem transformar medo em regra nem entusiasmo em garantia.`,
+        anchors: ["planet:venus", "planet:jupiter", "planet:saturn", aspectId(secondAspect)],
+        practicalDirection: "Antes de uma decisão material relevante, registre o que está comprando ou preservando, qual necessidade espera atender, o custo total e quando poderá avaliar o resultado. Use dados reais e, se houver risco financeiro, procure orientação qualificada.",
+      },
+      {
+        id: "potenciais",
+        title: "Capacidades que crescem quando encontram prática",
+        body: `${placement(jupiter)} aponta uma forma possível de ampliar repertório, confiança e horizonte, mas expansão só ganha consistência quando encontra contexto e repetição. ${placement(uranus)} acrescenta abertura para romper automatismos, enquanto ${placement(neptune)} pode ampliar imaginação, sensibilidade simbólica ou percepção de nuances. ${aspectSentence(thirdAspect)} mostra que essas funções não atuam isoladamente: facilidade pode virar recurso quando recebe direção, e tensão pode produzir aprendizagem quando existe margem para testar sem se expor a um custo desnecessário. O mapa não garante talento nem mede competência. Ele oferece hipóteses sobre condições em que certas capacidades tendem a aparecer com mais nitidez — curiosidade, invenção, leitura de ambiente, síntese, persistência ou coragem para rever uma forma conhecida. Potencial sem prática permanece expectativa; prática sem critério pode virar repetição vazia. O ponto fértil está em escolher uma habilidade, criar uma entrega pequena e comparar o resultado com o que você imaginava sobre si.`,
+        anchors: ["planet:jupiter", "planet:uranus", "planet:neptune", aspectId(thirdAspect)],
+        practicalDirection: "Escolha uma capacidade que deseja desenvolver e transforme-a num experimento de sete dias com começo, fim e evidência observável. Ao concluir, registre o que veio com facilidade, o que exigiu treino e qual próximo teste faz sentido.",
       },
       {
         id: "tensoes",
@@ -122,7 +145,7 @@ export function buildAstro911MockPayload(chart) {
     document,
     factLabels,
     meta: {
-      schemaVersion: "2026-08-13.2",
+      schemaVersion: "2026-08-22.3",
       grounded: true,
       provider: "mock",
       model: "local-development",

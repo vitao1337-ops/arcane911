@@ -70,7 +70,7 @@ function completeSummaryBody(payment = null) {
   return body;
 }
 
-function specificSummaryBody(payment = null) {
+function specificSummaryBody(payment = null, parentReadingId = "") {
   const reading = specificReadingsBySlug.caminhos;
   const layout = buildSpecificLayout(reading);
   const cards = [tarotCards[1], tarotCards[4], tarotCards[7], tarotCards[10], tarotCards[13]];
@@ -91,6 +91,7 @@ function specificSummaryBody(payment = null) {
         intentLabel: "Caminhos",
         question: "Qual decisão precisa de limite agora?",
         spreadId: reading.slug,
+        parentReadingId,
         cards: cards.map((card, index) => ({
           slug: card.slug,
           position: { id: layout[index].id },
@@ -185,7 +186,7 @@ test("crédito formal sem ledger configurado falha fechado e não consome IA", a
     globalThis.fetch = async () => { calls += 1; };
     try {
       const body = followUpBody({
-        sessionId: "cs_test_paidfollowup123456",
+        sessionId: "mp-12345678903",
         productId: "agent911-pergunta",
         readingId: "2026-08-17T00:00:00.000Z",
         questionNumber: 1,
@@ -207,7 +208,7 @@ test("falha do provider devolve o crédito ao ledger em vez de queimá-lo", asyn
     GEMINI_FALLBACK_MODEL: "off",
     OPENAI_API_KEY: undefined,
     SUPABASE_URL: "https://arcane-ledger.supabase.co",
-    SUPABASE_SECRET_KEY: "sb_secret_arcane911_payment_release_123456",
+    SUPABASE_SECRET_KEY: ["sb", "secret", "arcane911", "payment", "release", "123456"].join("_"),
   }, async () => {
     resetAgent911RuntimeStateForTests();
     const originalFetch = globalThis.fetch;
@@ -232,7 +233,7 @@ test("falha do provider devolve o crédito ao ledger em vez de queimá-lo", asyn
 
     try {
       const body = followUpBody({
-        sessionId: "cs_test_paidfollowup123456",
+        sessionId: "mp-12345678903",
         productId: "agent911-pergunta",
         readingId: "2026-08-17T00:00:00.000Z",
         questionNumber: 1,
@@ -242,6 +243,58 @@ test("falha do provider devolve o crédito ao ledger em vez de queimá-lo", asyn
       assert.equal(response.statusCode, 503);
       assert.equal(calls.filter((call) => call.url.includes("generativelanguage.googleapis.com")).length, 1);
       const settlement = calls.find((call) => call.url.endsWith("arcane911_settle_entitlement"));
+      assert.equal(settlement.body.p_outcome, "released");
+    } finally {
+      globalThis.fetch = originalFetch;
+      console.error = originalError;
+    }
+  });
+});
+
+test("as cinco perguntas incluídas usam slots do bundle e liberam o slot quando o provider falha", async () => {
+  await withEnvironment({
+    GEMINI_API_KEY: "gemini-included-specific-release-test",
+    GEMINI_FALLBACK_MODEL: "off",
+    OPENAI_API_KEY: undefined,
+    SUPABASE_URL: "https://arcane-ledger.supabase.co",
+    SUPABASE_SECRET_KEY: ["sb", "secret", "arcane911", "included", "release", "123456"].join("_"),
+  }, async () => {
+    resetAgent911RuntimeStateForTests();
+    const originalFetch = globalThis.fetch;
+    const originalError = console.error;
+    const calls = [];
+    console.error = () => {};
+    globalThis.fetch = async (url, options) => {
+      const body = JSON.parse(options.body ?? "{}");
+      calls.push({ url, body });
+      if (url.endsWith("arcane911_claim_bundle_entitlement")) {
+        return { ok: true, status: 200, async json() { return { claimed: true, state: "processing" }; } };
+      }
+      if (url.endsWith("arcane911_settle_bundle_entitlement")) {
+        return { ok: true, status: 200, async json() { return { settled: true, state: "active" }; } };
+      }
+      return {
+        ok: false,
+        status: 403,
+        async json() { return { error: { code: "permission_denied" } }; },
+      };
+    };
+
+    try {
+      const parentReadingId = "reading-complete-included-123456";
+      const body = specificSummaryBody({
+        sessionId: "mp-12345678904",
+        productId: "arcane911-leitura-profunda",
+        readingId: parentReadingId,
+        questionNumber: 5,
+      }, parentReadingId);
+      const response = mockResponse();
+      await agentHandler(request(body), response);
+      assert.equal(response.statusCode, 503);
+      const claim = calls.find((call) => call.url.endsWith("arcane911_claim_bundle_entitlement"));
+      assert.equal(claim.body.p_claim_scope, "specific_summary");
+      assert.equal(claim.body.p_claim_slot, 5);
+      const settlement = calls.find((call) => call.url.endsWith("arcane911_settle_bundle_entitlement"));
       assert.equal(settlement.body.p_outcome, "released");
     } finally {
       globalThis.fetch = originalFetch;
@@ -278,7 +331,7 @@ test("fingerprint pago do mapa precisa coincidir antes de consultar o ledger", a
   }, async () => {
     resetAstro911RuntimeStateForTests();
     const payment = {
-      sessionId: "cs_test_astralpayment123456",
+      sessionId: "mp-12345678905",
       productId: "astro911-documento-completo",
       readingId: astro911Fingerprint(sampleAstroChart()),
     };

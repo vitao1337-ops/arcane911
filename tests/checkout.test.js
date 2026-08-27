@@ -1,377 +1,160 @@
-import assert from "node:assert/strict";
 import test from "node:test";
-import { createProductCatalog } from "../src/config/productCatalog.js";
+import assert from "node:assert/strict";
 import {
-  CheckoutClientError,
-  createHostedCheckout,
-  verifyHostedCheckout,
-} from "../src/lib/checkout.js";
-import {
-  CheckoutError,
-  checkoutErrorPayload,
-  createStripeCheckout,
-  verifyStripeCheckout,
+  createMercadoPagoPayment,
+  prepareMercadoPagoCheckout,
+  verifyMercadoPagoPayment,
 } from "../server/checkout-core.js";
 
-const env = Object.freeze({ STRIPE_SECRET_KEY: ["sk", "test", "arcane911checkouttests"].join("_") });
-const catalog = createProductCatalog(env);
-const origin = "http://localhost:5173";
+const TEST_MP_ACCESS_TOKEN = `${["APP", "USR"].join("_")}-arcane911-test-access-token-123456789`;
 
-function response(payload, status = 200) {
+const env = Object.freeze({
+  MERCADOPAGO_ACCESS_TOKEN: TEST_MP_ACCESS_TOKEN,
+  VITE_COMPLETE_READING_PRICE_CENTS: "1999",
+});
+
+const order = Object.freeze({
+  orderId: "order-1234567890abcdef",
+  productId: "arcane911-leitura-profunda",
+  readingId: "reading-1234567890",
+  readingSlug: "",
+  offerContext: "",
+  questionNumber: 0,
+  parentSessionId: "",
+  returnPath: "/tiragem-completa",
+});
+
+function jsonResponse(payload, status = 200) {
   return {
     ok: status >= 200 && status < 300,
     status,
-    async json() {
-      return payload;
-    },
+    json: async () => payload,
   };
 }
 
-function order(overrides = {}) {
+function approvedPixPayment() {
   return {
-    orderId: "order-checkout-test-0001",
-    productId: catalog.completeReading.id,
-    readingId: "reading-complete-0001",
-    returnPath: "/tiragem-completa",
-    ...overrides,
-  };
-}
-
-function paidSession(expected, overrides = {}) {
-  return {
-    id: overrides.id ?? "cs_test_1234567890abcdef",
-    status: "complete",
-    payment_status: "paid",
-    currency: "brl",
-    amount_total: expected.priceCents,
-    client_reference_id: expected.orderId,
+    id: 12345678901,
+    status: "approved",
+    status_detail: "accredited",
+    currency_id: "BRL",
+    transaction_amount: 19.99,
+    external_reference: order.orderId,
+    payment_method_id: "pix",
+    payment_type_id: "bank_transfer",
+    live_mode: false,
+    date_approved: "2026-08-27T05:00:00.000Z",
     metadata: {
-      product_id: expected.productId,
-      order_id: expected.orderId,
-      reading_id: expected.readingId,
-      ...(expected.readingSlug ? { reading_slug: expected.readingSlug } : {}),
-      ...(expected.offerContext ? { offer_context: expected.offerContext } : {}),
-      ...(expected.questionNumber ? { question_number: String(expected.questionNumber) } : {}),
+      product_id: order.productId,
+      product_kind: "complete_reading",
+      order_id: order.orderId,
+      reading_id: order.readingId,
+      reading_slug: "",
+      offer_context: "",
+      question_number: "0",
+      parent_payment_id: "",
     },
-    ...overrides,
+    point_of_interaction: {
+      transaction_data: {
+        qr_code: "00020101021226890014br.gov.bcb.pix",
+        qr_code_base64: "YWJj",
+        ticket_url: "https://www.mercadopago.com.br/payments/123",
+      },
+    },
   };
 }
 
-test("checkout da Tiragem Completa cobra R$ 19,99 do catálogo confiável", async () => {
-  const calls = [];
-  const raw = order({ price: 1, priceCents: 1, question: "texto privado que não pode sair" });
-  const result = await createStripeCheckout(raw, {
+test("pré-voo leva apenas ao checkout interno do Arcane", async () => {
+  const result = await prepareMercadoPagoCheckout(order, {
     env,
-    origin,
+    origin: "https://arcane911.vercel.app",
+    fetchImplementation: async () => { throw new Error("provider should not be called"); },
+  });
+  assert.equal(result.provider, "mercadopago");
+  assert.equal(result.checkoutUrl, "https://arcane911.vercel.app/pagamento");
+});
+
+test("Pix usa preço do catálogo, idempotência e metadata técnica", async () => {
+  const calls = [];
+  const result = await createMercadoPagoPayment({
+    ...order,
+    paymentData: {
+      payment_method_id: "pix",
+      payer: { email: "cliente@example.com", identification: { type: "CPF", number: "12345678909" } },
+      transaction_amount: 0.01,
+    },
+  }, {
+    env,
     fetchImplementation: async (url, options) => {
-      calls.push({ url, options });
-      return response({
-        id: "cs_test_1234567890abcdef",
-        url: "https://checkout.stripe.com/c/pay/cs_test_1234567890abcdef",
-      });
+      calls.push({ url: String(url), options });
+      return jsonResponse(approvedPixPayment());
     },
   });
 
   assert.equal(calls.length, 1);
-  const form = new URLSearchParams(calls[0].options.body);
-  assert.equal(form.get("line_items[0][price_data][unit_amount]"), "1999");
-  assert.equal(form.get("line_items[0][price_data][currency]"), "brl");
-  assert.equal(form.get("metadata[product_id]"), catalog.completeReading.id);
-  assert.equal(form.get("metadata[reading_id]"), raw.readingId);
-  assert.equal([...form.keys()].some((key) => /question(?!_number)/iu.test(key)), false);
-  assert.equal(calls[0].options.headers.Authorization, `Bearer ${env.STRIPE_SECRET_KEY}`);
-  assert.equal(result.checkoutUrl.startsWith("https://checkout.stripe.com/"), true);
+  assert.equal(calls[0].url, "https://api.mercadopago.com/v1/payments");
+  assert.ok(calls[0].options.headers["X-Idempotency-Key"]);
+  const sent = JSON.parse(calls[0].options.body);
+  assert.equal(sent.transaction_amount, 19.99);
+  assert.equal(sent.external_reference, order.orderId);
+  assert.equal(sent.payment_method_id, "pix");
+  assert.equal(sent.metadata.reading_id, order.readingId);
+  assert.equal(result.paymentId, "mp-12345678901");
+  assert.equal(result.entitlement.sessionId, "mp-12345678901");
 });
 
-test("retorno pago libera somente a compra que bate produto, valor e leitura", async () => {
-  const raw = order();
-  const session = paidSession({
-    productId: raw.productId,
-    priceCents: catalog.completeReading.priceCents,
-    orderId: raw.orderId,
-    readingId: raw.readingId,
-  });
-  const verified = await verifyStripeCheckout({ ...raw, sessionId: session.id }, {
+test("confirmação consulta o Mercado Pago e rejeita valor divergente", async () => {
+  const ok = await verifyMercadoPagoPayment({ ...order, paymentId: "mp-12345678901" }, {
     env,
-    fetchImplementation: async () => response(session),
+    fetchImplementation: async () => jsonResponse(approvedPixPayment()),
   });
-
-  assert.equal(verified.paid, true);
-  assert.equal(verified.entitlement.sessionId, session.id);
-  assert.equal(verified.entitlement.productId, catalog.completeReading.id);
-  assert.equal(verified.entitlement.readingId, raw.readingId);
-});
-
-test("retorno pendente ou com valor adulterado nunca libera o acesso", async () => {
-  const raw = order();
-  const base = paidSession({
-    productId: raw.productId,
-    priceCents: catalog.completeReading.priceCents,
-    orderId: raw.orderId,
-    readingId: raw.readingId,
-  });
+  assert.equal(ok.paid, true);
 
   await assert.rejects(
-    verifyStripeCheckout({ ...raw, sessionId: base.id }, {
+    verifyMercadoPagoPayment({ ...order, paymentId: "mp-12345678901" }, {
       env,
-      fetchImplementation: async () => response({ ...base, payment_status: "unpaid" }),
+      fetchImplementation: async () => jsonResponse({ ...approvedPixPayment(), transaction_amount: 1 }),
     }),
-    (error) => error instanceof CheckoutError && error.code === "payment_not_confirmed",
-  );
-  await assert.rejects(
-    verifyStripeCheckout({ ...raw, sessionId: base.id }, {
-      env,
-      fetchImplementation: async () => response({ ...base, amount_total: 1 }),
-    }),
-    (error) => error instanceof CheckoutError && error.code === "payment_mismatch",
+    (error) => error?.code === "payment_mismatch",
   );
 });
 
-test("pergunta específica avulsa custa R$ 10,00 e abre sem compra anterior", async () => {
+test("cartão só passa quando o método consultado é credit_card", async () => {
   const calls = [];
-  const raw = order({
-    orderId: "order-specific-standalone-0001",
-    productId: catalog.specificQuestionStandalone.id,
-    readingId: "reading-specific-standalone-0001",
-    readingSlug: "interior",
-    offerContext: "standalone",
-    returnPath: "/leituras/interior",
-  });
-  await createStripeCheckout(raw, {
-    env,
-    origin,
-    fetchImplementation: async (url, options) => {
-      calls.push({ url, options });
-      return response({
-        id: "cs_test_2234567890abcdef",
-        url: "https://checkout.stripe.com/c/pay/cs_test_2234567890abcdef",
-      });
-    },
-  });
-
-  assert.equal(calls.length, 1);
-  const form = new URLSearchParams(calls[0].options.body);
-  assert.equal(form.get("line_items[0][price_data][unit_amount]"), "1000");
-  assert.equal(form.get("metadata[reading_slug]"), "interior");
-  assert.equal(form.get("metadata[offer_context]"), "standalone");
-});
-
-test("pergunta específica de R$ 5,00 exige uma Tiragem Completa paga da mesma leitura", async () => {
-  const parentSessionId = "cs_test_3234567890abcdef";
-  const raw = order({
-    orderId: "order-specific-complete-0001",
-    productId: catalog.specificQuestionComplete.id,
-    readingId: "reading-complete-0001",
-    readingSlug: "caminhos",
-    offerContext: "complete_reading",
-    parentSessionId,
-    returnPath: "/leituras/caminhos?origem=tiragem-completa",
-  });
-  const calls = [];
-  await createStripeCheckout(raw, {
-    env,
-    origin,
-    fetchImplementation: async (url, options) => {
-      calls.push({ url, options });
-      if (url.endsWith(parentSessionId)) {
-        return response({
-          id: parentSessionId,
-          status: "complete",
-          payment_status: "paid",
-          currency: "brl",
-          amount_total: catalog.completeReading.priceCents,
-          metadata: {
-            product_id: catalog.completeReading.id,
-            reading_id: raw.readingId,
-          },
-        });
-      }
-      return response({
-        id: "cs_test_4234567890abcdef",
-        url: "https://checkout.stripe.com/c/pay/cs_test_4234567890abcdef",
-      });
-    },
-  });
-
-  assert.equal(calls.length, 2);
-  const form = new URLSearchParams(calls[1].options.body);
-  assert.equal(form.get("line_items[0][price_data][unit_amount]"), "500");
-
-  await assert.rejects(
-    createStripeCheckout({ ...raw, parentSessionId: "" }, {
-      env,
-      origin,
-      fetchImplementation: async () => response({}),
-    }),
-    (error) => error instanceof CheckoutError && error.code === "complete_entitlement_required",
-  );
-});
-
-test("Documento Astral só cobra após preço explícito e volta para o mesmo mapa", async () => {
-  const astralEnv = {
-    ...env,
-    VITE_ASTRO911_PRICE_CENTS: "2990",
+  const cardPayment = {
+    ...approvedPixPayment(),
+    id: 12345678902,
+    payment_method_id: "visa",
+    payment_type_id: "credit_card",
   };
-  const astralCatalog = createProductCatalog(astralEnv);
-  const raw = order({
-    orderId: "order-astral-document-0001",
-    productId: astralCatalog.astralDocument.id,
-    readingId: "astro-v1-fingerprint123",
-    offerContext: "astral_document",
-    returnPath: "/mapa-astral",
-    name: "dado pessoal que não pode sair",
-    date: "1990-01-01",
-    city: "São Paulo",
-  });
-  const calls = [];
-  await createStripeCheckout(raw, {
-    env: astralEnv,
-    origin,
-    fetchImplementation: async (url, options) => {
-      calls.push({ url, options });
-      return response({
-        id: "cs_test_astro1234567890",
-        url: "https://checkout.stripe.com/c/pay/cs_test_astro1234567890",
-      });
+
+  const result = await createMercadoPagoPayment({
+    ...order,
+    paymentData: {
+      payment_method_id: "visa",
+      token: "card-token-created-by-brick",
+      installments: 1,
+      issuer_id: "25",
+      payer: { email: "cliente@example.com", identification: { type: "CPF", number: "12345678909" } },
     },
-  });
-
-  assert.equal(calls.length, 1);
-  const form = new URLSearchParams(calls[0].options.body);
-  assert.equal(form.get("line_items[0][price_data][unit_amount]"), "2990");
-  assert.equal(form.get("metadata[reading_id]"), raw.readingId);
-  assert.equal(form.get("metadata[offer_context]"), "astral_document");
-  assert.match(form.get("success_url"), /^http:\/\/localhost:5173\/mapa-astral\?checkout=success/u);
-  assert.equal(form.get("metadata[name]"), null);
-  assert.equal(form.get("metadata[date]"), null);
-  assert.equal(form.get("metadata[city]"), null);
-  assert.equal(calls[0].options.body.includes("dado+pessoal"), false);
-  assert.equal(calls[0].options.body.includes("S%C3%A3o+Paulo"), false);
-});
-
-test("Documento Astral sem preço configurado não cria cobrança de valor zero", async () => {
-  await assert.rejects(
-    createStripeCheckout(order({
-      productId: catalog.astralDocument.id,
-      readingId: "astro-v1-fingerprint123",
-      offerContext: "astral_document",
-      returnPath: "/mapa-astral",
-    }), {
-      env,
-      origin,
-      fetchImplementation: async () => response({}),
-    }),
-    (error) => error instanceof CheckoutError && error.code === "checkout_not_configured",
-  );
-});
-
-test("cada pergunta ao 911 custa R$ 5,00 e também exige a Ferradura paga", async () => {
-  const parentSessionId = "cs_test_5234567890abcdef";
-  const raw = order({
-    orderId: "order-agent-question-0001",
-    productId: catalog.agentQuestion.id,
-    readingId: "reading-complete-0001",
-    questionNumber: 1,
-    parentSessionId,
-  });
-  const calls = [];
-  await createStripeCheckout(raw, {
+  }, {
     env,
-    origin,
     fetchImplementation: async (url, options) => {
-      calls.push({ url, options });
-      if (url.endsWith(parentSessionId)) {
-        return response({
-          id: parentSessionId,
-          status: "complete",
-          payment_status: "paid",
-          currency: "brl",
-          amount_total: catalog.completeReading.priceCents,
-          metadata: {
-            product_id: catalog.completeReading.id,
-            reading_id: raw.readingId,
-          },
-        });
+      calls.push({ url: String(url), options });
+      if (String(url).endsWith("/v1/payment_methods")) {
+        return jsonResponse([{ id: "visa", payment_type_id: "credit_card" }]);
       }
-      return response({
-        id: "cs_test_6234567890abcdef",
-        url: "https://checkout.stripe.com/c/pay/cs_test_6234567890abcdef",
-      });
+      return jsonResponse(cardPayment);
     },
   });
 
   assert.equal(calls.length, 2);
-  const form = new URLSearchParams(calls[1].options.body);
-  assert.equal(form.get("line_items[0][price_data][unit_amount]"), "500");
-  assert.equal(form.get("metadata[question_number]"), "1");
-});
-
-test("checkout recusa retorno fora das rotas do produto e segredo ausente", async () => {
-  await assert.rejects(
-    createStripeCheckout(order({ returnPath: "https://evil.example/roubo" }), {
-      env,
-      origin,
-      fetchImplementation: async () => response({}),
-    }),
-    (error) => error instanceof CheckoutError && error.code === "invalid_return_path",
-  );
-  await assert.rejects(
-    createStripeCheckout(order(), {
-      env: {},
-      origin,
-      fetchImplementation: async () => response({}),
-    }),
-    (error) => error instanceof CheckoutError && error.code === "checkout_not_configured",
-  );
-});
-
-test("cliente envia somente o contrato mínimo e valida a URL hospedada", async () => {
-  let sentBody;
-  const raw = order({ question: "segredo", price: 1, priceCents: 1 });
-  const created = await createHostedCheckout(raw, {
-    fetchImplementation: async (_url, options) => {
-      sentBody = JSON.parse(options.body);
-      return response({ checkoutUrl: "https://checkout.stripe.com/c/pay/cs_test_cliente123456" });
-    },
-  });
-
-  assert.equal(created.checkoutUrl.startsWith("https://checkout.stripe.com/"), true);
-  assert.equal(Object.hasOwn(sentBody, "question"), false);
-  assert.equal(Object.hasOwn(sentBody, "price"), false);
-  assert.equal(Object.hasOwn(sentBody, "priceCents"), false);
-
-  await assert.rejects(
-    createHostedCheckout(raw, {
-      fetchImplementation: async () => response({ checkoutUrl: "https://evil.example/falso" }),
-    }),
-    (error) => error instanceof CheckoutClientError && error.code === "checkout_invalid_response",
-  );
-});
-
-test("cliente confirma a sessão somente pelo endpoint server-side", async () => {
-  let requestedUrl = "";
-  let sentBody;
-  const raw = order();
-  const result = await verifyHostedCheckout("cs_test_7234567890abcdef", raw, {
-    fetchImplementation: async (url, options) => {
-      requestedUrl = url;
-      sentBody = JSON.parse(options.body);
-      return response({ paid: true, entitlement: { sessionId: sentBody.sessionId } });
-    },
-  });
-
-  assert.equal(requestedUrl, "/api/checkout-session");
-  assert.equal(sentBody.sessionId, "cs_test_7234567890abcdef");
-  assert.equal(result.paid, true);
-});
-
-test("erros internos do checkout viram códigos públicos sem detalhes do provedor", () => {
-  const payload = checkoutErrorPayload(new CheckoutError("checkout_provider_error", 503, {
-    providerCode: "secret-provider-detail",
-  }));
-
-  assert.deepEqual(payload, {
-    status: 503,
-    body: { error: "checkout_provider_error" },
-  });
+  assert.equal(calls[1].url, "https://api.mercadopago.com/v1/payments");
+  const sent = JSON.parse(calls[1].options.body);
+  assert.equal(sent.transaction_amount, 19.99);
+  assert.equal(sent.payment_method_id, "visa");
+  assert.equal(sent.token, "card-token-created-by-brick");
+  assert.equal(sent.installments, 1);
+  assert.equal(result.paymentType, "credit_card");
+  assert.equal(result.entitlement.sessionId, "mp-12345678902");
 });

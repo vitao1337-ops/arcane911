@@ -54,6 +54,7 @@ export default function Agent911Summary({
   createdAt,
   variant = "opening",
   spreadId = "",
+  parentReadingId = "",
   entitlement = null,
   onResult,
 }) {
@@ -80,7 +81,8 @@ export default function Agent911Summary({
     question,
     createdAt,
     spreadId,
-  }), [cards, createdAt, intentId, intentLabel, question, spreadId]);
+    parentReadingId,
+  }), [cards, createdAt, intentId, intentLabel, parentReadingId, question, spreadId]);
 
   useEffect(() => {
     let active = true;

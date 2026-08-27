@@ -43,7 +43,7 @@ function TermsContent() {
       </section>
       <section>
         <h2>3. Produtos e entrega digital</h2>
-        <p>Cada preço exibido corresponde a uma entrega digital única descrita na própria oferta. A confirmação é processada pelo Stripe e vinculada a um código de pedido. Guarde esse código: ele permite recuperar a autorização de acesso, mas não recria perguntas, cartas ou mapas privados apagados do seu dispositivo.</p>
+        <p>Cada preço exibido corresponde à entrega digital descrita na própria oferta. A Tiragem Completa inclui até cinco perguntas específicas vinculadas àquela leitura; perguntas adicionais seguem a oferta exibida no momento. A confirmação é processada pelo Mercado Pago e vinculada a um código de pedido. Guarde esse código: ele permite recuperar a autorização de acesso, mas não recria perguntas, cartas ou mapas privados apagados do seu dispositivo.</p>
       </section>
       <section>
         <h2>4. Inteligência artificial e limites</h2>
@@ -66,11 +66,11 @@ function PrivacyContent() {
     <>
       <section>
         <h2>1. Dados mantidos no seu navegador</h2>
-        <p>Perguntas, cartas escolhidas, diário, rascunhos e resultados ficam principalmente no armazenamento local ou de sessão do navegador. Eles podem desaparecer quando você limpa os dados do site, troca de dispositivo ou encerra uma sessão privada.</p>
+        <p>Perguntas, cartas escolhidas, diário, rascunhos, resultados e dados do mapa ficam principalmente no armazenamento local ou de sessão do navegador. A memória opcional do 911 só é mantida após consentimento na interface. Esses dados podem desaparecer quando você limpa os dados do site, troca de dispositivo ou encerra uma sessão privada.</p>
       </section>
       <section>
         <h2>2. Compra e autorização</h2>
-        <p>O Stripe processa os dados de pagamento conforme sua própria política. O Arcane911 recebe identificadores técnicos da sessão, produto, valor, moeda, estado e código do pedido. O livro-caixa privado não guarda texto da pergunta, cartas, resposta, e-mail ou dados natais.</p>
+        <p>O Mercado Pago processa os dados de pagamento conforme sua própria política. O Arcane911 recebe apenas identificadores técnicos do pagamento, produto, valor, moeda, estado e código do pedido. O livro-caixa privado registra também o consumo técnico dos acessos e das perguntas incluídas, mas não guarda texto da pergunta, cartas, resposta, e-mail ou dados natais.</p>
       </section>
       <section>
         <h2>3. Conteúdo enviado à inteligência artificial</h2>
@@ -82,7 +82,7 @@ function PrivacyContent() {
       </section>
       <section>
         <h2>5. Controle, exclusão e segurança</h2>
-        <p>Você pode apagar leituras limpando os dados do site no navegador. Registros financeiros e antifraude podem precisar ser mantidos pelos prazos legais aplicáveis. Para acesso, correção ou dúvida sobre dados técnicos, use o canal abaixo. Nenhum sistema é infalível, mas o acesso ao livro-caixa é restrito ao servidor.</p>
+        <p>Você pode apagar leituras limpando os dados do site no navegador e remover a memória opcional pelo controle da própria experiência. Registros financeiros e antifraude podem precisar ser mantidos pelos prazos legais aplicáveis. Para acesso, correção ou dúvida sobre dados técnicos, use o canal abaixo. Nenhum sistema é infalível, mas o acesso ao livro-caixa é restrito ao servidor.</p>
       </section>
       <section>
         <h2>6. Contato</h2>
@@ -140,7 +140,7 @@ export default function LegalPage({ type }) {
           <Link to="/termos">Termos de Uso</Link>
           <Link to="/privacidade">Privacidade</Link>
           <Link to="/reembolsos">Reembolsos</Link>
-          <a href="https://stripe.com/br/privacy" target="_blank" rel="noreferrer">Privacidade do Stripe <ExternalLink size={13} /></a>
+          <a href="https://www.mercadopago.com.br/privacidade" target="_blank" rel="noreferrer">Privacidade do Mercado Pago <ExternalLink size={13} /></a>
         </nav>
       </article>
     </main>

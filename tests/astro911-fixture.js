@@ -1,5 +1,6 @@
 import { createAstro911Context } from "../src/lib/astro911.js";
 import { calculateNatalChart, fallbackLocations } from "../src/lib/astrology.js";
+import { astro911SectionIds } from "../src/config/astro911Sections.js";
 
 export function sampleAstroChart() {
   return calculateNatalChart({
@@ -15,7 +16,7 @@ export function sampleAstroRequest(overrides = {}) {
   return {
     agent: "astro-911",
     requestId: "astro-api-contract-test",
-    schemaVersion: "2026-08-13.2",
+    schemaVersion: "2026-08-22.3",
     context: createAstro911Context(chart),
     ...overrides,
   };
@@ -32,7 +33,6 @@ export function sampleAstroDocument(context = sampleAstroRequest().context) {
   const angleFacts = ["angle:ascendant", "angle:midheaven"];
   const aspectFacts = context.chart.aspects.map((aspect) => aspect.id);
   const anchors = [...planetFacts, ...angleFacts, ...aspectFacts];
-  const sectionIds = ["essencia", "afetos", "vocacao", "tensoes", "integracao"];
   return {
     title: "Uma arquitetura que pede presença",
     subtitle: "Força e sensibilidade não precisam disputar o mesmo lugar.",
@@ -42,17 +42,24 @@ export function sampleAstroDocument(context = sampleAstroRequest().context) {
       centralTension: "Equilibrar responsabilidade, liberdade e necessidades emocionais sem fazer uma dimensão silenciar a outra.",
       integration: "Transformar percepção em acordos observáveis, com ritmo, limite e espaço para revisão.",
     },
-    sections: sectionIds.map((id, index) => ({
+    sections: astro911SectionIds.map((id, index) => ({
       id,
       title: [
         "A forma como você ocupa a própria vida",
+        "Presença, linguagem e expressão pessoal",
         "Afeto precisa de presença e espaço",
         "Construção com assinatura própria",
+        "Valor material com critério e limite",
+        "Capacidades que pedem prática",
         "O conflito que também vira recurso",
         "Um modo possível de integrar o mapa",
       ][index],
-      body: paragraph(`Pessoa encontra nesta camada uma relação específica entre ${anchors[index]} e ${anchors[index + 5]}.`, 5),
-      anchors: [anchors[index], anchors[index + 5], anchors[12 + index]],
+      body: paragraph(`Pessoa encontra nesta camada uma relação específica entre ${planetFacts[index % planetFacts.length]} e ${aspectFacts[index % aspectFacts.length]}.`, 5),
+      anchors: [
+        planetFacts[index % planetFacts.length],
+        angleFacts[index % angleFacts.length],
+        aspectFacts[index % aspectFacts.length],
+      ],
       practicalDirection: "Observe por sete dias em qual situação esta combinação aparece e registre o fato antes de interpretar a intenção de alguém.",
     })),
     practices: Array.from({ length: 5 }, (_, index) => ({
@@ -79,7 +86,7 @@ export function sampleAstroApiPayload() {
     document: sampleAstroDocument(context),
     factLabels: {},
     meta: {
-      schemaVersion: "2026-08-13.2",
+      schemaVersion: "2026-08-22.3",
       grounded: true,
       provider: "gemini",
       model: "gemini-3.5-flash",

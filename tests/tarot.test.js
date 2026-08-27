@@ -219,8 +219,8 @@ test("a oferta comercial usa o catálogo central e o checkout server-side", () =
   assert.equal(salesConfig.offer.features.length, 5);
   assert.equal(salesConfig.offer.price, "R$ 19,99");
   assert.match(checkout, /createProductCatalog/u);
-  assert.match(checkout, /STRIPE_SECRET_KEY/u);
-  assert.match(checkout, /unit_amount/u);
+  assert.match(checkout, /MERCADOPAGO_ACCESS_TOKEN/u);
+  assert.match(checkout, /transaction_amount/u);
   assert.doesNotMatch(checkout, /raw\.price/u);
 });
 

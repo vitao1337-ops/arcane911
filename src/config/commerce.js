@@ -12,7 +12,15 @@ export function formatBRL(cents) {
   return `R$ ${amount.toFixed(2).replace(".", ",")}`;
 }
 
-function product({ id, name, kind, cents, accessRequired = true }) {
+function product({
+  id,
+  name,
+  kind,
+  cents,
+  accessRequired = true,
+  includedSpecificQuestions = 0,
+  available = true,
+}) {
   const priceCents = positiveCents(cents);
   return Object.freeze({
     id,
@@ -22,6 +30,8 @@ function product({ id, name, kind, cents, accessRequired = true }) {
     priceCents,
     price: priceCents > 0 ? formatBRL(priceCents) : "A definir",
     accessRequired,
+    available,
+    includedSpecificQuestions: positiveCents(includedSpecificQuestions),
   });
 }
 
@@ -34,6 +44,7 @@ const products = Object.freeze({
   completeReading: product({
     ...catalog.completeReading,
     cents: catalog.completeReading.priceCents,
+    includedSpecificQuestions: catalog.completeReading.includedSpecificQuestions,
   }),
   agentQuestion: product({
     ...catalog.agentQuestion,
@@ -53,12 +64,15 @@ const products = Object.freeze({
     // Sem preço, a validação atual continua aberta. Ao configurar um valor,
     // o mesmo catálogo ativa automaticamente a proteção server-side.
     accessRequired: catalog.astralDocument.priceCents > 0,
+    available: devUnlocked
+      || catalog.astralDocument.priceCents > 0
+      || String(viteEnv.VITE_ASTRO911_ALLOW_FREE_PRODUCTION ?? "false").toLowerCase() === "true",
   }),
 });
 
 export const commerceConfig = Object.freeze({
   mode: devUnlocked ? "development_unlocked" : "payment_required",
   devUnlocked,
-  provider: "stripe_checkout",
+  provider: "mercadopago_bricks",
   products,
 });

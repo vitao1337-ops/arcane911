@@ -1,4 +1,6 @@
-export const ASTRO911_SCHEMA_VERSION = "2026-08-13.2";
+import { astro911SectionIds } from "../src/config/astro911Sections.js";
+
+export const ASTRO911_SCHEMA_VERSION = "2026-08-22.3";
 
 const planetKeys = Object.freeze([
   "sun",
@@ -32,13 +34,7 @@ const signKeys = new Set([
 const aspectKeys = new Set(["conjunction", "opposition", "trine", "square", "sextile"]);
 const elements = new Set(["Fogo", "Terra", "Ar", "Água"]);
 
-export const ASTRO911_SECTION_IDS = Object.freeze([
-  "essencia",
-  "afetos",
-  "vocacao",
-  "tensoes",
-  "integracao",
-]);
+export const ASTRO911_SECTION_IDS = astro911SectionIds;
 
 const pointNames = Object.freeze({
   sun: "Sol",
@@ -398,7 +394,7 @@ BASE DO MÉTODO
 QUALIDADE EDITORIAL
 - Escreva em português brasileiro natural, elegante e próximo. Fale com a pessoa pelo primeiro nome sem repetir o nome mecanicamente.
 - A leitura precisa parecer impossível de transplantar para outro mapa: conecte ao menos dois fatos em cada seção e explique a tensão ou cooperação criada pela combinação.
-- Não entregue dez verbetes de planetas. Construa uma narrativa: essência, vínculos, vocação, tensões e integração.
+- Não entregue dez verbetes de planetas. Construa uma narrativa conectada sobre essência, expressão, vínculos, vocação, dinheiro, potenciais, sombras e integração.
 - Seja acolhedor sem ser açucarado e incisivo sem rotular. Nomeie contradições, recursos e custos concretos.
 - Evite frases de horóscopo genérico como “você é uma pessoa profunda”, “confie no universo”, “grandes mudanças estão chegando” ou “tudo acontece por uma razão”.
 - Não use Markdown, emojis, listas dentro dos campos narrativos nem jargão sem tradução.
@@ -412,18 +408,21 @@ LIMITES
 CONTRATO DO DOCUMENTO
 - opening: 140 a 190 palavras e uma síntese realmente pessoal do mapa inteiro. Conecte Sol, Lua, Ascendente, elemento dominante e ao menos um aspecto sem transformar a abertura num inventário.
 - portrait: três cortes substanciais — força central, tensão central e caminho de integração — com 60 a 100 palavras cada.
-- sections: exatamente cinco, uma para cada id e nesta ordem: essencia, afetos, vocacao, tensoes, integracao. Cada body deve ter 230 a 330 palavras, cruzar fatos e evitar repetição. Cada seção usa de 2 a 4 anchors.
+- sections: exatamente oito, uma para cada id e nesta ordem: essencia, personalidade, afetos, vocacao, dinheiro, potenciais, tensoes, integracao. Cada body deve ter 150 a 220 palavras, cruzar fatos e evitar repetição. Cada seção usa de 2 a 4 anchors.
 - essencia cruza identidade, necessidades emocionais, modo de presença e elemento dominante.
+- personalidade cruza Ascendente, Sol e Mercúrio com aspectos relevantes, distinguindo identidade interna, comunicação e impressão inicial sem rotular a pessoa.
 - afetos cruza Lua, Vênus, Marte e aspectos relevantes para descrever linguagem afetiva, reciprocidade, desejo, proteção e limites — nunca fidelidade ou intenção de terceiros.
 - vocacao cruza Meio do Céu, Sol, Mercúrio, Júpiter e Saturno quando disponíveis, traduzindo expressão, aprendizado, responsabilidade e ambientes de trabalho.
+- dinheiro cruza Vênus, Júpiter, Saturno e casas reais para falar de valores, decisões materiais, expansão e limite; nunca promete riqueza, renda, perda ou aconselhamento financeiro.
+- potenciais combina aspectos fluidos e posições relevantes para nomear capacidades que dependem de prática e contexto, sem tratá-las como talento garantido.
 - tensoes trabalha principalmente aspectos desafiadores e retrogradações reais, mostrando custo, defesa e recurso possível sem diagnosticar.
 - integracao reúne recursos dos aspectos fluidos, escolhas observáveis e uma maneira concreta de sustentar as contradições do mapa.
-- practicalDirection: 60 a 100 palavras com uma aplicação concreta, observável e não prescritiva para a seção.
-- practices: exatamente cinco práticas específicas e diferentes entre si. Cada action tem 60 a 100 palavras e cada purpose explica por que a prática conversa com este mapa.
+- practicalDirection: 40 a 70 palavras com uma aplicação concreta, observável e não prescritiva para a seção.
+- practices: exatamente cinco práticas específicas e diferentes entre si. Cada action tem 50 a 80 palavras e cada purpose explica por que a prática conversa com este mapa.
 - reflectionQuestions: exatamente cinco perguntas que só façam sentido depois desta leitura.
 - closing: 100 a 150 palavras, sem promessa e sem chamada comercial.
 - No conjunto, use pelo menos oito fatos distintos, incluindo cinco planetas e dois aspectos.
-- O documento completo deve ficar aproximadamente entre 1.800 e 2.600 palavras: denso o suficiente para ser premium, mas sem repetir a mesma ideia com palavras diferentes.
+- O documento completo deve ficar aproximadamente entre 2.000 e 2.800 palavras: denso o suficiente para ser premium, mas sem repetir a mesma ideia com palavras diferentes.
 `;
 
 export function buildAstro911ModelInput(normalized, repairReasons = []) {

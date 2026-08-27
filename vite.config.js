@@ -43,17 +43,9 @@ export default defineConfig(({ command, mode, isPreview }) => {
     // Expõe ao cliente somente o booleano de opt-in; o target continua privado no Vite.
     envPrefix: ["VITE_", "ARCANE911_DEV_REAL_AI", "ARCANE911_DEV_UNLOCK_PAID"],
     build: {
-      // O motor astral é um chunk tardio: só é baixado ao abrir /mapa-astral.
-      chunkSizeWarningLimit: 900,
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (id.includes("/circular-natal-horoscope-js/")) return "astro-chart-engine";
-            if (id.includes("/astronomy-engine/")) return "astro-precision-engine";
-            return undefined;
-          },
-        },
-      },
+      // As rotas com cálculo astral já usam import() dinâmico. Deixar o Rollup
+      // preservar esse grafo evita que um manualChunk seja pré-carregado na home.
+      chunkSizeWarningLimit: 950,
     },
     server: {
       host: "0.0.0.0",

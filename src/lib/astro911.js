@@ -1,4 +1,5 @@
 import { astro911Config } from "../config/astro911.js";
+import { astro911SectionIds } from "../config/astro911Sections.js";
 
 const CACHE_KEY = "arcane911.astral-document.v3";
 const LEGACY_CACHE_KEY = "arcane911.astral-document.v2";
@@ -115,7 +116,8 @@ function validDocumentPayload(value) {
       && typeof value === "object"
       && typeof value.document?.title === "string"
       && Array.isArray(value.document?.sections)
-      && value.document.sections.length === 5
+      && value.document.sections.length === astro911SectionIds.length
+      && value.document.sections.every((section, index) => section?.id === astro911SectionIds[index])
       && Array.isArray(value.document?.practices)
       && value.document.practices.length === 5
       && value.meta?.grounded === true,
@@ -272,6 +274,7 @@ async function performRequest(chart, options) {
         provider_quota: "O Documento Astral está temporariamente indisponível. Tente novamente em alguns instantes.",
         provider_unavailable: "O Documento Astral está temporariamente indisponível. Tente novamente em alguns instantes.",
         provider_invalid_response: "A leitura conectada chegou incompleta. Tente novamente.",
+        astral_not_configured: "O Documento Astral ainda não está disponível para geração conectada.",
         rate_limit: "Muitos documentos foram pedidos em sequência. Aguarde alguns minutos.",
         payment_required: "Este documento precisa de uma autorização paga válida.",
         payment_credit_unavailable: "Esta autorização já foi usada para gerar o documento.",

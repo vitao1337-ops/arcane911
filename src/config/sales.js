@@ -17,7 +17,7 @@ export const salesConfig = Object.freeze({
       "Quatro novas cartas sem perder as três que você escolheu",
       "Leitura de cada posição, com sombra e convite prático",
       "Leitura completa salva no seu diário",
-      `Perguntas específicas por ${commerceConfig.products.specificQuestionComplete.price} depois da Ferradura`,
+      `${completeReading.includedSpecificQuestions} perguntas específicas incluídas`,
     ]),
   }),
 });

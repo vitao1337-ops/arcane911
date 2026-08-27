@@ -36,10 +36,12 @@ import {
   createHostedCheckout,
   findPaymentEntitlement,
   loadPendingCheckout,
+  removePaymentEntitlement,
   savePaymentEntitlement,
   savePendingCheckout,
   trackCommercialEvent,
   verifyHostedCheckout,
+  verifyStoredPaymentEntitlement,
 } from "./lib/checkout";
 import {
   buildCompleteSpreadFromSelections,
@@ -54,9 +56,16 @@ const AstralMapPage = lazy(() => import("./pages/AstralMapPage"));
 const SpecificReadingPage = lazy(() => import("./pages/SpecificReadingPage"));
 const LegalPage = lazy(() => import("./pages/LegalPage"));
 const PurchaseRecoveryPage = lazy(() => import("./pages/PurchaseRecoveryPage"));
+const PaymentPage = lazy(() => import("./pages/PaymentPage"));
 
 const STORAGE_KEY = "arcane911.readings.v1";
 const READING_SESSION_KEY = "arcane911.active-reading.v1";
+const DEFINITIVE_ENTITLEMENT_ERRORS = new Set([
+  "invalid_order",
+  "payment_credit_unavailable",
+  "payment_mismatch",
+  "purchase_not_found",
+]);
 
 function getStoredReadingSession() {
   try {
@@ -323,7 +332,8 @@ function App() {
     productId: salesConfig.productId,
     readingId: initialSession?.createdAt,
   }), [initialSession]);
-  const initialCompleteAccess = salesConfig.devUnlocked || Boolean(initialCompleteEntitlement);
+  // O sessionStorage é somente uma pista para revalidação; nunca uma autorização.
+  const initialCompleteAccess = salesConfig.devUnlocked;
   const [phase, setPhase] = useState(() => {
     if (route === "/tiragem-completa" && initialCompleteAccess && initialComplete.length === 7) return "complete";
     if (route === "/tiragem-completa" && initialCompleteAccess && initialOpening.length === 3) return "complete-deck";
@@ -352,12 +362,15 @@ function App() {
   const [checkoutState, setCheckoutState] = useState("idle");
   const [checkoutMessage, setCheckoutMessage] = useState("");
   const [completeAccessGranted, setCompleteAccessGranted] = useState(initialCompleteAccess);
-  const [completeEntitlement, setCompleteEntitlement] = useState(initialCompleteEntitlement);
+  const [completeEntitlement, setCompleteEntitlement] = useState(
+    salesConfig.devUnlocked ? initialCompleteEntitlement : null,
+  );
   const [agentSummaries, setAgentSummaries] = useState({ opening: null, complete: null });
   const [status, setStatus] = useState("");
   const timerRef = useRef(null);
   const ritualRef = useRef(null);
   const checkoutVerificationRef = useRef("");
+  const completeRestorePromiseRef = useRef(null);
   const isLanding = route === "/";
   const isFreeRoute = route === "/tiragem-gratis";
   const isCompleteRoute = route === "/tiragem-completa";
@@ -368,6 +381,7 @@ function App() {
     : route === "/privacidade" ? "privacy" : route === "/reembolsos" ? "refunds" : "";
   const isLegalRoute = Boolean(legalRouteType);
   const isRecoveryRoute = route === "/recuperar-compra";
+  const isPaymentRoute = route === "/pagamento";
   const featuredSpecificReading = getReadingForIntent(intentId);
   const specificReadingOrigin = new URLSearchParams(location.search).get("origem");
   const specificReadingHasCompleteContext = specificReadingOrigin === "tiragem-completa"
@@ -382,6 +396,59 @@ function App() {
     () => getAgent911ReadingMode(readingMode),
     [readingMode],
   );
+
+  useEffect(() => {
+    if (salesConfig.devUnlocked || !initialCompleteEntitlement || !initialSession?.createdAt) return undefined;
+    if (!completeRestorePromiseRef.current) {
+      completeRestorePromiseRef.current = verifyStoredPaymentEntitlement(initialCompleteEntitlement, {
+        productId: salesConfig.productId,
+        readingId: initialSession.createdAt,
+      });
+    }
+
+    let subscribed = true;
+    completeRestorePromiseRef.current
+      .then((serverEntitlement) => {
+        if (!subscribed) return;
+        const entitlement = savePaymentEntitlement(serverEntitlement);
+        if (!entitlement) return;
+        setCompleteEntitlement(entitlement);
+        setCompleteAccessGranted(true);
+      })
+      .catch((error) => {
+        if (!subscribed) return;
+        setCompleteEntitlement(null);
+        setCompleteAccessGranted(false);
+        if (DEFINITIVE_ENTITLEMENT_ERRORS.has(error?.code)) {
+          removePaymentEntitlement(initialCompleteEntitlement.sessionId);
+        }
+      });
+    return () => {
+      subscribed = false;
+    };
+  }, [initialCompleteEntitlement, initialSession]);
+
+  useEffect(() => {
+    const synchronizeBundleUsage = () => {
+      const stored = findPaymentEntitlement({
+        productId: salesConfig.productId,
+        readingId: createdAt,
+      });
+      if (!stored) return;
+      setCompleteEntitlement((current) => {
+        if (!current || current.sessionId !== stored.sessionId) return current;
+        const includedQuestionsUsed = Math.max(
+          Number(current.includedQuestionsUsed) || 0,
+          Number(stored.includedQuestionsUsed) || 0,
+        );
+        return includedQuestionsUsed === current.includedQuestionsUsed
+          ? current
+          : { ...current, includedQuestionsUsed };
+      });
+    };
+    window.addEventListener("arcane911:entitlements-changed", synchronizeBundleUsage);
+    return () => window.removeEventListener("arcane911:entitlements-changed", synchronizeBundleUsage);
+  }, [createdAt]);
 
   const resolvedQuestion = question.trim() || selectedIntent.prompt;
   const activeReadingCards = isCompleteRoute && completeSpread.length === 7
@@ -452,7 +519,7 @@ function App() {
       return;
     }
 
-    const sessionId = params.get("session_id") ?? "";
+    const sessionId = params.get("payment_id") ?? "";
     if (paymentReturn !== "success" || !sessionId || checkoutVerificationRef.current === sessionId) return;
     checkoutVerificationRef.current = sessionId;
     const pending = loadPendingCheckout();
@@ -1129,6 +1196,9 @@ function App() {
 
   function renderSpecificQuestionOffer(origin = "standalone") {
     const insideCompleteReading = origin === "complete";
+    const includedLimit = commerceConfig.products.completeReading.includedSpecificQuestions;
+    const includedUsed = Math.max(0, Number(completeEntitlement?.includedQuestionsUsed) || 0);
+    const includedRemaining = Math.max(0, includedLimit - includedUsed);
     const offer = insideCompleteReading
       ? commerceConfig.products.specificQuestionComplete
       : commerceConfig.products.specificQuestionStandalone;
@@ -1146,7 +1216,9 @@ function App() {
         <div className="specific-context-copy">
           <span className="section-kicker">
             {insideCompleteReading
-              ? `Aprofundamento da Ferradura · ${offer.price}`
+              ? includedRemaining > 0
+                ? `Aprofundamento da Ferradura · ${includedRemaining} de ${includedLimit} incluídas`
+                : `Pergunta adicional · ${offer.price}`
               : `Pergunta específica · ${selectedIntent.label}`}
           </span>
           <h3 id={sectionId}>
@@ -1183,10 +1255,14 @@ function App() {
             className="button button-primary"
             to={`/leituras/${featuredSpecificReading.slug}${insideCompleteReading ? "?origem=tiragem-completa" : ""}`}
           >
-            Abrir pergunta de {selectedIntent.label} · {offer.price}
+            {insideCompleteReading && includedRemaining > 0
+              ? `Fazer pergunta incluída de ${selectedIntent.label}`
+              : `Abrir pergunta de ${selectedIntent.label} · ${offer.price}`}
             <ArrowRight size={16} />
           </Link>
-          <small><LockKeyhole size={13} /> Pagamento único. A pergunta continua privada.</small>
+          <small><LockKeyhole size={13} /> {insideCompleteReading && includedRemaining > 0
+            ? "Sem nova cobrança nas cinco perguntas incluídas."
+            : "Pagamento único. A pergunta continua privada."}</small>
         </div>
       </section>
     );
@@ -1863,10 +1939,11 @@ function App() {
       {isSpecificRoute ? (
         <Suspense fallback={<div className="route-loading"><span>✦</span><p>Abrindo a estrutura…</p></div>}>
           <SpecificReadingPage
-            key={`${route}${location.search}`}
+            key={`${route}${location.search}:${specificReadingHasCompleteContext ? "complete" : "standalone"}`}
             slug={route.split("/")[2]}
             insideCompleteReading={specificReadingHasCompleteContext}
             parentReadingId={specificReadingHasCompleteContext ? createdAt : ""}
+            parentEntitlement={specificReadingHasCompleteContext ? completeEntitlement : null}
             sourceQuestion={featuredSpecificReading.slug === route.split("/")[2] && spread.length === 3
               ? resolvedQuestion
               : ""}
@@ -1881,12 +1958,17 @@ function App() {
           <PurchaseRecoveryPage />
         </Suspense>
       ) : null}
+      {isPaymentRoute ? (
+        <Suspense fallback={<div className="route-loading"><span>✦</span><p>Protegendo o pagamento…</p></div>}>
+          <PaymentPage />
+        </Suspense>
+      ) : null}
       {isLegalRoute ? (
         <Suspense fallback={<div className="route-loading"><span>✦</span><p>Abrindo o documento…</p></div>}>
           <LegalPage type={legalRouteType} />
         </Suspense>
       ) : null}
-      {!["/", "/tiragem-gratis", "/tiragem-completa", "/mapa-astral", "/recuperar-compra", "/termos", "/privacidade", "/reembolsos"].includes(route) && !isSpecificRoute ? <Navigate to="/" replace /> : null}
+      {!["/", "/tiragem-gratis", "/tiragem-completa", "/mapa-astral", "/recuperar-compra", "/pagamento", "/termos", "/privacidade", "/reembolsos"].includes(route) && !isSpecificRoute ? <Navigate to="/" replace /> : null}
 
       <footer>
         <Link className="brand footer-brand" to="/">

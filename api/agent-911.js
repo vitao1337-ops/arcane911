@@ -17,7 +17,9 @@ import {
 import { createProductCatalog } from "../src/config/productCatalog.js";
 import {
   PaymentLedgerError,
+  claimBundlePaymentEntitlement,
   claimPaymentEntitlement,
+  settleBundlePaymentEntitlement,
   settlePaymentEntitlement,
 } from "../server/payment-ledger.js";
 
@@ -891,27 +893,59 @@ function normalizePaidAccess(body, normalized) {
   const readingId = String(payment?.readingId ?? "").trim();
   const questionNumber = Number(payment?.questionNumber) || 0;
   const catalog = createProductCatalog(process.env);
-  const acceptedProducts = normalized.action === "complete_summary"
-    ? new Set([catalog.completeReading.id])
-    : normalized.action === "specific_summary"
-      ? new Set([catalog.specificQuestionComplete.id, catalog.specificQuestionStandalone.id])
-      : normalized.action === "follow_up" ? new Set([catalog.agentQuestion.id]) : new Set();
-  const expectedQuestionNumber = normalized.action === "follow_up"
-    ? normalized.questionsUsed + 1
-    : 0;
-  if (!/^cs_(?:test_|live_)?[a-zA-Z0-9]{10,220}$/u.test(sessionId)
-      || !acceptedProducts.has(productId)
-      || readingId !== normalized.reading.createdAt
-      || questionNumber !== expectedQuestionNumber) {
+  if (!/^mp-\d{5,30}$/u.test(sessionId)) {
     throw new PaymentLedgerError("payment_required", 402);
   }
-  return { sessionId, productId, readingId, questionNumber };
+
+  if (normalized.action === "complete_summary"
+      && productId === catalog.completeReading.id
+      && readingId === normalized.reading.createdAt
+      && questionNumber === 0) {
+    return {
+      sessionId,
+      productId,
+      readingId,
+      questionNumber,
+      accessMode: "bundle",
+      claimScope: "complete_summary",
+      claimSlot: 0,
+    };
+  }
+
+  const includedQuestion = normalized.action === "specific_summary"
+    && productId === catalog.completeReading.id
+    && Boolean(normalized.reading.parentReadingId)
+    && readingId === normalized.reading.parentReadingId
+    && questionNumber >= 1
+    && questionNumber <= catalog.completeReading.includedSpecificQuestions;
+  if (includedQuestion) {
+    return {
+      sessionId,
+      productId,
+      readingId,
+      questionNumber,
+      accessMode: "bundle",
+      claimScope: "specific_summary",
+      claimSlot: questionNumber,
+    };
+  }
+
+  const singleUseProduct = normalized.action === "specific_summary"
+    ? [catalog.specificQuestionComplete.id, catalog.specificQuestionStandalone.id].includes(productId)
+    : normalized.action === "follow_up" && productId === catalog.agentQuestion.id;
+  const expectedQuestionNumber = normalized.action === "follow_up" ? normalized.questionsUsed + 1 : 0;
+  if (!singleUseProduct || readingId !== normalized.reading.createdAt || questionNumber !== expectedQuestionNumber) {
+    throw new PaymentLedgerError("payment_required", 402);
+  }
+  return { sessionId, productId, readingId, questionNumber, accessMode: "single" };
 }
 
 function requestFingerprint(normalized, ip, paidAccess = null) {
   const source = JSON.stringify({
     ip,
     paymentSessionId: paidAccess?.sessionId ?? "",
+    paymentClaimScope: paidAccess?.claimScope ?? "",
+    paymentClaimSlot: paidAccess?.claimSlot ?? 0,
     action: normalized.action,
     readingMode: normalized.readingMode,
     questionsUsed: normalized.questionsUsed,
@@ -937,14 +971,20 @@ async function executePaidAgent911(normalized, providerPlan, paidAccess, fingerp
       .update(`${paidAccess.sessionId}:${fingerprint}`)
       .digest("hex"),
   };
-  await claimPaymentEntitlement(claim);
+  const claimAccess = paidAccess.accessMode === "bundle"
+    ? claimBundlePaymentEntitlement
+    : claimPaymentEntitlement;
+  const settleAccess = paidAccess.accessMode === "bundle"
+    ? settleBundlePaymentEntitlement
+    : settlePaymentEntitlement;
+  await claimAccess(claim);
   try {
     const payload = await executeAgent911(normalized, providerPlan);
-    await settlePaymentEntitlement(claim, "consumed");
+    await settleAccess(claim, "consumed");
     return payload;
   } catch (error) {
     try {
-      await settlePaymentEntitlement(claim, "released");
+      await settleAccess(claim, "released");
     } catch (releaseError) {
       console.error("payment_entitlement_release_failed", {
         action: normalized.action,

@@ -28,7 +28,7 @@ test("pedidos simultâneos do mesmo mapa são deduplicados para economizar chama
     calls += 1;
     const body = JSON.parse(options.body);
     assert.equal(body.agent, "astro-911");
-    assert.equal(body.schemaVersion, "2026-08-13.2");
+    assert.equal(body.schemaVersion, "2026-08-22.3");
     await new Promise((resolve) => setTimeout(resolve, 8));
     return { ok: true, status: 200, json: async () => payload };
   };

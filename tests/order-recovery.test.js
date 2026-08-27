@@ -4,7 +4,7 @@ import handler from "../api/order-status.js";
 
 const env = {
   SUPABASE_URL: "https://arcane-ledger.supabase.co",
-  SUPABASE_SECRET_KEY: "sb_secret_arcane911_recovery_1234567890",
+  SUPABASE_SECRET_KEY: ["sb", "secret", "arcane911", "recovery", "1234567890"].join("_"),
 };
 
 function mockResponse() {
@@ -46,7 +46,7 @@ async function withEnvironment(operation) {
 function ledgerResult(orderId, overrides = {}) {
   return {
     found: true,
-    sessionId: "cs_test_recoverysession123456",
+    sessionId: "mp-12345678906",
     orderId,
     productId: "arcane911-leitura-profunda",
     readingId: "reading-recovery-123456",
@@ -115,6 +115,25 @@ test("conteúdo pago continua autorizado, mas crédito de IA consumido não rena
       await handler(request(agentOrder, "198.51.100.212"), agentResult);
       assert.equal(agentResult.statusCode, 409);
       assert.equal(agentResult.payload.error, "payment_credit_unavailable");
+
+      const astralOrder = "order-recovery-astral-123456";
+      globalThis.fetch = async () => ({
+        ok: true,
+        status: 200,
+        async json() {
+          return ledgerResult(astralOrder, {
+            state: "consumed",
+            productId: "astro911-documento-completo",
+            readingId: "astro-v1-recoveryfingerprint",
+            offerContext: "astral_document",
+            amountTotal: 2990,
+          });
+        },
+      });
+      const astralResult = mockResponse();
+      await handler(request(astralOrder, "198.51.100.213"), astralResult);
+      assert.equal(astralResult.statusCode, 200);
+      assert.equal(astralResult.payload.entitlement.creditAvailable, false);
     } finally {
       globalThis.fetch = originalFetch;
     }

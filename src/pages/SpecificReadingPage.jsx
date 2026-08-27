@@ -22,10 +22,12 @@ import {
   createHostedCheckout,
   findPaymentEntitlement,
   loadPendingCheckout,
+  removePaymentEntitlement,
   savePaymentEntitlement,
   savePendingCheckout,
   trackCommercialEvent,
   verifyHostedCheckout,
+  verifyStoredPaymentEntitlement,
 } from "../lib/checkout";
 import {
   buildSpecificSynthesis,
@@ -34,6 +36,7 @@ import {
 } from "../lib/reading";
 
 const DRAFT_PREFIX = "arcane911.specific-reading.v1:";
+const INCLUDED_USAGE_PREFIX = "arcane911.included-specific.v1:";
 
 function safeSession() {
   return typeof window === "object" ? window.sessionStorage : null;
@@ -41,6 +44,33 @@ function safeSession() {
 
 function draftKey(slug, parentReadingId) {
   return `${DRAFT_PREFIX}${slug}:${parentReadingId || "standalone"}`;
+}
+
+function includedUsageKey(parentReadingId) {
+  return `${INCLUDED_USAGE_PREFIX}${parentReadingId}`;
+}
+
+function loadIncludedQuestionSlots(parentReadingId) {
+  if (!parentReadingId) return [];
+  try {
+    const slots = JSON.parse(safeSession()?.getItem(includedUsageKey(parentReadingId)) ?? "[]");
+    return Array.isArray(slots)
+      ? [...new Set(slots.map(Number).filter((slot) => Number.isInteger(slot) && slot >= 1 && slot <= 5))].sort()
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function markIncludedQuestionSlot(parentReadingId, slot) {
+  if (!parentReadingId || !Number.isInteger(slot) || slot < 1 || slot > 5) return [];
+  const next = [...new Set([...loadIncludedQuestionSlots(parentReadingId), slot])].sort();
+  try {
+    safeSession()?.setItem(includedUsageKey(parentReadingId), JSON.stringify(next));
+  } catch {
+    // O servidor continua sendo a autoridade do limite mesmo sem cache local.
+  }
+  return next;
 }
 
 function loadDraft(slug, parentReadingId) {
@@ -52,6 +82,11 @@ function loadDraft(slug, parentReadingId) {
       question: String(draft.question ?? "").slice(0, 800),
       phase: ["offer", "deck", "reading"].includes(draft.phase) ? draft.phase : "offer",
       cards: Array.isArray(draft.cards) ? draft.cards.slice(0, 5) : [],
+      includedSlot: Number.isInteger(Number(draft.includedSlot))
+        && Number(draft.includedSlot) >= 1
+        && Number(draft.includedSlot) <= 5
+        ? Number(draft.includedSlot)
+        : 0,
     };
   } catch {
     return null;
@@ -122,6 +157,7 @@ function SpecificReadingExperience({
   slug,
   insideCompleteReading = false,
   parentReadingId = "",
+  parentEntitlement = null,
   sourceQuestion = "",
   sourceIntentLabel = "",
 }) {
@@ -129,13 +165,15 @@ function SpecificReadingExperience({
   const navigate = useNavigate();
   const timerRef = useRef(null);
   const verificationRef = useRef("");
+  const restorePromiseRef = useRef({ key: "", promise: null });
 
-  const completeEntitlement = findPaymentEntitlement({
-    productId: commerceConfig.products.completeReading.id,
-    readingId: parentReadingId,
-  });
+  const completeEntitlement = parentEntitlement;
   const discounted = insideCompleteReading
-    && (commerceConfig.devUnlocked || Boolean(completeEntitlement));
+    && (commerceConfig.devUnlocked || Boolean(
+      completeEntitlement
+      && completeEntitlement.productId === commerceConfig.products.completeReading.id
+      && completeEntitlement.readingId === parentReadingId,
+    ));
   const offer = discounted
     ? commerceConfig.products.specificQuestionComplete
     : commerceConfig.products.specificQuestionStandalone;
@@ -144,13 +182,18 @@ function SpecificReadingExperience({
     () => loadDraft(slug, discounted ? parentReadingId : ""),
     [discounted, parentReadingId, slug],
   );
-  const initialEntitlement = findPaymentEntitlement({
+  const initialEntitlement = useMemo(() => findPaymentEntitlement({
     productId: offer.id,
     readingId: initialDraft?.readingId,
     readingSlug: reading.slug,
-  });
-  const initialSpread = (initialDraft?.cards ?? []).map((cardSlug) => tarotBySlug[cardSlug]).filter(Boolean);
-  const canRestorePaidPhase = commerceConfig.devUnlocked || Boolean(initialEntitlement);
+  }), [initialDraft?.readingId, offer.id, reading.slug]);
+  const initialSpread = useMemo(
+    () => (initialDraft?.cards ?? []).map((cardSlug) => tarotBySlug[cardSlug]).filter(Boolean),
+    [initialDraft],
+  );
+  const includedQuestionLimit = commerceConfig.products.completeReading.includedSpecificQuestions;
+  const initialIncludedSlot = discounted ? Number(initialDraft?.includedSlot) || 0 : 0;
+  const canRestorePaidPhase = commerceConfig.devUnlocked || Boolean(initialIncludedSlot && completeEntitlement);
   const restoredPhase = canRestorePaidPhase && initialDraft?.phase === "reading" && initialSpread.length === 5
     ? "reading"
     : canRestorePaidPhase && initialDraft?.phase === "deck" ? "deck" : "offer";
@@ -163,7 +206,16 @@ function SpecificReadingExperience({
   const [drawPool, setDrawPool] = useState([]);
   const [selectedCards, setSelectedCards] = useState([]);
   const [spread, setSpread] = useState(initialSpread.length === 5 ? initialSpread : []);
-  const [specificEntitlement, setSpecificEntitlement] = useState(initialEntitlement);
+  const [specificEntitlement, setSpecificEntitlement] = useState(
+    initialIncludedSlot && completeEntitlement
+      ? { ...completeEntitlement, questionNumber: initialIncludedSlot }
+      : commerceConfig.devUnlocked ? initialEntitlement : null,
+  );
+  const [activeIncludedSlot, setActiveIncludedSlot] = useState(initialIncludedSlot);
+  const [includedQuestionsUsed, setIncludedQuestionsUsed] = useState(() => Math.max(
+    Number(completeEntitlement?.includedQuestionsUsed) || 0,
+    loadIncludedQuestionSlots(parentReadingId).length,
+  ));
   const [isShuffling, setIsShuffling] = useState(false);
   const [status, setStatus] = useState("");
   const [paymentState, setPaymentState] = useState("idle");
@@ -172,10 +224,54 @@ function SpecificReadingExperience({
   const layout = buildSpecificLayout(reading);
   const returnPath = `/leituras/${reading.slug}${discounted ? "?origem=tiragem-completa" : ""}`;
   const backPath = discounted ? "/tiragem-completa" : "/tiragem-gratis";
+  const includedQuestionAvailable = discounted && includedQuestionsUsed < includedQuestionLimit;
+  const nextIncludedSlot = includedQuestionAvailable ? includedQuestionsUsed + 1 : 0;
 
   useEffect(() => () => {
     if (timerRef.current) window.clearTimeout(timerRef.current);
   }, []);
+
+  useEffect(() => {
+    if (commerceConfig.devUnlocked || initialIncludedSlot || !initialEntitlement || !initialDraft?.readingId) return undefined;
+    const restoreKey = `${initialEntitlement.sessionId}:${offer.id}:${initialDraft.readingId}`;
+    if (restorePromiseRef.current.key !== restoreKey) {
+      restorePromiseRef.current = {
+        key: restoreKey,
+        promise: verifyStoredPaymentEntitlement(initialEntitlement, {
+          productId: offer.id,
+          readingId: initialDraft.readingId,
+          readingSlug: reading.slug,
+          offerContext,
+        }),
+      };
+    }
+
+    let subscribed = true;
+    restorePromiseRef.current.promise
+      .then((serverEntitlement) => {
+        if (!subscribed) return;
+        const entitlement = savePaymentEntitlement(serverEntitlement);
+        if (!entitlement) return;
+        setSpecificEntitlement(entitlement);
+        if (initialDraft.phase === "reading" && initialSpread.length === 5) {
+          setSpread(initialSpread);
+          setPhase("reading");
+        } else if (initialDraft.phase === "deck") {
+          setPhase("deck");
+        }
+      })
+      .catch((error) => {
+        if (!subscribed) return;
+        setSpecificEntitlement(null);
+        setPhase("offer");
+        if (["invalid_order", "payment_credit_unavailable", "payment_mismatch", "purchase_not_found"].includes(error?.code)) {
+          removePaymentEntitlement(initialEntitlement.sessionId);
+        }
+      });
+    return () => {
+      subscribed = false;
+    };
+  }, [initialDraft, initialEntitlement, initialIncludedSlot, initialSpread, offer.id, offerContext, reading.slug]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -197,7 +293,7 @@ function SpecificReadingExperience({
       return;
     }
 
-    const sessionId = params.get("session_id") ?? "";
+    const sessionId = params.get("payment_id") ?? "";
     if (checkoutState !== "success" || !sessionId || verificationRef.current === sessionId) return;
     verificationRef.current = sessionId;
     const pending = loadPendingCheckout();
@@ -242,12 +338,13 @@ function SpecificReadingExperience({
       });
   }, [discounted, location.search, navigate, offer.id, offerContext, parentReadingId, question, reading.slug, readingId, returnPath]);
 
-  function persist(nextPhase, cards = spread) {
+  function persist(nextPhase, cards = spread, includedSlot = activeIncludedSlot) {
     saveDraft(reading.slug, discounted ? parentReadingId : "", {
       readingId,
       question: question.trim(),
       phase: nextPhase,
       cards: cards.map((card) => card.slug),
+      includedSlot,
     });
   }
 
@@ -279,6 +376,24 @@ function SpecificReadingExperience({
 
     if (commerceConfig.devUnlocked) {
       unlockDevReading();
+      return;
+    }
+
+    if (includedQuestionAvailable && completeEntitlement) {
+      const slot = nextIncludedSlot;
+      setActiveIncludedSlot(slot);
+      setSpecificEntitlement({ ...completeEntitlement, questionNumber: slot });
+      setPhase("deck");
+      setPaymentState("paid");
+      setPaymentMessage(`Pergunta ${slot} de ${includedQuestionLimit} incluída na sua Ferradura.`);
+      setStatus("Sua pergunta incluída está pronta para o embaralhamento.");
+      persist("deck", [], slot);
+      trackCommercialEvent("included_specific_question_opened", {
+        product_id: completeEntitlement.productId,
+        reading_slug: reading.slug,
+        question_slot: slot,
+      });
+      window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
       return;
     }
 
@@ -339,7 +454,9 @@ function SpecificReadingExperience({
     setPhase("reading");
     setStatus("Sua pergunta específica está aberta.");
     persist("reading", selectedCards);
-    if (!commerceConfig.devUnlocked && specificEntitlement && !specificEntitlement.consumedAt) {
+    if (!commerceConfig.devUnlocked && specificEntitlement
+        && specificEntitlement.productId !== commerceConfig.products.completeReading.id
+        && !specificEntitlement.consumedAt) {
       const consumed = consumePaymentEntitlement(specificEntitlement.sessionId);
       if (consumed) setSpecificEntitlement(consumed);
     }
@@ -361,11 +478,22 @@ function SpecificReadingExperience({
     setSelectedCards([]);
     setSpread([]);
     setSpecificEntitlement(null);
+    setActiveIncludedSlot(0);
     setStatus("");
     setPaymentState("idle");
     setPaymentMessage("");
     setQuestionError("");
     window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+  }
+
+  function handleSpecificSummaryResult(result) {
+    if (!result || !activeIncludedSlot || !parentReadingId || commerceConfig.devUnlocked) return;
+    const usedSlots = markIncludedQuestionSlot(parentReadingId, activeIncludedSlot);
+    const used = Math.max(includedQuestionsUsed, usedSlots.length, activeIncludedSlot);
+    setIncludedQuestionsUsed(used);
+    if (completeEntitlement) {
+      savePaymentEntitlement({ ...completeEntitlement, includedQuestionsUsed: used });
+    }
   }
 
   if (phase === "deck") {
@@ -489,7 +617,9 @@ function SpecificReadingExperience({
           createdAt={readingId}
           variant="specific"
           spreadId={reading.slug}
+          parentReadingId={activeIncludedSlot ? parentReadingId : ""}
           entitlement={specificEntitlement}
+          onResult={handleSpecificSummaryResult}
         />
 
         <div className="specific-result-actions">
@@ -569,11 +699,15 @@ function SpecificReadingExperience({
             >
               {commerceConfig.devUnlocked
                 ? "Continuar no DEV · sem cobrança"
-                : paymentState === "opening" ? "Abrindo pagamento…" : `Continuar por ${offer.price}`}
+                : includedQuestionAvailable
+                  ? `Continuar · pergunta ${nextIncludedSlot} de ${includedQuestionLimit} incluída`
+                  : paymentState === "opening" ? "Abrindo pagamento…" : `Continuar por ${offer.price}`}
               <ArrowRight size={18} />
             </button>
-            <span><ShieldCheck size={15} /> {discounted
-              ? `${offer.price} porque esta Ferradura já foi liberada`
+            <span><ShieldCheck size={15} /> {includedQuestionAvailable
+              ? `${includedQuestionLimit - includedQuestionsUsed} pergunta${includedQuestionLimit - includedQuestionsUsed === 1 ? "" : "s"} incluída${includedQuestionLimit - includedQuestionsUsed === 1 ? "" : "s"} restante${includedQuestionLimit - includedQuestionsUsed === 1 ? "" : "s"}`
+              : discounted
+                ? `${offer.price} para perguntas adicionais após as ${includedQuestionLimit} incluídas`
               : commerceConfig.devUnlocked
                 ? `${offer.price} em produção · aqui a compra é simulada`
                 : `${offer.price} · pagamento único · leitura de 5 cartas`}</span>

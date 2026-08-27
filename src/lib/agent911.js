@@ -85,6 +85,7 @@ export function createTarotAgentContext({
   question,
   createdAt,
   spreadId = "",
+  parentReadingId = "",
 }) {
   if (!Array.isArray(cards) || ![3, 5, 7].includes(cards.length)) {
     throw new Agent911Error("A leitura precisa conter três, cinco ou sete cartas.", "invalid_tarot_context");
@@ -115,6 +116,7 @@ export function createTarotAgentContext({
       intentLabel: cleanText(intentLabel, 80),
       question: cleanText(question, 800),
       spreadId: cards.length === 5 ? cleanText(spreadId, 40) : "",
+      parentReadingId: cards.length === 5 ? cleanText(parentReadingId, 120) : "",
       cards: cards.map((card, index) => ({
         order: index + 1,
         slug: card.slug,

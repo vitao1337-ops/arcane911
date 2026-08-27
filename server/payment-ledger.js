@@ -1,3 +1,5 @@
+import { createProductCatalog, findCatalogProduct } from "../src/config/productCatalog.js";
+
 const LEDGER_TIMEOUT_MS = 6_000;
 
 export class PaymentLedgerError extends Error {
@@ -46,7 +48,7 @@ export function paymentLedgerConfigured(env = process.env) {
 
 export async function assertPaymentLedgerReady(options = {}) {
   const result = await callLedgerRpc("arcane911_payment_ledger_health", {}, options);
-  if (result?.ready !== true || Number(result?.version) !== 2) {
+  if (result?.ready !== true || Number(result?.version) !== 4) {
     throw new PaymentLedgerError("payment_ledger_not_ready", 503, 5_000);
   }
   return result;
@@ -106,12 +108,17 @@ async function callLedgerRpc(functionName, body, {
   }
 }
 
-function normalizedEntitlement(entitlement) {
+function normalizedEntitlement(entitlement, env = process.env) {
+  const product = findCatalogProduct(
+    createProductCatalog(env),
+    cleanIdentifier(entitlement?.productId, 80),
+  );
   const normalized = {
     sessionId: cleanIdentifier(entitlement?.sessionId),
-    paymentIntentId: cleanIdentifier(entitlement?.paymentIntentId),
+    providerTransactionId: cleanIdentifier(entitlement?.providerTransactionId),
     orderId: cleanIdentifier(entitlement?.orderId, 120),
     productId: cleanIdentifier(entitlement?.productId, 80),
+    productKind: cleanIdentifier(product?.kind, 40),
     readingId: cleanIdentifier(entitlement?.readingId, 120),
     readingSlug: cleanIdentifier(entitlement?.readingSlug, 40),
     offerContext: cleanIdentifier(entitlement?.offerContext, 40),
@@ -121,7 +128,8 @@ function normalizedEntitlement(entitlement) {
     livemode: entitlement?.livemode === true,
     verifiedAt: String(entitlement?.verifiedAt ?? "").trim().slice(0, 40),
   };
-  if (!normalized.sessionId || !normalized.orderId || !normalized.productId || !normalized.readingId
+  if (!normalized.sessionId || !normalized.orderId || !normalized.productId || !normalized.productKind
+      || !normalized.readingId
       || !Number.isInteger(normalized.amountTotal) || normalized.amountTotal <= 0
       || normalized.currency !== "brl") {
     throw new PaymentLedgerError("payment_ledger_invalid_entitlement", 400);
@@ -130,12 +138,13 @@ function normalizedEntitlement(entitlement) {
 }
 
 export async function registerPaymentEntitlement(entitlement, options = {}) {
-  const normalized = normalizedEntitlement(entitlement);
+  const normalized = normalizedEntitlement(entitlement, options.env ?? process.env);
   const result = await callLedgerRpc("arcane911_register_entitlement", {
-    p_stripe_session_id: normalized.sessionId,
-    p_payment_intent_id: normalized.paymentIntentId,
+    p_payment_id: normalized.sessionId,
+    p_provider_transaction_id: normalized.providerTransactionId,
     p_order_id: normalized.orderId,
     p_product_id: normalized.productId,
+    p_product_kind: normalized.productKind,
     p_reading_id: normalized.readingId,
     p_reading_slug: normalized.readingSlug,
     p_offer_context: normalized.offerContext,
@@ -173,6 +182,8 @@ export async function findPaymentEntitlementByOrder(orderIdValue, options = {}) 
     currency: cleanIdentifier(result.currency, 8).toLowerCase(),
     livemode: result.livemode === true,
     state: cleanIdentifier(result.state, 24),
+    completeSummaryUsed: result.completeSummaryUsed === true,
+    includedQuestionsUsed: Math.max(0, Number(result.includedQuestionsUsed) || 0),
     verifiedAt: String(result.verifiedAt ?? "").trim().slice(0, 40),
   };
   if (!entitlement.sessionId || !entitlement.orderId || !entitlement.productId
@@ -194,11 +205,43 @@ export async function claimPaymentEntitlement(access, options = {}) {
     throw new PaymentLedgerError("payment_required", 402);
   }
   const result = await callLedgerRpc("arcane911_claim_entitlement", {
-    p_stripe_session_id: normalized.sessionId,
+    p_payment_id: normalized.sessionId,
     p_claim_id: normalized.claimId,
     p_product_id: normalized.productId,
     p_reading_id: normalized.readingId,
     p_question_number: normalized.questionNumber,
+  }, options);
+  if (result?.claimed !== true) {
+    throw new PaymentLedgerError("payment_credit_unavailable", 402);
+  }
+  return result;
+}
+
+export async function claimBundlePaymentEntitlement(access, options = {}) {
+  const normalized = {
+    sessionId: cleanIdentifier(access?.sessionId),
+    claimId: cleanIdentifier(access?.claimId, 120),
+    productId: cleanIdentifier(access?.productId, 80),
+    readingId: cleanIdentifier(access?.readingId, 120),
+    claimScope: cleanIdentifier(access?.claimScope, 40),
+    claimSlot: Number(access?.claimSlot) || 0,
+  };
+  const validScope = normalized.claimScope === "complete_summary"
+    ? normalized.claimSlot === 0
+    : normalized.claimScope === "specific_summary"
+      && Number.isInteger(normalized.claimSlot)
+      && normalized.claimSlot >= 1
+      && normalized.claimSlot <= 5;
+  if (!normalized.sessionId || !normalized.claimId || !normalized.productId || !normalized.readingId || !validScope) {
+    throw new PaymentLedgerError("payment_required", 402);
+  }
+  const result = await callLedgerRpc("arcane911_claim_bundle_entitlement", {
+    p_payment_id: normalized.sessionId,
+    p_claim_id: normalized.claimId,
+    p_product_id: normalized.productId,
+    p_reading_id: normalized.readingId,
+    p_claim_scope: normalized.claimScope,
+    p_claim_slot: normalized.claimSlot,
   }, options);
   if (result?.claimed !== true) {
     throw new PaymentLedgerError("payment_credit_unavailable", 402);
@@ -213,8 +256,31 @@ export async function settlePaymentEntitlement(access, outcome, options = {}) {
     throw new PaymentLedgerError("payment_ledger_invalid_entitlement", 400);
   }
   const result = await callLedgerRpc("arcane911_settle_entitlement", {
-    p_stripe_session_id: sessionId,
+    p_payment_id: sessionId,
     p_claim_id: claimId,
+    p_outcome: outcome,
+  }, options);
+  if (result?.settled !== true) {
+    throw new PaymentLedgerError("payment_ledger_conflict", 409);
+  }
+  return result;
+}
+
+export async function settleBundlePaymentEntitlement(access, outcome, options = {}) {
+  const sessionId = cleanIdentifier(access?.sessionId);
+  const claimId = cleanIdentifier(access?.claimId, 120);
+  const claimScope = cleanIdentifier(access?.claimScope, 40);
+  const claimSlot = Number(access?.claimSlot) || 0;
+  if (!sessionId || !claimId || !["complete_summary", "specific_summary"].includes(claimScope)
+      || !Number.isInteger(claimSlot) || claimSlot < 0 || claimSlot > 5
+      || !["consumed", "released"].includes(outcome)) {
+    throw new PaymentLedgerError("payment_ledger_invalid_entitlement", 400);
+  }
+  const result = await callLedgerRpc("arcane911_settle_bundle_entitlement", {
+    p_payment_id: sessionId,
+    p_claim_id: claimId,
+    p_claim_scope: claimScope,
+    p_claim_slot: claimSlot,
     p_outcome: outcome,
   }, options);
   if (result?.settled !== true) {

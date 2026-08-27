@@ -12,6 +12,6 @@ export const astro911Config = Object.freeze({
   remoteEnabled: mode === "live",
   devMockEnabled: mode === "mock",
   endpoint: String(viteEnv.VITE_ASTRO911_ENDPOINT ?? "/api/astro-911").trim(),
-  contextSchemaVersion: "2026-08-13.2",
+  contextSchemaVersion: "2026-08-22.3",
   timeoutMs: 58_000,
 });

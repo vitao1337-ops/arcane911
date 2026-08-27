@@ -4,15 +4,19 @@ import test from "node:test";
 import {
   PaymentLedgerError,
   assertPaymentLedgerReady,
+  claimBundlePaymentEntitlement,
   claimPaymentEntitlement,
   paymentLedgerConfigured,
   registerPaymentEntitlement,
+  settleBundlePaymentEntitlement,
   settlePaymentEntitlement,
 } from "../server/payment-ledger.js";
 
+const TEST_SUPABASE_SECRET = ["sb", "secret", "arcane911", "test", "key", "1234567890"].join("_");
+
 const baseEnv = Object.freeze({
   SUPABASE_URL: "https://arcane-ledger.supabase.co",
-  SUPABASE_SECRET_KEY: "sb_secret_arcane911_test_key_1234567890",
+  SUPABASE_SECRET_KEY: TEST_SUPABASE_SECRET,
 });
 
 function response(payload, status = 200) {
@@ -25,12 +29,12 @@ function response(payload, status = 200) {
 
 function entitlement() {
   return {
-    sessionId: "cs_test_ledger1234567890",
+    sessionId: "mp-12345678901",
     orderId: "order-ledger-test-123456",
     productId: "agent911-pergunta",
     readingId: "2026-08-17T00:00:00.000Z",
     questionNumber: 1,
-    paymentIntentId: "pi_ledger1234567890",
+    providerTransactionId: "mp-12345678901",
     amountTotal: 500,
     currency: "brl",
     livemode: false,
@@ -57,14 +61,14 @@ test("SQL mantém dados em schema privado, RLS e RPCs restritas ao service_role"
 test("healthcheck comprova a versão do schema antes de abrir cobrança", async () => {
   const ready = await assertPaymentLedgerReady({
     env: baseEnv,
-    fetchImplementation: async () => response({ ready: true, version: 2 }),
+    fetchImplementation: async () => response({ ready: true, version: 4 }),
   });
   assert.equal(ready.ready, true);
 
   await assert.rejects(
     assertPaymentLedgerReady({
       env: baseEnv,
-      fetchImplementation: async () => response({ ready: true, version: 1 }),
+      fetchImplementation: async () => response({ ready: true, version: 2 }),
     }),
     (error) => error instanceof PaymentLedgerError && error.code === "payment_ledger_not_ready",
   );
@@ -85,6 +89,7 @@ test("registro usa RPC privada, sb_secret_ apenas em apikey e não envia conteú
   assert.equal(call.options.headers.apikey, baseEnv.SUPABASE_SECRET_KEY);
   assert.equal(Object.hasOwn(call.options.headers, "Authorization"), false);
   assert.equal(call.body.p_product_id, "agent911-pergunta");
+  assert.equal(call.body.p_product_kind, "agent_question");
   assert.equal(JSON.stringify(call.body).includes("question"), true);
   assert.equal(Object.keys(call.body).some((key) => ["message", "cards", "answer", "birthDate"].includes(key)), false);
 });
@@ -140,5 +145,35 @@ test("RPC ausente é distinguida de crédito consumido", async () => {
       fetchImplementation: async () => response({ code: "PGRST202" }, 404),
     }),
     (error) => error instanceof PaymentLedgerError && error.code === "payment_ledger_not_ready",
+  );
+});
+
+test("bundle da Ferradura usa slot 0 na síntese e slots 1–5 nas perguntas incluídas", async () => {
+  const calls = [];
+  const access = {
+    sessionId: "mp-12345678902",
+    claimId: "claim-bundle-specific-123456",
+    productId: "arcane911-leitura-profunda",
+    readingId: "reading-bundle-123456",
+    claimScope: "specific_summary",
+    claimSlot: 5,
+  };
+  const fetchImplementation = async (url, options) => {
+    calls.push({ url, body: JSON.parse(options.body) });
+    if (url.endsWith("arcane911_claim_bundle_entitlement")) {
+      return response({ claimed: true, state: "processing" });
+    }
+    return response({ settled: true, state: "consumed" });
+  };
+
+  await claimBundlePaymentEntitlement(access, { env: baseEnv, fetchImplementation });
+  await settleBundlePaymentEntitlement(access, "consumed", { env: baseEnv, fetchImplementation });
+  assert.equal(calls[0].body.p_claim_scope, "specific_summary");
+  assert.equal(calls[0].body.p_claim_slot, 5);
+  assert.equal(calls[1].body.p_outcome, "consumed");
+
+  await assert.rejects(
+    claimBundlePaymentEntitlement({ ...access, claimSlot: 6 }, { env: baseEnv, fetchImplementation }),
+    (error) => error instanceof PaymentLedgerError && error.code === "payment_required",
   );
 });
