@@ -19,6 +19,10 @@ function supabaseProjectRef() {
   }
 }
 
+function configured(value, minimum = 1) {
+  return String(value ?? "").trim().length >= minimum;
+}
+
 export default async function handler(request, response) {
   if (request.method !== "GET") {
     response.setHeader("Allow", "GET");
@@ -27,6 +31,9 @@ export default async function handler(request, response) {
 
   const result = {
     mercadoPagoConfigured: mercadoPagoConfigured(),
+    mercadoPagoPublicKeyConfigured: configured(process.env.VITE_MERCADOPAGO_PUBLIC_KEY, 16),
+    mercadoPagoWebhookSecretConfigured: configured(process.env.MERCADOPAGO_WEBHOOK_SECRET, 16),
+    publicSiteUrlConfigured: configured(process.env.VITE_PUBLIC_SITE_URL, 8),
     paymentLedgerConfigured: paymentLedgerConfigured(),
     paymentLedgerReady: false,
     paymentLedgerError: null,
