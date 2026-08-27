@@ -8,6 +8,17 @@ function sendJson(response, status, payload) {
   return response.status(status).json(payload);
 }
 
+function supabaseProjectRef() {
+  try {
+    const url = new URL(String(process.env.SUPABASE_URL ?? "").trim());
+    const host = String(url.hostname || "").toLowerCase();
+    const suffix = ".supabase.co";
+    return host.endsWith(suffix) ? host.slice(0, -suffix.length) : host || null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function handler(request, response) {
   if (request.method !== "GET") {
     response.setHeader("Allow", "GET");
@@ -19,6 +30,7 @@ export default async function handler(request, response) {
     paymentLedgerConfigured: paymentLedgerConfigured(),
     paymentLedgerReady: false,
     paymentLedgerError: null,
+    supabaseProjectRef: supabaseProjectRef(),
   };
 
   if (result.paymentLedgerConfigured) {
