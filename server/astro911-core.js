@@ -629,6 +629,17 @@ function auditExplicitAspectClaims(text, normalized) {
 
 const deterministicPattern = /\b(?:vai\s+(?:acontecer|ocorrer|dar\s+certo|terminar)|certamente|sem\s+d[uú]vida|destinad[oa]s?|garantid[oa]s?|inevit[aá]vel|o\s+mapa\s+prova|voc[eê]\s+[ée]\s+(?:narcisista|dependente|traumatizad[oa]))\b/iu;
 
+export function auditAstro911Answer(answer, normalized) {
+  const text = String(answer ?? '').trim();
+  const comparison = normalizedForComparison(text);
+  const references = normalized.chart.planets.filter((planet) =>
+    new RegExp(`\\b${escapePattern(normalizedForComparison(planet.name))}\\b`, 'u').test(comparison));
+  return text.length >= 400 && text.length <= 12000 && text.split(/\s+/u).length >= 80
+    && references.length >= 2
+    && auditPlacementClaims(text, normalized) && auditHouseClaims(text, normalized)
+    && auditExplicitAspectClaims(text, normalized) && !deterministicPattern.test(text);
+}
+
 export function auditAstro911Document(document, normalized) {
   const reasons = [];
   const allowedFactIds = new Set(normalized.facts.map((fact) => fact.id));

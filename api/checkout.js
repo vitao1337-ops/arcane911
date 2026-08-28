@@ -1,11 +1,9 @@
+import { preparePurchaseBeforeCharge } from "../server/purchase-preflight.js";
 import {
   CheckoutError,
   checkoutErrorPayload,
-  checkoutProductNeedsLedger,
-  mercadoPagoConfigured,
   prepareMercadoPagoCheckout,
 } from "../server/checkout-core.js";
-import { assertPaymentLedgerReady, paymentLedgerConfigured } from "../server/payment-ledger.js";
 
 function sendJson(response, status, payload) {
   response.setHeader("Cache-Control", "no-store, max-age=0");
@@ -56,16 +54,11 @@ export default async function handler(request, response) {
   try { body = parseBody(request); } catch { return sendJson(response, 400, { error: "invalid_payload" }); }
 
   try {
-    if (!mercadoPagoConfigured()) throw new CheckoutError("checkout_not_configured", 503);
-    if (checkoutProductNeedsLedger(body.productId) && !paymentLedgerConfigured()) throw new CheckoutError("payment_ledger_not_configured", 503);
-    if (checkoutProductNeedsLedger(body.productId)) {
-      try { await assertPaymentLedgerReady(); }
-      catch (error) { throw new CheckoutError(error?.code ?? "payment_ledger_unavailable", error?.status ?? 503); }
-    }
+    await preparePurchaseBeforeCharge(body, { createDraft: true });
     const result = await prepareMercadoPagoCheckout(body, { origin: requestOrigin(request) });
     return sendJson(response, 200, result);
   } catch (error) {
-    const failure = checkoutErrorPayload(error);
+    const failure = checkoutErrorPayload(error?.code ? new CheckoutError(error.code, error.status || 503) : error);
     return sendJson(response, failure.status, failure.body);
   }
 }

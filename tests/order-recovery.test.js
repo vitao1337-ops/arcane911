@@ -62,11 +62,12 @@ function ledgerResult(orderId, overrides = {}) {
   };
 }
 
-test("código do pedido restaura autorização sem conteúdo íntimo", async () => {
+test("código do pedido restaura autorização e consulta o conteúdo privado", async () => {
   await withEnvironment(async () => {
     const orderId = "order-recovery-complete-123456";
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (_url, options) => {
+      if (_url.endsWith('arcane911_read_paid_content')) return { ok: true, status: 200, json: async () => ({ authorized: true, results: [] }) };
       assert.deepEqual(JSON.parse(options.body), { p_order_id: orderId });
       return { ok: true, status: 200, async json() { return ledgerResult(orderId); } };
     };
@@ -87,7 +88,8 @@ test("conteúdo pago continua autorizado, mas crédito de IA consumido não rena
   await withEnvironment(async () => {
     const originalFetch = globalThis.fetch;
     const completeOrder = "order-recovery-consumed-123456";
-    globalThis.fetch = async () => ({
+    globalThis.fetch = async (url) => url.endsWith('arcane911_read_paid_content')
+      ? { ok: true, status: 200, json: async () => ({ authorized: true, results: [] }) } : ({
       ok: true,
       status: 200,
       async json() { return ledgerResult(completeOrder, { state: "consumed" }); },
@@ -99,7 +101,8 @@ test("conteúdo pago continua autorizado, mas crédito de IA consumido não rena
       assert.equal(completeResult.payload.entitlement.creditAvailable, false);
 
       const agentOrder = "order-recovery-agent-123456";
-      globalThis.fetch = async () => ({
+      globalThis.fetch = async (url) => url.endsWith('arcane911_read_paid_content')
+      ? { ok: true, status: 200, json: async () => ({ authorized: true, results: [] }) } : ({
         ok: true,
         status: 200,
         async json() {
@@ -117,7 +120,8 @@ test("conteúdo pago continua autorizado, mas crédito de IA consumido não rena
       assert.equal(agentResult.payload.error, "payment_credit_unavailable");
 
       const astralOrder = "order-recovery-astral-123456";
-      globalThis.fetch = async () => ({
+      globalThis.fetch = async (url) => url.endsWith('arcane911_read_paid_content')
+      ? { ok: true, status: 200, json: async () => ({ authorized: true, results: [] }) } : ({
         ok: true,
         status: 200,
         async json() {

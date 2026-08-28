@@ -20,9 +20,9 @@ function cleanIdentifier(value, maximumLength = 240) {
 function ledgerConfig(env = process.env) {
   const rawUrl = String(env.SUPABASE_URL ?? "").trim().replace(/\/+$/u, "");
   const secretKey = String(
-    env.SUPABASE_SECRET_KEY
-      ?? env.SUPABASE_SERVICE_ROLE_KEY
-      ?? "",
+    String(env.SUPABASE_SECRET_KEY ?? "").trim()
+      || env.SUPABASE_SERVICE_ROLE_KEY
+      || "",
   ).trim();
   let url;
   try {
@@ -48,8 +48,16 @@ export function paymentLedgerConfigured(env = process.env) {
 
 export async function assertPaymentLedgerReady(options = {}) {
   const result = await callLedgerRpc("arcane911_payment_ledger_health", {}, options);
-  if (result?.ready !== true || Number(result?.version) !== 4) {
+  if (result?.ready !== true || Number(result?.version) !== 5) {
     throw new PaymentLedgerError("payment_ledger_not_ready", 503, 5_000);
+  }
+  return result;
+}
+
+export async function assertAstralFulfillmentReady(options = {}) {
+  const result = await callLedgerRpc("arcane911_astral_fulfillment_health", {}, options);
+  if (result?.ready !== true || Number(result?.version) !== 2) {
+    throw new PaymentLedgerError("astral_fulfillment_not_ready", 503, 5_000);
   }
   return result;
 }
@@ -157,6 +165,7 @@ export async function registerPaymentEntitlement(entitlement, options = {}) {
   if (result?.registered !== true) {
     throw new PaymentLedgerError("payment_ledger_conflict", 409);
   }
+  if (result.state === "revoked") throw new PaymentLedgerError("payment_revoked", 403);
   return result;
 }
 
@@ -212,7 +221,7 @@ export async function claimPaymentEntitlement(access, options = {}) {
     p_question_number: normalized.questionNumber,
   }, options);
   if (result?.claimed !== true) {
-    throw new PaymentLedgerError("payment_credit_unavailable", 402);
+    throw new PaymentLedgerError(result?.state === "processing" ? "purchase_processing" : "payment_credit_unavailable", result?.state === "processing" ? 409 : 402, 5000);
   }
   return result;
 }
@@ -244,7 +253,7 @@ export async function claimBundlePaymentEntitlement(access, options = {}) {
     p_claim_slot: normalized.claimSlot,
   }, options);
   if (result?.claimed !== true) {
-    throw new PaymentLedgerError("payment_credit_unavailable", 402);
+    throw new PaymentLedgerError(result?.state === "processing" ? "purchase_processing" : "payment_credit_unavailable", result?.state === "processing" ? 409 : 402, 5000);
   }
   return result;
 }
@@ -286,5 +295,166 @@ export async function settleBundlePaymentEntitlement(access, outcome, options = 
   if (result?.settled !== true) {
     throw new PaymentLedgerError("payment_ledger_conflict", 409);
   }
+  return result;
+}
+
+function cleanEmail(value) {
+  const email = String(value ?? "").trim().toLowerCase().slice(0, 150);
+  return /^\S+@\S+\.\S+$/u.test(email) ? email : "";
+}
+
+export async function registerAstralOrder(order, options = {}) {
+  const normalized = {
+    sessionId: cleanIdentifier(order?.sessionId),
+    orderId: cleanIdentifier(order?.orderId, 120),
+    readingId: cleanIdentifier(order?.readingId, 120),
+    fullName: String(order?.fullName ?? "").replace(/\s+/gu, " ").trim().slice(0, 80),
+    email: cleanEmail(order?.email),
+    birthDate: String(order?.birthDate ?? "").trim().slice(0, 10),
+    birthTime: String(order?.birthTime ?? "").trim().slice(0, 8),
+    cityName: String(order?.cityName ?? "").replace(/\s+/gu, " ").trim().slice(0, 120),
+    regionName: String(order?.regionName ?? "").replace(/\s+/gu, " ").trim().slice(0, 120),
+    countryName: String(order?.countryName ?? "").replace(/\s+/gu, " ").trim().slice(0, 120),
+    timezone: String(order?.timezone ?? "").trim().slice(0, 80),
+    latitude: Number(order?.latitude),
+    longitude: Number(order?.longitude),
+  };
+  if (!normalized.sessionId || !normalized.orderId || !normalized.readingId
+      || normalized.fullName.length < 2 || !normalized.email
+      || !/^\d{4}-\d{2}-\d{2}$/u.test(normalized.birthDate)
+      || !/^\d{2}:\d{2}(?::\d{2})?$/u.test(normalized.birthTime)
+      || !normalized.cityName || !normalized.countryName || !normalized.timezone
+      || !Number.isFinite(normalized.latitude) || normalized.latitude < -90 || normalized.latitude > 90
+      || !Number.isFinite(normalized.longitude) || normalized.longitude < -180 || normalized.longitude > 180) {
+    throw new PaymentLedgerError("astral_order_invalid", 400);
+  }
+
+  const result = await callLedgerRpc("arcane911_register_astral_order", {
+    p_payment_id: normalized.sessionId,
+    p_order_id: normalized.orderId,
+    p_reading_id: normalized.readingId,
+    p_full_name: normalized.fullName,
+    p_email: normalized.email,
+    p_birth_date: normalized.birthDate,
+    p_birth_time: normalized.birthTime,
+    p_city_name: normalized.cityName,
+    p_region_name: normalized.regionName,
+    p_country_name: normalized.countryName,
+    p_timezone: normalized.timezone,
+    p_latitude: normalized.latitude,
+    p_longitude: normalized.longitude,
+  }, options);
+  if (result?.registered !== true) throw new PaymentLedgerError("astral_order_conflict", 409);
+  return result;
+}
+
+export async function getAstralOrderStatus(access, options = {}) {
+  const normalized = {
+    sessionId: cleanIdentifier(access?.sessionId),
+    orderId: cleanIdentifier(access?.orderId, 120),
+    readingId: cleanIdentifier(access?.readingId, 120),
+  };
+  if (!normalized.sessionId || !normalized.orderId || !normalized.readingId) {
+    throw new PaymentLedgerError("astral_order_invalid", 400);
+  }
+  return callLedgerRpc("arcane911_get_astral_order_status", {
+    p_payment_id: normalized.sessionId,
+    p_order_id: normalized.orderId,
+    p_reading_id: normalized.readingId,
+  }, options);
+}
+
+export async function markAstralOrderDelivered(orderIdValue, options = {}) {
+  const orderId = cleanIdentifier(orderIdValue, 120);
+  if (!orderId.startsWith("order-") || orderId.length < 18) {
+    throw new PaymentLedgerError("invalid_order", 400);
+  }
+  const result = await callLedgerRpc("arcane911_mark_astral_order_delivered", {
+    p_order_id: orderId,
+  }, options);
+  if (result?.updated !== true) throw new PaymentLedgerError("purchase_not_found", 404);
+  return result;
+}
+
+export async function claimAstralQuestion(access, options = {}) {
+  const normalized = {
+    sessionId: cleanIdentifier(access?.sessionId),
+    orderId: cleanIdentifier(access?.orderId, 120),
+    readingId: cleanIdentifier(access?.readingId, 120),
+    claimId: cleanIdentifier(access?.claimId, 120),
+  };
+  if (!normalized.sessionId || !normalized.orderId || !normalized.readingId || !normalized.claimId) {
+    throw new PaymentLedgerError("payment_required", 402);
+  }
+  const result = await callLedgerRpc("arcane911_claim_astral_question", {
+    p_payment_id: normalized.sessionId,
+    p_order_id: normalized.orderId,
+    p_reading_id: normalized.readingId,
+    p_claim_id: normalized.claimId,
+  }, options);
+  if (result?.replayed === true) return result;
+  if (result?.claimed !== true) {
+    if (result?.state === "processing") throw new PaymentLedgerError("purchase_processing", 409, 5000);
+    const code = result?.state === "delivery_required" ? "astral_delivery_required" : "payment_credit_unavailable";
+    throw new PaymentLedgerError(code, code === "astral_delivery_required" ? 403 : 402);
+  }
+  return result;
+}
+
+export async function preparePurchase(order, options = {}) {
+  const result = await callLedgerRpc('arcane911_prepare_purchase', {
+    p_order_id: order.orderId, p_product_id: order.product.id,
+    p_reading_id: order.readingId, p_amount_total: order.product.priceCents,
+    p_snapshot: order.snapshot,
+  }, options);
+  if (!result?.prepared) throw new PaymentLedgerError('payment_mismatch', 409);
+  return result;
+}
+
+export async function revokePaymentEntitlement(sessionId, reason, options = {}) {
+  return callLedgerRpc('arcane911_revoke_entitlement', {
+    p_payment_id: cleanIdentifier(sessionId), p_reason: cleanIdentifier(reason, 40),
+  }, options);
+}
+
+export async function readPaidContent(access, options = {}) {
+  const result = await callLedgerRpc('arcane911_read_paid_content', {
+    p_payment_id: cleanIdentifier(access.sessionId),
+    p_product_id: cleanIdentifier(access.productId, 80),
+    p_reading_id: cleanIdentifier(access.readingId, 120),
+    p_order_id: cleanIdentifier(access.orderId, 120),
+  }, options);
+  if (!result?.authorized) throw new PaymentLedgerError(result?.state === 'revoked' ? 'payment_revoked' : 'payment_required', 403);
+  return result;
+}
+
+export async function completePaidContent(access, payload, input, options = {}) {
+  const result = await callLedgerRpc('arcane911_complete_paid_content', {
+    p_payment_id: cleanIdentifier(access.sessionId), p_claim_id: cleanIdentifier(access.claimId, 120),
+    p_scope: access.claimScope || 'single', p_slot: Number(access.claimSlot) || 0,
+    p_payload: payload, p_input: input,
+  }, options);
+  if (!result?.settled) throw new PaymentLedgerError(result?.state === 'revoked' ? 'payment_revoked' : 'payment_ledger_conflict', 409);
+  return result.payload;
+}
+
+export async function settleAstralQuestion(access, outcome, options = {}) {
+  const normalized = {
+    sessionId: cleanIdentifier(access?.sessionId),
+    claimId: cleanIdentifier(access?.claimId, 120),
+    claimSlot: Number(access?.claimSlot) || 0,
+  };
+  if (!normalized.sessionId || !normalized.claimId
+      || !Number.isInteger(normalized.claimSlot) || normalized.claimSlot < 1 || normalized.claimSlot > 5
+      || !["consumed", "released"].includes(outcome)) {
+    throw new PaymentLedgerError("payment_ledger_invalid_entitlement", 400);
+  }
+  const result = await callLedgerRpc("arcane911_settle_astral_question", {
+    p_payment_id: normalized.sessionId,
+    p_claim_id: normalized.claimId,
+    p_claim_slot: normalized.claimSlot,
+    p_outcome: outcome,
+  }, options);
+  if (result?.settled !== true) throw new PaymentLedgerError("payment_ledger_conflict", 409);
   return result;
 }

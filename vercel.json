@@ -1,14 +1,40 @@
 {
   "functions": {
-    "api/agent-911.js": { "maxDuration": 60 },
-    "api/astro-911.js": { "maxDuration": 60 },
-    "api/checkout.js": { "maxDuration": 15 },
-    "api/payment.js": { "maxDuration": 15 },
-    "api/payment-status.js": { "maxDuration": 15 },
-    "api/mercadopago-webhook.js": { "maxDuration": 15 },
-    "api/order-status.js": { "maxDuration": 15 }
+    "api/agent-911.js": {
+      "maxDuration": 60
+    },
+    "api/astro-911.js": {
+      "maxDuration": 60
+    },
+    "api/checkout.js": {
+      "maxDuration": 30
+    },
+    "api/payment.js": {
+      "maxDuration": 60
+    },
+    "api/payment-status.js": {
+      "maxDuration": 30
+    },
+    "api/mercadopago-webhook.js": {
+      "maxDuration": 30
+    },
+    "api/order-status.js": {
+      "maxDuration": 30
+    },
+    "api/astral-order.js": {
+      "maxDuration": 20
+    },
+    "api/astral-admin-delivery.js": {
+      "maxDuration": 20
+    },
+    "api/astro-question.js": {
+      "maxDuration": 60
+    }
   },
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }

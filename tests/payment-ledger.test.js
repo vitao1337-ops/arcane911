@@ -55,13 +55,17 @@ test("SQL mantém dados em schema privado, RLS e RPCs restritas ao service_role"
   assert.match(sql, /revoke all on table[\s\S]+from public, anon, authenticated/iu);
   assert.match(sql, /grant execute[\s\S]+to service_role/iu);
   assert.equal(/security definer/iu.test(sql), false);
-  assert.equal(/\b(question_text|cards|answer|birth_date|full_name)\b/iu.test(sql), false);
+  const paymentCore = sql.slice(0, sql.indexOf("-- V26 · fila privada do Documento Astral humano."));
+  assert.equal(/\b(question_text|cards|answer|birth_date|full_name)\b/iu.test(paymentCore), false);
+  assert.match(sql, /create table if not exists arcane911_private\.astral_orders/iu);
+  assert.match(sql, /birth_date date not null/iu);
+  assert.match(sql, /full_name text not null/iu);
 });
 
 test("healthcheck comprova a versão do schema antes de abrir cobrança", async () => {
   const ready = await assertPaymentLedgerReady({
     env: baseEnv,
-    fetchImplementation: async () => response({ ready: true, version: 4 }),
+    fetchImplementation: async () => response({ ready: true, version: 5 }),
   });
   assert.equal(ready.ready, true);
 

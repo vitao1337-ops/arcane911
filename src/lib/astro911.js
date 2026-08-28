@@ -252,6 +252,7 @@ async function performRequest(chart, options) {
         schemaVersion: astro911Config.contextSchemaVersion,
         payment: options.payment ? {
           sessionId: cleanText(options.payment.sessionId, 240),
+      orderId: cleanText(options.payment.orderId, 120),
           productId: cleanText(options.payment.productId, 80),
           readingId: cleanText(options.payment.readingId, 120),
         } : null,

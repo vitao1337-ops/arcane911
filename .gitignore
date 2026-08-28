@@ -5,3 +5,6 @@ dist
 .env
 .env.*
 !.env.example
+
+# Generated from the bundled GeoNames dataset
+public/geo/

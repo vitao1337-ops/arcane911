@@ -1,11 +1,36 @@
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
-import handler, { resetAstro911RuntimeStateForTests } from "../api/astro-911.js";
+import realHandler, { resetAstro911RuntimeStateForTests } from "../api/astro-911.js";
 import { sampleAstroDocument, sampleAstroRequest } from "./astro911-fixture.js";
 
-// A suíte ativa deliberadamente o modo gratuito. Sem este opt-in, produção
-// sem preço recusa a geração antes de qualquer chamada ao provedor.
-process.env.VITE_ASTRO911_ALLOW_FREE_PRODUCTION = "true";
+// Contract tests use a paid entitlement fixture; they never enable free access.
+process.env.SUPABASE_URL = 'https://fixture-ledger.example.invalid';
+process.env.SUPABASE_SECRET_KEY = 'sb_secret_paid_fixture_not_real';
+let fixtureUsers = 0;
+let providerFetch;
+async function handler(request, response) {
+  const context = request.body?.context;
+  let hash = 2166136261;
+  const source = JSON.stringify(context?.chart ?? {});
+  for (let i = 0; i < source.length; i += 1) { hash ^= source.charCodeAt(i); hash = Math.imul(hash, 16777619); }
+  const body = context ? { ...request.body, payment: { sessionId: 'mp-991234567890', orderId: 'order-paid-fixture-1234567890',
+    productId: 'astro911-documento-completo', readingId: `astro-v1-${(hash >>> 0).toString(36)}` } } : request.body;
+  if (fixtureUsers++ === 0) {
+    providerFetch = globalThis.fetch;
+    globalThis.fetch = async (url, options) => {
+      if (String(url).startsWith('https://fixture-ledger.example.invalid/')) {
+        const args = JSON.parse(options.body);
+        const value = String(url).endsWith('arcane911_read_paid_content') ? { authorized: true, results: [] }
+          : String(url).endsWith('arcane911_claim_entitlement') ? { claimed: true, state: 'processing' }
+          : { settled: true, payload: args.p_payload, state: args.p_outcome === 'released' ? 'active' : 'consumed' };
+        return { ok: true, status: 200, json: async () => value };
+      }
+      return providerFetch(url, options);
+    };
+  }
+  try { return await realHandler({ ...request, body }, response); }
+  finally { if (--fixtureUsers === 0) globalThis.fetch = providerFetch; }
+}
 
 beforeEach(() => resetAstro911RuntimeStateForTests());
 
@@ -140,7 +165,7 @@ test("a rota astral recusa método diferente de POST sem chamar o provedor", asy
   }
 });
 
-test("produção sem preço ou campanha gratuita recusa o documento antes do provedor", async () => {
+test("produção sem autorização paga recusa o Documento Astral antes do provedor", async () => {
   const originalFetch = globalThis.fetch;
   let calls = 0;
   try {
@@ -154,9 +179,9 @@ test("produção sem preço ou campanha gratuita recusa o documento antes do pro
         throw new Error("não deveria chamar");
       };
       const response = mockResponse();
-      await handler(mockRequest(), response);
-      assert.equal(response.statusCode, 503);
-      assert.equal(response.payload.error, "astral_not_configured");
+      await realHandler(mockRequest(), response);
+      assert.equal(response.statusCode, 402);
+      assert.equal(response.payload.error, "payment_required");
       assert.equal(calls, 0);
     });
   } finally {

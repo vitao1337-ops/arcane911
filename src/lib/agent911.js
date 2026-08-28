@@ -181,6 +181,7 @@ export async function requestAgent911(context, options = {}) {
     questionsUsed: Number.isInteger(options.questionsUsed) ? options.questionsUsed : 0,
     payment: options.payment ? {
       sessionId: cleanText(options.payment.sessionId, 240),
+      orderId: cleanText(options.payment.orderId, 120),
       productId: cleanText(options.payment.productId, 80),
       readingId: cleanText(options.payment.readingId, 120),
       questionNumber: Number(options.payment.questionNumber) || 0,

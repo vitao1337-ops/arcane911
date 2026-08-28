@@ -1,4 +1,5 @@
-import { CheckoutError, checkoutErrorPayload, checkoutProductNeedsLedger, createMercadoPagoPayment } from "../server/checkout-core.js";
+import { preparePurchaseBeforeCharge } from "../server/purchase-preflight.js";
+import { CheckoutError, checkoutErrorPayload, checkoutProductNeedsLedger, createMercadoPagoPayment, verifyMercadoPagoPayment } from "../server/checkout-core.js";
 import { PaymentLedgerError, registerPaymentEntitlement } from "../server/payment-ledger.js";
 
 function sendJson(response, status, payload) {
@@ -33,7 +34,12 @@ export default async function handler(request, response) {
   try { body = parseBody(request); } catch { return sendJson(response, 400, { error: "invalid_payload" }); }
 
   try {
-    const result = await createMercadoPagoPayment(body);
+    const prepared = await preparePurchaseBeforeCharge(body);
+    const result = prepared.existingPaymentId ? {
+      ...await verifyMercadoPagoPayment({ ...body, paymentId: prepared.existingPaymentId }),
+      provider: 'mercadopago', paymentId: prepared.existingPaymentId, status: 'approved',
+      orderId: prepared.orderId, productId: prepared.product.id,
+    } : await createMercadoPagoPayment(body);
     if (result.entitlement && checkoutProductNeedsLedger(result.entitlement.productId)) {
       try {
         const ledger = await registerPaymentEntitlement(result.entitlement);
@@ -48,7 +54,7 @@ export default async function handler(request, response) {
     }
     return sendJson(response, 200, result);
   } catch (error) {
-    const failure = checkoutErrorPayload(error);
+    const failure = checkoutErrorPayload(error instanceof PaymentLedgerError ? new CheckoutError(error.code, error.status) : error);
     return sendJson(response, failure.status, failure.body);
   }
 }

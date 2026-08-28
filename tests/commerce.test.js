@@ -23,11 +23,12 @@ test("catálogo comercial centraliza os preços da Tiragem Completa e das pergun
   assert.equal(formatBRL(1_999), "R$ 19,99");
 });
 
-test("Documento Astral fica preparado sem inventar preço ainda não decidido", () => {
-  assert.equal(commerceConfig.products.astralDocument.priceCents, 0);
-  assert.equal(commerceConfig.products.astralDocument.price, "A definir");
-  assert.equal(commerceConfig.products.astralDocument.accessRequired, false);
-  assert.equal(commerceConfig.products.astralDocument.available, false);
+test("Documento Astral nasce como produto premium sem teste gratuito", () => {
+  assert.equal(commerceConfig.products.astralDocument.priceCents, 11_990);
+  assert.equal(commerceConfig.products.astralDocument.price, "R$ 119,90");
+  assert.equal(commerceConfig.products.astralDocument.accessRequired, true);
+  assert.equal(commerceConfig.products.astralDocument.available, true);
+  assert.equal(commerceConfig.products.astralDocument.includedSpecificQuestions, 5);
   assert.equal(commerceConfig.products.astralDocument.kind, "astral_document");
 });
 
@@ -40,9 +41,10 @@ test("Documento Astral usa o mesmo catálogo confiável no cliente e no servidor
   assert.match(checkout, /product\.kind === "astral_document"/u);
   assert.match(checkout, /product\.priceCents <= 0/u);
   assert.match(page, /offerContext:\s*ASTRAL_OFFER_CONTEXT/u);
-  assert.match(page, /readingId:\s*chartFingerprint/u);
+  assert.match(page, /readingId:\s*targetFingerprint/u);
   assert.match(page, /verifyHostedCheckout/u);
-  assert.match(page, /!astralProduct\.available \? \(/u);
+  assert.match(page, /chart && astralAccessGranted/u);
+  assert.match(page, /Continuar para pagamento/u);
 });
 
 test("bypass comercial só pode existir em import.meta.env.DEV", () => {

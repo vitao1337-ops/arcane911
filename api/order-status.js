@@ -4,6 +4,7 @@ import {
 } from "../server/checkout-core.js";
 import {
   findPaymentEntitlementByOrder,
+  readPaidContent,
   PaymentLedgerError,
 } from "../server/payment-ledger.js";
 
@@ -99,10 +100,12 @@ export default async function handler(request, response) {
     const body = parseBody(request);
     const entitlement = await findPaymentEntitlementByOrder(body.orderId);
     if (!entitlement) return sendJson(response, 404, { error: "purchase_not_found" }, rateHeaders);
+    if (entitlement.state === "revoked") return sendJson(response, 403, { error: "payment_revoked" }, rateHeaders);
     if (entitlement.state === "processing") {
       return sendJson(response, 409, { error: "purchase_processing" }, rateHeaders);
     }
-    const allowsConsumedAccess = checkoutProductAllowsConsumedAccess(entitlement.productId);
+    const content = await readPaidContent(entitlement);
+    const allowsConsumedAccess = checkoutProductAllowsConsumedAccess(entitlement.productId) || content.results?.length > 0;
     if (entitlement.state === "consumed" && !allowsConsumedAccess) {
       return sendJson(response, 409, { error: "payment_credit_unavailable" }, rateHeaders);
     }
@@ -113,6 +116,7 @@ export default async function handler(request, response) {
       state: entitlement.state,
     });
     return sendJson(response, 200, {
+      content,
       entitlement: {
         ...entitlement,
         creditAvailable: entitlement.state === "active",

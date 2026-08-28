@@ -61,12 +61,9 @@ const products = Object.freeze({
   astralDocument: product({
     ...catalog.astralDocument,
     cents: catalog.astralDocument.priceCents,
-    // Sem preço, a validação atual continua aberta. Ao configurar um valor,
-    // o mesmo catálogo ativa automaticamente a proteção server-side.
-    accessRequired: catalog.astralDocument.priceCents > 0,
-    available: devUnlocked
-      || catalog.astralDocument.priceCents > 0
-      || String(viteEnv.VITE_ASTRO911_ALLOW_FREE_PRODUCTION ?? "false").toLowerCase() === "true",
+    includedSpecificQuestions: catalog.astralDocument.includedSpecificQuestions,
+    accessRequired: true,
+    available: true,
   }),
 });
 

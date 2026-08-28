@@ -357,6 +357,7 @@ function App() {
   const [journal, setJournal] = useState(getStoredJournal);
   const [journalOpen, setJournalOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [deckOpen, setDeckOpen] = useState(false);
   const [activeCard, setActiveCard] = useState(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutState, setCheckoutState] = useState("idle");
@@ -885,7 +886,11 @@ function App() {
     setCheckoutMessage("Abrindo o pagamento seguro…");
 
     try {
-      const checkout = await createHostedCheckout(pending);
+      const checkout = await createHostedCheckout(pending, { readingSnapshot: {
+        createdAt, intentId, question, readingMode,
+        openingCards: spread.map((card) => card.slug),
+        completeCards: completeSpread.map((card) => card.slug),
+      } });
       trackCommercialEvent("begin_checkout", {
         product_id: salesConfig.productId,
         price_label: salesConfig.offer.price,
@@ -1856,62 +1861,78 @@ function App() {
           </a>
         </section>
 
-        <section className="deck-section" id="baralho">
-          <div className="section-heading split-heading">
-            <div>
-              <span className="section-kicker">Coleção I · Arcanos Maiores</span>
-              <h2>Vinte e duas portas.<br />A mesma jornada humana.</h2>
-            </div>
-            <p>
-              Cada carta mantém os símbolos canônicos que tornam a leitura intuitiva. Toque em qualquer uma para enxergar a camada de luz, sombra e ação.
-            </p>
-          </div>
-
-          <div className="deck-gallery">
-            {tarotCards.map((card, index) => (
-              <div className="gallery-item" key={card.slug} style={{ "--gallery-index": index }}>
-                <TarotCardVisual
-                  card={card}
-                  className="gallery-card"
-                  onClick={() => setActiveCard(card)}
-                />
-              </div>
-            ))}
-          </div>
-          <div className="deck-order" aria-label="Ordem do baralho">
-            <span>0 · O Louco</span>
-            <i />
-            <strong>22 Arcanos · composição ritual 7 · 8 · 7</strong>
-            <i />
-            <span>XXI · O Mundo</span>
-          </div>
-        </section>
-
-        <section className="astro-entry-section" id="mapa-astral">
+        <section className="astro-entry-section astro-entry-premium" id="mapa-astral">
           <div className="astro-entry-copy">
-            <span className="section-kicker">Novo espaço · Mapa Astral</span>
+            <span className="section-kicker">Documento Astral 911 · experiência premium</span>
             <h2>As cartas capturam o agora.<br /><em>O mapa guarda o instante de chegada.</em></h2>
             <p>
-              Descubra Sol, Lua, Ascendente, planetas, casas e aspectos — e receba um documento
-              pessoal escrito pelo 911 somente depois que o céu real for calculado e auditado.
+              Informe seus dados de nascimento e siga para o pagamento. Assim que a compra for confirmada,
+              o Arcane911 abre imediatamente o mapa e a leitura automática que já fazem parte da experiência.
             </p>
+            <div className="astro-entry-delivery">
+              <div><strong>Na hora</strong><span>Mapa completo + leitura automática do 911</span></div>
+              <div><strong>1–2 dias úteis</strong><span>Síntese aprofundada em PDF, revisada individualmente e enviada por e-mail</span></div>
+              <div><strong>Depois do PDF</strong><span>5 perguntas específicas sobre o seu próprio mapa</span></div>
+            </div>
             <div className="astro-entry-proof">
-              <span><Check size={15} /> Cálculo local real</span>
-              <span><ShieldCheck size={15} /> IA sem data, hora ou cidade</span>
-              <span>
-                <Sparkles size={15} />
-                {commerceConfig.products.astralDocument.accessRequired
-                  ? `Documento completo · ${commerceConfig.products.astralDocument.price}`
-                  : "Documento premium aberto em teste"}
-              </span>
+              <span><Check size={15} /> Sol, Lua, Ascendente, casas e aspectos</span>
+              <span><ShieldCheck size={15} /> Pagamento antes da abertura do mapa</span>
+              <span><Sparkles size={15} /> Leitura imediata + síntese humana aprofundada</span>
             </div>
             <Link className="button button-primary button-large" to="/mapa-astral">
-              Criar meu mapa astral
+              Solicitar meu Documento Astral
               <ArrowRight size={18} />
             </Link>
           </div>
           <div className="astro-entry-wheel">
             <NatalWheel preview />
+          </div>
+        </section>
+
+        <section className={`deck-section deck-disclosure ${deckOpen ? "is-open" : ""}`} id="baralho">
+          <button
+            className="deck-disclosure-trigger"
+            type="button"
+            onClick={() => setDeckOpen((current) => !current)}
+            aria-expanded={deckOpen}
+            aria-controls="arcane-deck-content"
+          >
+            <span>
+              <span className="section-kicker">Coleção I · Arcanos Maiores</span>
+              <strong>Explorar os 22 Arcanos</strong>
+              <small>Abra a coleção completa sem alongar a landing.</small>
+            </span>
+            <ChevronRight size={22} aria-hidden="true" />
+          </button>
+
+          <div className="deck-disclosure-content" id="arcane-deck-content" hidden={!deckOpen}>
+            <div className="section-heading split-heading">
+              <div>
+                <h2>Vinte e duas portas.<br />A mesma jornada humana.</h2>
+              </div>
+              <p>
+                Cada carta mantém os símbolos canônicos que tornam a leitura intuitiva. Toque em qualquer uma para enxergar a camada de luz, sombra e ação.
+              </p>
+            </div>
+
+            <div className="deck-gallery">
+              {tarotCards.map((card, index) => (
+                <div className="gallery-item" key={card.slug} style={{ "--gallery-index": index }}>
+                  <TarotCardVisual
+                    card={card}
+                    className="gallery-card"
+                    onClick={() => setActiveCard(card)}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="deck-order" aria-label="Ordem do baralho">
+              <span>0 · O Louco</span>
+              <i />
+              <strong>22 Arcanos · composição ritual 7 · 8 · 7</strong>
+              <i />
+              <span>XXI · O Mundo</span>
+            </div>
           </div>
         </section>
 

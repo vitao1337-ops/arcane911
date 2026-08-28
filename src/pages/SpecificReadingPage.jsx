@@ -411,7 +411,10 @@ function SpecificReadingExperience({
     setPaymentMessage("Abrindo o pagamento seguro…");
 
     try {
-      const checkout = await createHostedCheckout(pending);
+      const checkout = await createHostedCheckout(pending, { readingSnapshot: {
+        kind: 'specific', slug: reading.slug, readingId, question,
+        parentReadingId: discounted ? parentReadingId : '', phase: 'deck', cards: [],
+      } });
       trackCommercialEvent("begin_checkout", {
         product_id: offer.id,
         reading_slug: reading.slug,

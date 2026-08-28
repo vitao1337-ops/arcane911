@@ -1,11 +1,54 @@
--- Arcane911 V24 Mercado Pago · livro-caixa privado de autorizações e slots pagos
--- Execute no SQL Editor de um projeto Supabase exclusivo do Arcane911.
--- Nenhuma pergunta, carta, resposta, e-mail ou dado natal é armazenado aqui.
+-- Arcane911 Mercado Pago · ledger privado V4 de autorizações e slots pagos
+-- Execute no SQL Editor do projeto Supabase usado pelo Arcane911.
+-- O ledger de pagamentos não armazena conteúdo íntimo. A fila astral V26, ao final deste arquivo, guarda apenas os dados natais e de contato necessários para a entrega humana contratada.
 
 create schema if not exists arcane911_private;
 
 revoke all on schema arcane911_private from public, anon, authenticated;
 grant usage on schema arcane911_private to service_role;
+
+-- Pré-voo seguro: se existir um ledger antigo incompatível e vazio, ele é
+-- removido para permitir a instalação limpa. Se houver qualquer registro,
+-- a migration aborta em vez de apagar uma compra existente.
+do $$
+declare
+  entitlements_exists boolean := pg_catalog.to_regclass('arcane911_private.payment_entitlements') is not null;
+  claims_exists boolean := pg_catalog.to_regclass('arcane911_private.payment_claims') is not null;
+  entitlements_compatible boolean := true;
+  claims_compatible boolean := true;
+  entitlements_rows bigint := 0;
+  claims_rows bigint := 0;
+begin
+  if entitlements_exists then
+    select exists (
+      select 1 from information_schema.columns
+      where table_schema = 'arcane911_private'
+        and table_name = 'payment_entitlements'
+        and column_name = 'payment_id'
+    ) into entitlements_compatible;
+    execute 'select count(*) from arcane911_private.payment_entitlements' into entitlements_rows;
+  end if;
+
+  if claims_exists then
+    select exists (
+      select 1 from information_schema.columns
+      where table_schema = 'arcane911_private'
+        and table_name = 'payment_claims'
+        and column_name = 'payment_id'
+    ) into claims_compatible;
+    execute 'select count(*) from arcane911_private.payment_claims' into claims_rows;
+  end if;
+
+  if (entitlements_exists and not entitlements_compatible)
+     or (claims_exists and not claims_compatible) then
+    if entitlements_rows > 0 or claims_rows > 0 then
+      raise exception 'arcane911_incompatible_ledger_has_data';
+    end if;
+    drop table if exists arcane911_private.payment_claims cascade;
+    drop table if exists arcane911_private.payment_entitlements cascade;
+  end if;
+end;
+$$;
 
 create table if not exists arcane911_private.payment_entitlements (
   payment_id text primary key,
@@ -185,13 +228,42 @@ create index if not exists payment_entitlements_provider_ref_idx
   on arcane911_private.payment_entitlements (provider_transaction_id)
   where provider_transaction_id <> '';
 
--- Remove somente a assinatura V21 para não deixar uma RPC pública sobrecarregada.
-drop function if exists public.arcane911_register_entitlement(
-  text, text, text, text, text, text, smallint, timestamptz
-);
-drop function if exists public.arcane911_register_entitlement(
-  text, text, text, text, text, text, text, smallint, integer, text, boolean, timestamptz
-);
+-- Recria somente as RPCs do ledger. Isso evita conflito de assinatura ao
+-- atualizar uma instalação antiga sem tocar em nenhuma outra função do projeto.
+do $$
+declare
+  fn record;
+begin
+  for fn in
+    select
+      n.nspname as schema_name,
+      p.proname as function_name,
+      pg_catalog.pg_get_function_identity_arguments(p.oid) as identity_args
+    from pg_catalog.pg_proc p
+    join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and (
+        p.proname in (
+          'arcane911_payment_ledger_health',
+          'arcane911_register_entitlement',
+          'arcane911_claim_entitlement',
+          'arcane911_settle_entitlement',
+          'arcane911_claim_bundle_entitlement',
+          'arcane911_settle_bundle_entitlement',
+          'arcane911_find_entitlement'
+        )
+        or p.proname like 'arcane911_mp_test_%'
+      )
+  loop
+    execute pg_catalog.format(
+      'drop function if exists %I.%I(%s)',
+      fn.schema_name,
+      fn.function_name,
+      fn.identity_args
+    );
+  end loop;
+end;
+$$;
 
 create or replace function public.arcane911_payment_ledger_health()
 returns jsonb
@@ -391,7 +463,6 @@ begin
     and question_number = coalesce(p_question_number, 0)
     and (
       state = 'active'
-      or (state = 'processing' and claim_id = p_claim_id)
       or (state = 'processing' and claimed_at < now() - interval '5 minutes')
     )
   returning * into claimed;
@@ -506,6 +577,7 @@ begin
     and e.product_id = p_product_id
     and e.product_kind = 'complete_reading'
     and e.reading_id = p_reading_id
+    and e.state <> 'revoked'
   on conflict (payment_id, claim_scope, claim_slot) do update
   set
     claim_id = excluded.claim_id,
@@ -514,9 +586,6 @@ begin
     consumed_at = null,
     updated_at = now()
   where (
-    existing.state = 'processing'
-    and existing.claim_id = excluded.claim_id
-  ) or (
     existing.state = 'processing'
     and existing.claimed_at < now() - interval '5 minutes'
   )
@@ -682,3 +751,391 @@ notify pgrst, 'reload schema';
 
 -- Verificação final (resultado esperado: {"ready": true, "version": 4}):
 -- select public.arcane911_payment_ledger_health();
+
+-- V26 · fila privada do Documento Astral humano.
+-- Aqui ficam somente os dados necessários para preparar e entregar a síntese contratada.
+create table if not exists arcane911_private.astral_orders (
+  payment_id text primary key references arcane911_private.payment_entitlements(payment_id) on delete restrict,
+  order_id text not null unique,
+  reading_id text not null,
+  full_name text not null,
+  email text not null,
+  birth_date date not null,
+  birth_time time not null,
+  city_name text not null,
+  region_name text not null default '',
+  country_name text not null,
+  timezone text not null,
+  latitude double precision not null,
+  longitude double precision not null,
+  status text not null default 'pending',
+  questions_available smallint not null default 0,
+  questions_used smallint not null default 0,
+  created_at timestamptz not null default now(),
+  delivered_at timestamptz,
+  updated_at timestamptz not null default now(),
+  constraint astral_orders_order_format check (order_id ~ '^order-[A-Za-z0-9:._-]{12,114}$'),
+  constraint astral_orders_reading_length check (char_length(reading_id) between 8 and 120),
+  constraint astral_orders_name_length check (char_length(full_name) between 2 and 80),
+  constraint astral_orders_email_format check (char_length(email) between 5 and 150 and email ~* '^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$'),
+  constraint astral_orders_city_length check (char_length(city_name) between 1 and 120),
+  constraint astral_orders_country_length check (char_length(country_name) between 1 and 120),
+  constraint astral_orders_timezone_length check (char_length(timezone) between 1 and 80),
+  constraint astral_orders_latitude check (latitude between -90 and 90),
+  constraint astral_orders_longitude check (longitude between -180 and 180),
+  constraint astral_orders_status check (status in ('pending', 'reviewing', 'delivered')),
+  constraint astral_orders_questions check (
+    questions_available between 0 and 5
+    and questions_used between 0 and questions_available
+  ),
+  constraint astral_orders_delivery_state check (
+    (status <> 'delivered' and delivered_at is null)
+    or (status = 'delivered' and delivered_at is not null and questions_available = 5)
+  )
+);
+
+alter table arcane911_private.astral_orders enable row level security;
+alter table arcane911_private.astral_orders force row level security;
+revoke all on table arcane911_private.astral_orders from public, anon, authenticated;
+grant select, insert, update on table arcane911_private.astral_orders to service_role;
+
+create index if not exists astral_orders_status_idx
+  on arcane911_private.astral_orders (status, created_at);
+
+create or replace function public.arcane911_register_astral_order(
+  p_payment_id text,
+  p_order_id text,
+  p_reading_id text,
+  p_full_name text,
+  p_email text,
+  p_birth_date date,
+  p_birth_time time,
+  p_city_name text,
+  p_region_name text,
+  p_country_name text,
+  p_timezone text,
+  p_latitude double precision,
+  p_longitude double precision
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  entitlement arcane911_private.payment_entitlements%rowtype;
+  stored arcane911_private.astral_orders%rowtype;
+begin
+  select * into entitlement
+  from arcane911_private.payment_entitlements
+  where payment_id = p_payment_id
+    and order_id = p_order_id
+    and reading_id = p_reading_id
+    and product_kind = 'astral_document';
+
+  if entitlement.payment_id is null then
+    return jsonb_build_object('registered', false, 'state', 'payment_mismatch');
+  end if;
+
+  insert into arcane911_private.astral_orders (
+    payment_id, order_id, reading_id, full_name, email, birth_date, birth_time,
+    city_name, region_name, country_name, timezone, latitude, longitude
+  ) values (
+    p_payment_id,
+    p_order_id,
+    p_reading_id,
+    left(trim(p_full_name), 80),
+    lower(left(trim(p_email), 150)),
+    p_birth_date,
+    p_birth_time,
+    left(trim(p_city_name), 120),
+    left(trim(coalesce(p_region_name, '')), 120),
+    left(trim(p_country_name), 120),
+    left(trim(p_timezone), 80),
+    p_latitude,
+    p_longitude
+  )
+  on conflict (payment_id) do nothing;
+
+  select * into stored
+  from arcane911_private.astral_orders
+  where payment_id = p_payment_id;
+
+  if stored.payment_id is null
+     or stored.order_id <> p_order_id
+     or stored.reading_id <> p_reading_id
+     or stored.full_name <> left(trim(p_full_name),80)
+     or stored.email <> lower(left(trim(p_email),150))
+     or stored.birth_date <> p_birth_date or stored.birth_time <> p_birth_time
+     or stored.latitude <> p_latitude or stored.longitude <> p_longitude
+     or stored.timezone <> p_timezone then
+    return jsonb_build_object('registered', false, 'state', 'conflict');
+  end if;
+
+  return jsonb_build_object(
+    'registered', true,
+    'state', stored.status,
+    'questionsAvailable', stored.questions_available,
+    'questionsUsed', stored.questions_used,
+    'createdAt', stored.created_at,
+    'deliveredAt', stored.delivered_at
+  );
+end;
+$$;
+
+create or replace function public.arcane911_get_astral_order_status(
+  p_payment_id text,
+  p_order_id text,
+  p_reading_id text
+)
+returns jsonb
+language plpgsql
+stable
+security invoker
+set search_path = ''
+as $$
+declare
+  stored arcane911_private.astral_orders%rowtype;
+begin
+  select * into stored
+  from arcane911_private.astral_orders
+  where payment_id = p_payment_id
+    and order_id = p_order_id
+    and reading_id = p_reading_id;
+
+  if stored.payment_id is null then
+    return jsonb_build_object('found', false);
+  end if;
+
+  return jsonb_build_object(
+    'found', true,
+    'status', stored.status,
+    'questionsAvailable', stored.questions_available,
+    'questionsUsed', stored.questions_used,
+    'createdAt', stored.created_at,
+    'deliveredAt', stored.delivered_at
+  );
+end;
+$$;
+
+create or replace function public.arcane911_mark_astral_order_delivered(p_order_id text)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  stored arcane911_private.astral_orders%rowtype;
+begin
+  update arcane911_private.astral_orders
+  set status = 'delivered',
+      delivered_at = coalesce(delivered_at, now()),
+      questions_available = 5,
+      updated_at = now()
+  where order_id = p_order_id
+  returning * into stored;
+
+  return jsonb_build_object(
+    'updated', stored.payment_id is not null,
+    'status', coalesce(stored.status, 'not_found'),
+    'questionsAvailable', coalesce(stored.questions_available, 0),
+    'questionsUsed', coalesce(stored.questions_used, 0),
+    'deliveredAt', stored.delivered_at
+  );
+end;
+$$;
+
+revoke execute on function public.arcane911_register_astral_order(
+  text, text, text, text, text, date, time, text, text, text, text, double precision, double precision
+) from public, anon, authenticated;
+revoke execute on function public.arcane911_get_astral_order_status(text, text, text)
+from public, anon, authenticated;
+revoke execute on function public.arcane911_mark_astral_order_delivered(text)
+from public, anon, authenticated;
+
+grant execute on function public.arcane911_register_astral_order(
+  text, text, text, text, text, date, time, text, text, text, text, double precision, double precision
+) to service_role;
+grant execute on function public.arcane911_get_astral_order_status(text, text, text)
+to service_role;
+grant execute on function public.arcane911_mark_astral_order_delivered(text)
+to service_role;
+
+notify pgrst, 'reload schema';
+
+-- V26 · cinco perguntas astrais liberadas somente após a síntese humana entregue.
+alter table arcane911_private.payment_claims
+  drop constraint if exists payment_claims_scope_slot;
+alter table arcane911_private.payment_claims
+  add constraint payment_claims_scope_slot check (
+    (claim_scope = 'complete_summary' and claim_slot = 0)
+    or (claim_scope = 'specific_summary' and claim_slot between 1 and 5)
+    or (claim_scope = 'astral_question' and claim_slot between 1 and 5)
+  );
+
+create or replace function public.arcane911_claim_astral_question(
+  p_payment_id text,
+  p_order_id text,
+  p_reading_id text,
+  p_claim_id text
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  target_slot smallint;
+  stored arcane911_private.payment_claims%rowtype;
+begin
+  if not exists (
+    select 1 from arcane911_private.astral_orders o
+    join arcane911_private.payment_entitlements e on e.payment_id = o.payment_id
+    where o.payment_id = p_payment_id
+      and o.order_id = p_order_id
+      and o.reading_id = p_reading_id
+      and o.status = 'delivered'
+      and o.questions_available = 5
+      and e.product_kind = 'astral_document'
+  ) then
+    return jsonb_build_object('claimed', false, 'state', 'delivery_required');
+  end if;
+
+  select slot::smallint into target_slot
+  from generate_series(1, 5) as slot
+  where not exists (
+    select 1 from arcane911_private.payment_claims c
+    where c.payment_id = p_payment_id
+      and c.claim_scope = 'astral_question'
+      and c.claim_slot = slot
+  )
+  order by slot
+  limit 1;
+
+  if target_slot is null then
+    return jsonb_build_object('claimed', false, 'state', 'credits_exhausted');
+  end if;
+
+  insert into arcane911_private.payment_claims (
+    payment_id, claim_scope, claim_slot, claim_id, state
+  ) values (
+    p_payment_id, 'astral_question', target_slot, p_claim_id, 'processing'
+  )
+  on conflict (payment_id, claim_scope, claim_slot) do nothing
+  returning * into stored;
+
+  if stored.payment_id is null then
+    return jsonb_build_object('claimed', false, 'state', 'conflict');
+  end if;
+
+  return jsonb_build_object('claimed', true, 'state', stored.state, 'slot', target_slot);
+end;
+$$;
+
+create or replace function public.arcane911_settle_astral_question(
+  p_payment_id text,
+  p_claim_id text,
+  p_claim_slot smallint,
+  p_outcome text
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  settled arcane911_private.payment_claims%rowtype;
+  used_count integer := 0;
+begin
+  if p_claim_slot < 1 or p_claim_slot > 5 then
+    return jsonb_build_object('settled', false, 'state', 'invalid_slot');
+  end if;
+
+  if p_outcome = 'consumed' then
+    update arcane911_private.payment_claims
+    set state = 'consumed', consumed_at = now(), updated_at = now()
+    where payment_id = p_payment_id
+      and claim_scope = 'astral_question'
+      and claim_slot = p_claim_slot
+      and claim_id = p_claim_id
+      and state = 'processing'
+    returning * into settled;
+
+    if settled.payment_id is null then
+      select * into settled
+      from arcane911_private.payment_claims
+      where payment_id = p_payment_id
+        and claim_scope = 'astral_question'
+        and claim_slot = p_claim_slot
+        and claim_id = p_claim_id
+        and state = 'consumed';
+    end if;
+
+    if settled.payment_id is not null then
+      select count(*) into used_count
+      from arcane911_private.payment_claims
+      where payment_id = p_payment_id
+        and claim_scope = 'astral_question'
+        and state = 'consumed';
+
+      update arcane911_private.astral_orders
+      set questions_used = least(5, used_count), updated_at = now()
+      where payment_id = p_payment_id;
+    end if;
+  elsif p_outcome = 'released' then
+    delete from arcane911_private.payment_claims
+    where payment_id = p_payment_id
+      and claim_scope = 'astral_question'
+      and claim_slot = p_claim_slot
+      and claim_id = p_claim_id
+      and state = 'processing'
+    returning * into settled;
+  else
+    return jsonb_build_object('settled', false, 'state', 'invalid_outcome');
+  end if;
+
+  return jsonb_build_object(
+    'settled', settled.payment_id is not null,
+    'state', case when p_outcome = 'released' then 'active' else coalesce(settled.state, 'conflict') end,
+    'questionsUsed', used_count
+  );
+end;
+$$;
+
+revoke execute on function public.arcane911_claim_astral_question(text, text, text, text)
+from public, anon, authenticated;
+revoke execute on function public.arcane911_settle_astral_question(text, text, smallint, text)
+from public, anon, authenticated;
+
+grant execute on function public.arcane911_claim_astral_question(text, text, text, text)
+to service_role;
+grant execute on function public.arcane911_settle_astral_question(text, text, smallint, text)
+to service_role;
+
+notify pgrst, 'reload schema';
+
+-- V26 · pré-voo específico para impedir venda astral sem a fila humana instalada.
+create or replace function public.arcane911_astral_fulfillment_health()
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'ready',
+    to_regclass('arcane911_private.astral_orders') is not null
+      and to_regprocedure('public.arcane911_register_astral_order(text,text,text,text,text,date,time without time zone,text,text,text,text,double precision,double precision)') is not null
+      and to_regprocedure('public.arcane911_get_astral_order_status(text,text,text)') is not null
+      and to_regprocedure('public.arcane911_claim_astral_question(text,text,text,text)') is not null
+      and to_regprocedure('public.arcane911_settle_astral_question(text,text,smallint,text)') is not null,
+    'version', 1
+  );
+$$;
+
+revoke execute on function public.arcane911_astral_fulfillment_health()
+from public, anon, authenticated;
+grant execute on function public.arcane911_astral_fulfillment_health()
+to service_role;
+
+notify pgrst, 'reload schema';

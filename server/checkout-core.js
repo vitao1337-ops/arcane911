@@ -77,6 +77,11 @@ export function checkoutProductNeedsLedger(productIdValue, env = process.env) {
   return Boolean(product && Number.isInteger(product.priceCents) && product.priceCents > 0);
 }
 
+export function checkoutProductNeedsAstralFulfillment(productIdValue, env = process.env) {
+  const product = findCatalogProduct(createProductCatalog(env), cleanIdentifier(productIdValue, 80));
+  return product?.kind === "astral_document";
+}
+
 export function checkoutProductAllowsConsumedAccess(productIdValue, env = process.env) {
   const product = findCatalogProduct(createProductCatalog(env), cleanIdentifier(productIdValue, 80));
   return ["complete_reading", "specific_complete", "specific_standalone", "astral_document"].includes(product?.kind);
@@ -225,7 +230,11 @@ async function retrieveMercadoPagoPayment(paymentIdValue, options = {}) {
 function assertPaymentMatches(payment, order, { requireApproved = true } = {}) {
   const reference = paymentReference(payment?.id);
   if (!reference) throw new CheckoutError("checkout_invalid_response", 502);
-  if (requireApproved && payment?.status !== "approved") throw new CheckoutError("payment_not_confirmed", 409, { paymentStatus: payment?.status });
+  if (requireApproved && payment?.status !== "approved") {
+    const code = ['refunded', 'charged_back', 'cancelled'].includes(payment?.status) ? 'payment_revoked'
+      : payment?.status === 'rejected' ? 'payment_rejected' : 'payment_not_confirmed';
+    throw new CheckoutError(code, 409, { paymentStatus: payment?.status });
+  }
   if (String(payment?.currency_id ?? "").toUpperCase() !== "BRL") throw new CheckoutError("payment_mismatch", 409);
   const amountCents = Math.round(Number(payment?.transaction_amount) * 100);
   if (amountCents !== order.product.priceCents || payment?.external_reference !== order.orderId) throw new CheckoutError("payment_mismatch", 409);
@@ -295,6 +304,13 @@ export async function createMercadoPagoPayment(raw, {
   fetchImplementation = globalThis.fetch,
 } = {}) {
   const order = normalizeOrder(raw, env);
+  let attemptKey = order.orderId;
+  if (raw.retryPaymentId) {
+    const previous = await retrieveMercadoPagoPayment(raw.retryPaymentId, { env, fetchImplementation });
+    assertPaymentMatches(previous, order, { requireApproved: false });
+    if (!['rejected', 'cancelled'].includes(previous.status)) throw new CheckoutError('payment_not_confirmed', 409);
+    attemptKey = `${order.orderId}:${paymentReference(previous.id)}`;
+  }
   if (["specific_complete", "agent_question"].includes(order.product.kind)) {
     await assertCompleteEntitlement(order, { env, fetchImplementation });
   }
@@ -331,7 +347,7 @@ export async function createMercadoPagoPayment(raw, {
     fetchImplementation,
     method: "POST",
     body,
-    idempotencyKey: deterministicIdempotencyKey(order.orderId),
+    idempotencyKey: deterministicIdempotencyKey(attemptKey),
   });
 
   const sessionId = assertPaymentMatches(payment, order, { requireApproved: false });
@@ -367,6 +383,9 @@ export async function verifyMercadoPagoPayment(raw, { env = process.env, fetchIm
 
 export async function fulfillMercadoPagoPayment(paymentIdValue, { env = process.env, fetchImplementation = globalThis.fetch } = {}) {
   const payment = await retrieveMercadoPagoPayment(paymentIdValue, { env, fetchImplementation });
+  if (["refunded", "charged_back", "cancelled"].includes(payment?.status)) {
+    return { paid: false, revoked: true, sessionId: paymentReference(payment.id), reason: payment.status };
+  }
   if (payment?.status !== "approved") throw new CheckoutError("payment_not_confirmed", 409);
   const metadata = payment?.metadata ?? {};
   const raw = {

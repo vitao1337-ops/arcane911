@@ -43,7 +43,7 @@ function TermsContent() {
       </section>
       <section>
         <h2>3. Produtos e entrega digital</h2>
-        <p>Cada preço exibido corresponde à entrega digital descrita na própria oferta. A Tiragem Completa inclui até cinco perguntas específicas vinculadas àquela leitura; perguntas adicionais seguem a oferta exibida no momento. A confirmação é processada pelo Mercado Pago e vinculada a um código de pedido. Guarde esse código: ele permite recuperar a autorização de acesso, mas não recria perguntas, cartas ou mapas privados apagados do seu dispositivo.</p>
+        <p>Cada preço exibido corresponde à entrega descrita na própria oferta. A Tiragem Completa inclui até cinco perguntas específicas vinculadas àquela leitura. O Documento Astral 911 libera o mapa e a leitura automática após a confirmação do pagamento e inclui uma síntese individual em PDF, com prazo informado de 1 a 2 dias úteis, além de cinco perguntas específicas sobre o mapa após a entrega. A confirmação é processada pelo Mercado Pago e vinculada a um código de pedido.</p>
       </section>
       <section>
         <h2>4. Inteligência artificial e limites</h2>
@@ -66,11 +66,11 @@ function PrivacyContent() {
     <>
       <section>
         <h2>1. Dados mantidos no seu navegador</h2>
-        <p>Perguntas, cartas escolhidas, diário, rascunhos, resultados e dados do mapa ficam principalmente no armazenamento local ou de sessão do navegador. A memória opcional do 911 só é mantida após consentimento na interface. Esses dados podem desaparecer quando você limpa os dados do site, troca de dispositivo ou encerra uma sessão privada.</p>
+        <p>Diário, rascunhos e cópias de leitura podem ficar no navegador. A memória opcional do 911 depende de consentimento na interface. Dados de compras e respostas contratadas também são guardados em uma base privada para entrega e recuperação; limpar o navegador não apaga essa cópia. Você pode solicitar exclusão ao suporte, observadas as obrigações de retenção aplicáveis.</p>
       </section>
       <section>
         <h2>2. Compra e autorização</h2>
-        <p>O Mercado Pago processa os dados de pagamento conforme sua própria política. O Arcane911 recebe apenas identificadores técnicos do pagamento, produto, valor, moeda, estado e código do pedido. O livro-caixa privado registra também o consumo técnico dos acessos e das perguntas incluídas, mas não guarda texto da pergunta, cartas, resposta, e-mail ou dados natais.</p>
+        <p>O Mercado Pago processa os dados de pagamento conforme sua própria política. O livro-caixa privado registra identificadores técnicos e consumo dos acessos. Uma área privada de entrega guarda os dados da compra, as cartas, a pergunta necessária à leitura e as respostas pagas concluídas para permitir recuperação. Quando o Documento Astral é comprado, o Arcane911 também guarda, em área privada, nome, e-mail, data, horário, cidade, fuso e coordenadas necessários para preparar e entregar a síntese humana contratada. O código do pedido funciona como chave privada para recuperar o conteúdo. Não o compartilhe nem publique capturas de tela com ele.</p>
       </section>
       <section>
         <h2>3. Conteúdo enviado à inteligência artificial</h2>
@@ -78,11 +78,11 @@ function PrivacyContent() {
       </section>
       <section>
         <h2>4. Serviços técnicos</h2>
-        <p>Vercel hospeda o aplicativo e pode registrar IP, horário, rota e diagnóstico. Supabase guarda somente o livro-caixa técnico. Open-Meteo pode ser usado para localizar coordenadas e fuso durante o cálculo astral. Não há publicidade comportamental incorporada nesta versão.</p>
+        <p>Vercel hospeda o aplicativo e pode registrar IP, horário, rota e diagnóstico. Supabase guarda o livro-caixa, as respostas contratadas e a fila de entrega em área privada. A busca de cidades usa dados GeoNames incluídos no próprio site, sob licença CC BY 4.0; não envia dados de nascimento a um serviço externo de geocodificação. Não há publicidade comportamental incorporada nesta versão.</p>
       </section>
       <section>
         <h2>5. Controle, exclusão e segurança</h2>
-        <p>Você pode apagar leituras limpando os dados do site no navegador e remover a memória opcional pelo controle da própria experiência. Registros financeiros e antifraude podem precisar ser mantidos pelos prazos legais aplicáveis. Para acesso, correção ou dúvida sobre dados técnicos, use o canal abaixo. Nenhum sistema é infalível, mas o acesso ao livro-caixa é restrito ao servidor.</p>
+        <p>Você pode apagar leituras locais limpando os dados do site no navegador e remover a memória opcional pelo controle da própria experiência. Dados de uma encomenda astral podem precisar ser mantidos durante a preparação, entrega, suporte e prazos legais aplicáveis. Para acesso, correção ou exclusão quando cabível, use o canal abaixo. O acesso às tabelas privadas é restrito ao servidor.</p>
       </section>
       <section>
         <h2>6. Contato</h2>

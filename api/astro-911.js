@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
 import {
   ASTRO911_INSTRUCTIONS,
@@ -15,6 +16,8 @@ import {
 import { createProductCatalog } from "../src/config/productCatalog.js";
 import {
   PaymentLedgerError,
+  readPaidContent,
+  completePaidContent,
   claimPaymentEntitlement,
   settlePaymentEntitlement,
 } from "../server/payment-ledger.js";
@@ -880,6 +883,7 @@ function normalizePaidAccess(body) {
   }
   const payment = body?.payment;
   const sessionId = String(payment?.sessionId ?? "").trim();
+  const orderId = String(payment?.orderId ?? "").trim();
   const productId = String(payment?.productId ?? "").trim();
   const readingId = String(payment?.readingId ?? "").trim();
   const expectedReadingId = `astro-v1-${hashString(JSON.stringify(body?.context?.chart ?? {}))}`;
@@ -888,12 +892,12 @@ function normalizePaidAccess(body) {
       || readingId !== expectedReadingId) {
     throw new PaymentLedgerError("payment_required", 402);
   }
-  return { sessionId, productId, readingId, questionNumber: 0 };
+  return { sessionId, orderId, productId, readingId, questionNumber: 0 };
 }
 
 function requestFingerprint(normalized, ip, paidAccess = null) {
   return createHash("sha256").update(JSON.stringify({
-    ip,
+    ip: paidAccess ? undefined : ip,
     paymentSessionId: paidAccess?.sessionId ?? "",
     chart: normalized.chart,
   })).digest("hex");
@@ -909,8 +913,7 @@ async function executePaidAstro911(normalized, providerPlan, paidAccess, fingerp
   await claimPaymentEntitlement(claim);
   try {
     const payload = await executeAstro911(normalized, providerPlan);
-    await settlePaymentEntitlement(claim, "consumed");
-    return payload;
+    return await completePaidContent(claim, payload, { chart: normalized.chart });
   } catch (error) {
     try {
       await settlePaymentEntitlement(claim, "released");
@@ -994,12 +997,25 @@ export default async function handler(request, response) {
     return sendJson(response, 400, { error: "invalid_payload" });
   }
 
+  if (paidAccess) {
+    try {
+      const stored = await readPaidContent(paidAccess);
+      if (stored.snapshot?.context && !isDeepStrictEqual(stored.snapshot.context, body.context.chart)) {
+        return sendJson(response, 409, { error: "payment_mismatch" });
+      }
+      const saved = stored.results?.find((item) => item.scope === "single");
+      if (saved) return sendJson(response, 200, saved.payload);
+    } catch (error) {
+      return sendJson(response, error.status || 503, { error: error.code || "payment_ledger_unavailable" });
+    }
+  }
+
   const ip = requestIp(request);
   const fingerprint = requestFingerprint(normalized, ip, paidAccess);
   const now = Date.now();
   cleanTransientStores(now);
 
-  const cached = responseStore.get(fingerprint);
+  const cached = paidAccess ? null : responseStore.get(fingerprint);
   if (cached && cached.expiresAt > now) {
     console.info("astro911_request_completed", {
       requestId: normalized.requestId,

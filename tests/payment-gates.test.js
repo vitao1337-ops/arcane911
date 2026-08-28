@@ -18,6 +18,7 @@ function mockResponse() {
 }
 
 function request(body) {
+  if (body.payment) body.payment.orderId ||= "order-payment-gates-1234567890";
   return {
     method: "POST",
     body,
@@ -218,6 +219,9 @@ test("falha do provider devolve o crédito ao ledger em vez de queimá-lo", asyn
     globalThis.fetch = async (url, options) => {
       const body = JSON.parse(options.body ?? "{}");
       calls.push({ url, body });
+      if (url.endsWith('arcane911_read_paid_content')) {
+        return { ok: true, status: 200, json: async () => ({ authorized: true, results: [] }) };
+      }
       if (url.endsWith("arcane911_claim_entitlement")) {
         return { ok: true, status: 200, async json() { return { claimed: true, state: "processing" }; } };
       }
@@ -267,6 +271,9 @@ test("as cinco perguntas incluídas usam slots do bundle e liberam o slot quando
     globalThis.fetch = async (url, options) => {
       const body = JSON.parse(options.body ?? "{}");
       calls.push({ url, body });
+      if (url.endsWith('arcane911_read_paid_content')) {
+        return { ok: true, status: 200, json: async () => ({ authorized: true, results: [] }) };
+      }
       if (url.endsWith("arcane911_claim_bundle_entitlement")) {
         return { ok: true, status: 200, async json() { return { claimed: true, state: "processing" }; } };
       }

@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { CheckoutError, checkoutErrorPayload, fulfillMercadoPagoPayment } from "../server/checkout-core.js";
-import { PaymentLedgerError, registerPaymentEntitlement } from "../server/payment-ledger.js";
+import { PaymentLedgerError, registerPaymentEntitlement, revokePaymentEntitlement } from "../server/payment-ledger.js";
 
 function sendJson(response, status, payload) {
   response.setHeader("Cache-Control", "no-store, max-age=0");
@@ -60,6 +60,10 @@ export default async function handler(request, response) {
     if (type && type !== "payment") return sendJson(response, 200, { received: true, ignored: true });
 
     const result = await fulfillMercadoPagoPayment(dataId);
+    if (result.revoked) {
+      await revokePaymentEntitlement(result.sessionId, result.reason);
+      return sendJson(response, 200, { received: true, revoked: true });
+    }
     await registerPaymentEntitlement(result.entitlement);
     console.info("mercadopago_webhook_fulfilled", {
       paymentId: result.entitlement.sessionId,
@@ -68,6 +72,9 @@ export default async function handler(request, response) {
     });
     return sendJson(response, 200, { received: true });
   } catch (error) {
+    if (error instanceof PaymentLedgerError && error.code === 'payment_revoked') {
+      return sendJson(response, 200, { received: true, revoked: true });
+    }
     if (error instanceof CheckoutError && error.code === "payment_not_confirmed") {
       return sendJson(response, 200, { received: true, pending: true });
     }

@@ -10,9 +10,14 @@ const checkoutMessages = Object.freeze({
   checkout_unavailable: "O pagamento está temporariamente indisponível. Tente novamente.",
   checkout_invalid_response: "O pagamento não pôde ser aberto agora. Tente novamente.",
   payment_not_confirmed: "O pagamento ainda não foi confirmado. Aguarde um instante e tente novamente.",
+  payment_revoked: "Este pagamento foi cancelado ou reembolsado. O acesso foi encerrado.",
+  payment_rejected: "O pagamento não foi aprovado. Volte à oferta para tentar novamente.",
+  astral_order_invalid: "Confira o e-mail e os dados de nascimento antes de pagar.",
+  astral_order_requires_support: "Use o código da compra no suporte para recuperar os dados deste pedido antigo.",
   payment_mismatch: "Não foi possível vincular este pagamento à leitura. O acesso não foi liberado.",
   payment_ledger_not_configured: "A liberação segura ainda não está configurada. Nenhuma cobrança foi aberta.",
   payment_ledger_not_ready: "O pagamento foi confirmado, mas a liberação ainda está sendo preparada. Tente confirmar novamente.",
+  astral_fulfillment_not_ready: "O Documento Astral está em preparação e ainda não pode receber pagamentos.",
   payment_ledger_unavailable: "O pagamento foi confirmado, mas a liberação está temporariamente indisponível. Tente novamente.",
   payment_ledger_conflict: "Este pagamento já está ligado a outra liberação e não foi reutilizado.",
   payment_credit_unavailable: "Este pagamento já liberou o conteúdo contratado e não criou um novo crédito.",
@@ -80,6 +85,14 @@ function normalizedOrder(order) {
     parentSessionId: cleanText(order?.parentSessionId, 240),
     returnPath: safeReturnPath(order?.returnPath),
     createdAt: cleanText(order?.createdAt, 40) || new Date().toISOString(),
+    paymentId: cleanText(order?.paymentId, 80),
+    retryPaymentId: cleanText(order?.retryPaymentId, 80),
+    paymentStatus: cleanText(order?.paymentStatus, 40),
+    pix: order?.pix && typeof order.pix === 'object' ? {
+      qrCode: cleanText(order.pix.qrCode, 4000),
+      qrCodeBase64: cleanText(order.pix.qrCodeBase64, 200000),
+      ticketUrl: cleanText(order.pix.ticketUrl, 1600),
+    } : null,
   };
 }
 
@@ -134,7 +147,11 @@ async function requestJson(url, body, fetchImplementation = globalThis.fetch) {
 
 export async function createHostedCheckout(order, options = {}) {
   const normalized = normalizedOrder(order);
-  const payload = await requestJson(options.endpoint ?? "/api/checkout", normalized, options.fetchImplementation);
+  const payload = await requestJson(options.endpoint ?? "/api/checkout", {
+    ...normalized,
+    ...(options.fulfillment ? { fulfillment: options.fulfillment } : {}),
+    ...(options.readingSnapshot ? { readingSnapshot: options.readingSnapshot } : {}),
+  }, options.fetchImplementation);
   const checkoutUrl = String(payload?.checkoutUrl ?? "");
   if (!/^https?:\/\/[^/]+\/pagamento(?:[?#]|$)/iu.test(checkoutUrl)) {
     throw new CheckoutClientError("checkout_invalid_response");
@@ -284,6 +301,9 @@ export function trackCommercialEvent(eventName, payload = {}) {
     ...payload,
   };
 
+  delete event.order_id;
+  delete event.orderId;
+  delete event.sessionId;
   if (Array.isArray(window.dataLayer)) {
     window.dataLayer.push(event);
   }

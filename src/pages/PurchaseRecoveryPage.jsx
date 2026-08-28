@@ -2,6 +2,7 @@ import { ArrowLeft, ArrowRight, Check, KeyRound, ShieldCheck } from "lucide-reac
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { commerceConfig, formatBRL } from "../config/commerce";
+import { restorePaidPurchase } from "../lib/purchaseRecovery.js";
 import {
   checkoutErrorMessage,
   clearPendingCheckout,
@@ -43,9 +44,10 @@ export default function PurchaseRecoveryPage() {
       if (!entitlement) throw new Error("invalid_entitlement");
       clearPendingCheckout(entitlement.orderId);
       const product = productForId(entitlement.productId);
-      setResult({ entitlement, product, destination: destinationFor(entitlement, product) });
+      restorePaidPurchase(payload);
+      setResult({ entitlement, product, content: payload.content, destination: destinationFor(entitlement, product) });
       setState("success");
-      setMessage("Compra localizada e autorização restaurada neste navegador.");
+      setMessage("Compra localizada. O conteúdo salvo está disponível sem consumir outro crédito.");
       trackCommercialEvent("purchase_recovered", {
         product_id: entitlement.productId,
         order_id: entitlement.orderId,
@@ -65,7 +67,7 @@ export default function PurchaseRecoveryPage() {
           <div className="recovery-icon" aria-hidden="true"><KeyRound /></div>
           <span className="section-kicker">Compra digital · sem cadastro</span>
           <h1>Recuperar uma compra</h1>
-          <p>Digite o código <strong>order-…</strong> exibido no pagamento. Ele confirma a autorização sem precisar guardar sua pergunta.</p>
+          <p>Digite o código <strong>order-…</strong> exibido no pagamento. Ele é sua chave privada de acesso; não compartilhe.</p>
         </div>
 
         <form className="recovery-form" onSubmit={recover}>
@@ -94,14 +96,24 @@ export default function PurchaseRecoveryPage() {
               <span>Compra confirmada</span>
               <h2>{result.product?.name ?? "Produto Arcane911"}</h2>
               <p>{result.entitlement.amountTotal > 0 ? formatBRL(result.entitlement.amountTotal) : "Valor confirmado"} · código {result.entitlement.orderId}</p>
-              <Link className="button button-glass" to={result.destination}>Voltar à experiência <ArrowRight size={16} /></Link>
+              <a className="button button-glass" href={result.destination}>Abrir minha compra <ArrowRight size={16} /></a>
             </div>
           </article>
         ) : null}
 
+        {result?.content?.results?.filter((item) => item.payload?.answer || item.payload?.reading?.synthesis).map((item) => (
+          <article className="recovery-result" key={`${item.scope}-${item.slot}`}>
+            <div>
+              <h3>{item.input?.question || item.input?.message || item.input?.reading?.question || 'Sua leitura salva'}</h3>
+              {(item.payload.answer || item.payload.reading.synthesis).split(/\n{2,}/u).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+              {item.payload.reading?.groundedAction ? <p>{item.payload.reading.groundedAction}</p> : null}
+            </div>
+          </article>
+        ))}
+
         <aside className="recovery-privacy-note">
           <ShieldCheck size={17} />
-          <p><strong>O que é recuperado:</strong> a autorização técnica da compra. Perguntas, cartas e mapas apagados ou criados em outro dispositivo não são reconstruídos, porque o Arcane911 não os guarda no livro-caixa.</p>
+          <p><strong>O que é recuperado:</strong> os dados e conteúdos salvos da compra, incluindo mapa e respostas concluídas. Compras antigas, anteriores ao salvamento seguro, podem precisar do suporte. O código funciona como senha.</p>
         </aside>
       </section>
     </main>

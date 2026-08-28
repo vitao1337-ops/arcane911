@@ -62,7 +62,7 @@ export default function Astral911Document({ chart, entitlement, onStatus }) {
         setPayload(nextPayload);
         setPhase("ready");
         setRetryDelayMs(0);
-        onStatus?.("Documento Astral concluído e guardado temporariamente nesta sessão.");
+        onStatus?.("Leitura imediata concluída e guardada temporariamente nesta sessão.");
       })
       .catch((requestError) => {
         if (!active) return;
@@ -89,7 +89,7 @@ export default function Astral911Document({ chart, entitlement, onStatus }) {
         setPayload(nextPayload);
         setPhase("ready");
         setRetryDelayMs(0);
-        onStatus?.("Documento Astral concluído e guardado temporariamente nesta sessão.");
+        onStatus?.("Leitura imediata concluída e guardada temporariamente nesta sessão.");
       })
       .catch((requestError) => {
         if (!activeRef.current) return;
@@ -103,7 +103,7 @@ export default function Astral911Document({ chart, entitlement, onStatus }) {
     if (!payload) return;
     try {
       await navigator.clipboard.writeText(formatAstro911Document(payload, chart));
-      onStatus?.("Documento Astral copiado.");
+      onStatus?.("Leitura imediata copiada.");
     } catch {
       onStatus?.("Não foi possível copiar agora.");
     }
@@ -119,7 +119,7 @@ export default function Astral911Document({ chart, entitlement, onStatus }) {
       <section className="astro-document astro-document-loading" aria-labelledby="astro-document-loading-title">
         <div className="astro-document-seal" aria-hidden="true"><span>✦</span><strong>911</strong></div>
         <div>
-          <span className="section-kicker">03 · Documento Astral 911</span>
+          <span className="section-kicker">03 · Leitura imediata 911</span>
           <h3 id="astro-document-loading-title">O mapa já foi calculado.<br />Agora ele está sendo lido.</h3>
           <p>
             O 911 cruza o seu trio central, planetas, casas e aspectos. Nada aparece como
@@ -162,14 +162,14 @@ export default function Astral911Document({ chart, entitlement, onStatus }) {
         <div className="astro-document-seal" aria-hidden="true"><span>✦</span><strong>911</strong></div>
         <div className="astro-document-cover-copy">
           <div className="astro-document-meta">
-            <span>Documento Astral · {name}</span>
+            <span>Leitura imediata · {name}</span>
             <span><Check size={14} /> Estrutura auditada</span>
           </div>
           <h3 id="astro-document-title">{document.title}</h3>
           <p className="astro-document-subtitle">{document.subtitle}</p>
           <p className="astro-document-opening">{document.opening}</p>
           <div className="astro-document-badges">
-            <span><FileText size={15} /> Documento premium completo</span>
+            <span><FileText size={15} /> Leitura automática completa</span>
             <span><Sparkles size={15} /> {payload.meta.provider === "mock" ? "Modo DEV local · custo zero" : "Leitura ancorada no seu mapa"}</span>
           </div>
         </div>
@@ -257,7 +257,7 @@ export default function Astral911Document({ chart, entitlement, onStatus }) {
         </div>
         <div className="astro-document-actions">
           <button className="button button-primary" type="button" onClick={printDocument}>
-            <Download size={16} /> Salvar como PDF
+            <Download size={16} /> Salvar leitura atual
           </button>
           <button className="button button-glass" type="button" onClick={copyDocument}>
             <FileText size={16} /> Copiar documento

@@ -6,6 +6,7 @@ import {
   CheckoutClientError,
   checkoutErrorMessage,
   loadPendingCheckout,
+  savePendingCheckout,
   savePaymentEntitlement,
   trackCommercialEvent,
   verifyHostedCheckout,
@@ -63,7 +64,7 @@ export default function PaymentPage() {
   const navigate = useNavigate();
   const controllerRef = useRef(null);
   const pollRef = useRef(null);
-  const pending = useMemo(() => loadPendingCheckout(), []);
+  const [pending, setPending] = useState(loadPendingCheckout);
   const product = useMemo(() => productFor(pending?.productId), [pending?.productId]);
   const [state, setState] = useState("loading");
   const [message, setMessage] = useState("Preparando pagamento seguro…");
@@ -74,6 +75,13 @@ export default function PaymentPage() {
     if (!pending || !product) {
       setState("error");
       setMessage("Esta compra expirou ou não pôde ser recuperada. Volte para a oferta e tente novamente.");
+      return undefined;
+    }
+    if (pending.paymentId && ['pending', 'in_process', 'authorized'].includes(pending.paymentStatus)) {
+      setPaymentId(pending.paymentId);
+      setPix(pending.pix);
+      setState(pending.pix ? 'pix_pending' : 'card_pending');
+      setMessage('Retomando a confirmação do pagamento já iniciado. Não pague novamente.');
       return undefined;
     }
     const publicKey = String(import.meta.env.VITE_MERCADOPAGO_PUBLIC_KEY ?? "").trim();
@@ -115,6 +123,7 @@ export default function PaymentPage() {
                 .then((result) => {
                   if (!active) return;
                   const nextPaymentId = String(result?.paymentId ?? "");
+                  savePendingCheckout({ ...pending, paymentId: nextPaymentId, paymentStatus: result.status, pix: result.pix });
                   setPaymentId(nextPaymentId);
                   trackCommercialEvent("mercadopago_payment_created", {
                     product_id: pending.productId,
@@ -132,7 +141,7 @@ export default function PaymentPage() {
                     return;
                   }
 
-                  if (result?.paymentMethod === "pix" && result?.status === "pending") {
+                  if (result?.paymentMethod === "pix" && ['pending', 'in_process'].includes(result?.status)) {
                     setPix(result.pix ?? null);
                     setState("pix_pending");
                     setMessage("Pix criado. Assim que o Mercado Pago aprovar, o acesso será liberado.");
@@ -140,8 +149,22 @@ export default function PaymentPage() {
                     return;
                   }
 
+                  if (['pending', 'in_process', 'authorized'].includes(result?.status)) {
+                    setState('card_pending');
+                    setMessage('Pagamento em análise pelo Mercado Pago. Não é uma recusa; aguarde a confirmação.');
+                    resolve();
+                    return;
+                  }
+
                   setState("rejected");
                   setMessage("O Mercado Pago não aprovou este pagamento. Você pode tentar novamente.");
+                  // Retry a declined card using a new provider key, but keep
+                  // the same purchase and stable key after a network error.
+                  if (['rejected', 'cancelled'].includes(result?.status)) {
+                    const retry = savePendingCheckout({ ...pending, retryPaymentId: nextPaymentId,
+                      paymentId: '', paymentStatus: '', pix: null });
+                    setPending(retry);
+                  }
                   resolve();
                 })
                 .catch((error) => {
@@ -175,7 +198,7 @@ export default function PaymentPage() {
   }, [navigate, pending, product]);
 
   useEffect(() => {
-    if (state !== "pix_pending" || !paymentId || !pending) return undefined;
+    if (!['pix_pending', 'card_pending'].includes(state) || !paymentId || !pending) return undefined;
     let active = true;
     const check = async () => {
       try {
@@ -183,7 +206,7 @@ export default function PaymentPage() {
         if (!active) return;
         savePaymentEntitlement(result.entitlement);
         setState("approved");
-        setMessage("Pix confirmado. Liberando seu acesso…");
+        setMessage("Pagamento confirmado. Liberando seu acesso…");
         returnWithPayment(navigate, pending, paymentId);
       } catch (error) {
         if (!active) return;
@@ -240,12 +263,13 @@ export default function PaymentPage() {
       </section>
 
       <section className="payment-panel">
+        <p className="payment-order-code">Guarde o código da compra: <strong>{pending.orderId}</strong>. <Link to="/recuperar-compra">Recuperar compra</Link></p>
         <div className={`payment-status is-${state}`} aria-live="polite">
           {state === "approved" ? <Check size={18} /> : <span className="payment-status-dot" />}
           <span>{message}</span>
         </div>
 
-        {state !== "pix_pending" && state !== "approved" ? <div id="mercadopago-payment-brick" /> : null}
+        <div id="mercadopago-payment-brick" hidden={['pix_pending', 'card_pending', 'approved'].includes(state)} />
 
         {state === "pix_pending" ? (
           <div className="pix-pending-panel">

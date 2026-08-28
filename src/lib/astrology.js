@@ -1,3 +1,5 @@
+import { searchLocalBirthplaces } from "./birthplaces.js";
+import { resolveBirthInstant } from "./birthTime.js";
 import * as horoscopeModule from "circular-natal-horoscope-js/dist/index.js";
 import { Body, Ecliptic, GeoVector } from "astronomy-engine";
 
@@ -156,7 +158,7 @@ function astronomyLongitude(body, date) {
   return normalizeDegrees(Ecliptic(GeoVector(body, date, true)).elon);
 }
 
-export function calculateNatalChart({ name, date, time, location }) {
+export function calculateNatalChart({ name, date, time, location, utcOffsetMinutes }) {
   const normalizedName = String(name ?? "").replace(/\s+/gu, " ").trim().slice(0, 60);
   const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(String(date ?? ""));
   const timeMatch = /^(\d{2}):(\d{2})$/u.exec(String(time ?? ""));
@@ -172,9 +174,9 @@ export function calculateNatalChart({ name, date, time, location }) {
   const hour = Number(hourText);
   const minute = Number(minuteText);
   const dateKey = Number(`${yearText}${monthText}${dayText}`);
-  if (year < 1 || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)
+  if (year < 1900 || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)
       || hour < 0 || hour > 23 || minute < 0 || minute > 59 || dateKey > localDateKey()) {
-    throw new Error("Informe uma data e um horário de nascimento válidos.");
+    throw new Error("Informe uma data de nascimento válida, entre 1900 e hoje, e confira o horário.");
   }
 
   const normalizedLocation = normalizeLocation(location);
@@ -188,6 +190,17 @@ export function calculateNatalChart({ name, date, time, location }) {
     latitude: normalizedLocation.latitude,
     longitude: normalizedLocation.longitude,
   });
+
+  const timezone = normalizedLocation.timezone || origin.timezone.name;
+  const instant = resolveBirthInstant({ date, time, timezone, utcOffsetMinutes });
+  const deltaMs = instant.date.getTime() - origin.utcTime.valueOf();
+  origin.utcTime = origin.utcTime.clone().add(deltaMs, 'milliseconds');
+  origin.utcTimeFormatted = origin.utcTime.format();
+  origin.localTime = origin.utcTime.clone().utcOffset(instant.offset);
+  origin.localTimeFormatted = origin.localTime.format();
+  origin.timezone = { name: timezone };
+  origin.julianDate += deltaMs / 86400000;
+  origin.localSiderealTime = normalizeDegrees(origin.localSiderealTime + 360.98564736629 * deltaMs / 86400000);
 
   const horoscope = new Horoscope({
     origin,
@@ -302,7 +315,8 @@ export function calculateNatalChart({ name, date, time, location }) {
     id: `astro-${Date.now()}`,
     createdAt: new Date().toISOString(),
     person: normalizedName,
-    birth: { date: `${yearText}-${monthText}-${dayText}`, time: `${hourText}:${minuteText}` },
+    birth: { date: `${yearText}-${monthText}-${dayText}`, time: `${hourText}:${minuteText}`,
+      utcOffsetMinutes: instant.offset, utc: instant.date.toISOString() },
     location: {
       ...normalizedLocation,
       timezone: origin.timezone?.name ?? normalizedLocation.timezone,
@@ -323,7 +337,7 @@ export function calculateNatalChart({ name, date, time, location }) {
     precision: {
       status: maximumDelta <= 0.05 ? "verified" : "review",
       maximumDelta,
-      label: maximumDelta <= 0.05 ? "Cálculo duplo verificado" : "Cálculo disponível para revisão",
+      label: maximumDelta <= 0.05 ? "Posições planetárias conferidas em dois motores" : "Cálculo disponível para revisão",
     },
   };
 
@@ -349,33 +363,7 @@ export async function searchBirthplaces(query, signal) {
   );
 
   try {
-    const endpoint = new URL("https://geocoding-api.open-meteo.com/v1/search");
-    endpoint.searchParams.set("name", query.trim());
-    endpoint.searchParams.set("count", "6");
-    endpoint.searchParams.set("language", "pt");
-    endpoint.searchParams.set("format", "json");
-
-    const response = await fetch(endpoint, { signal });
-    if (!response.ok) throw new Error("Falha ao consultar cidades.");
-    const payload = await response.json();
-    const remoteMatches = (Array.isArray(payload.results) ? payload.results : [])
-      .map((location) => {
-        try {
-          return normalizeLocation({
-            id: String(location.id ?? ""),
-            name: location.name,
-            admin1: location.admin1 ?? "",
-            country: location.country ?? location.country_code,
-            countryCode: location.country_code,
-            latitude: Number(location.latitude),
-            longitude: Number(location.longitude),
-            timezone: location.timezone,
-          });
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
+    const remoteMatches = await searchLocalBirthplaces(query, signal);
 
     const seen = new Set();
     return [...remoteMatches, ...localMatches].filter((location) => {

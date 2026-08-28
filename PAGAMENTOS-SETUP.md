@@ -1,4 +1,4 @@
-# Mercado Pago · configuração do Arcane911 V24
+# Mercado Pago · configuração do Arcane911 V29
 
 O checkout usa o Payment Brick oficial no navegador e a API de pagamentos no servidor. O Brick exibe apenas cartão de crédito e Pix. Dados completos do cartão não passam pelo código do Arcane911.
 
@@ -11,6 +11,7 @@ MERCADOPAGO_WEBHOOK_SECRET=
 VITE_PUBLIC_SITE_URL=https://arcane911.vercel.app
 SUPABASE_URL=
 SUPABASE_SECRET_KEY=
+ASTRO911_ADMIN_SECRET=
 ```
 
 `MERCADOPAGO_NOTIFICATION_URL` é opcional. Se vazio, o backend usa `VITE_PUBLIC_SITE_URL + /api/mercadopago-webhook`.
@@ -19,20 +20,24 @@ Nunca coloque Access Token, segredo de webhook, chave do Supabase, Gemini ou Ope
 
 ## Banco
 
+A V29 grava o pedido antes de cobrar e inclui a fila na confirmação. Recuperação e respostas são persistidas em área privada. Código de pedido é uma chave de acesso; não publicar em logs, analytics ou capturas.
+
+
 Instalação nova:
 
 ```sql
 -- execute database/arcane911-payment-ledger.sql
+-- depois execute database/arcane911-v29.sql
 select public.arcane911_payment_ledger_health();
 ```
 
 Resultado esperado:
 
 ```json
-{"ready":true,"version":4}
+{"ready":true,"version":5}
 ```
 
-Se existe uma instalação antiga e ainda não houve venda real, use `database/RESET-FOR-CLEAN-INSTALL.sql` antes do ledger V24. Não rode reset depois de começar a vender.
+O SQL incluído preserva o ledger Mercado Pago atual e cria a fila privada do Documento Astral. `database/RESET-FOR-CLEAN-INSTALL.sql` continua sendo destrutivo e não deve ser executado em banco com vendas reais.
 
 ## Webhook
 
@@ -67,3 +72,13 @@ O backend valida `x-signature` usando `data.id`, `x-request-id` e `ts`, depois c
 - o meio enviado pelo navegador é conferido contra `/v1/payment_methods` antes da cobrança;
 - retries do mesmo pedido reutilizam a mesma chave de idempotência;
 - a liberação exige status `approved`, BRL, valor correto, pedido correto e metadata correta.
+
+
+## Documento Astral premium
+
+- o mapa não é exibido antes da confirmação do pagamento;
+- após aprovação, o mapa natal e a leitura automática do Agent911 são liberados imediatamente;
+- nome, e-mail e dados natais necessários à entrega humana são registrados em `arcane911_private.astral_orders`, com RLS forçada e acesso apenas por `service_role`;
+- a síntese aprofundada em PDF é preparada/revisada por astrólogo e enviada manualmente ao e-mail cadastrado em até 1–2 dias úteis;
+- após o envio, o operador marca o pedido como entregue usando `/api/astral-admin-delivery` com `ASTRO911_ADMIN_SECRET`;
+- a entrega libera exatamente 5 perguntas pós-síntese no Agent911; cada crédito só é consumido após uma resposta válida.

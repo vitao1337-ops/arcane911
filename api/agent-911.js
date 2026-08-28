@@ -17,6 +17,8 @@ import {
 import { createProductCatalog } from "../src/config/productCatalog.js";
 import {
   PaymentLedgerError,
+  readPaidContent,
+  completePaidContent,
   claimBundlePaymentEntitlement,
   claimPaymentEntitlement,
   settleBundlePaymentEntitlement,
@@ -889,6 +891,7 @@ function normalizePaidAccess(body, normalized) {
   if (normalized.action === "opening_summary") return null;
   const payment = body?.payment;
   const sessionId = String(payment?.sessionId ?? "").trim();
+  const orderId = String(payment?.orderId ?? "").trim();
   const productId = String(payment?.productId ?? "").trim();
   const readingId = String(payment?.readingId ?? "").trim();
   const questionNumber = Number(payment?.questionNumber) || 0;
@@ -903,6 +906,7 @@ function normalizePaidAccess(body, normalized) {
       && questionNumber === 0) {
     return {
       sessionId,
+      orderId,
       productId,
       readingId,
       questionNumber,
@@ -921,6 +925,7 @@ function normalizePaidAccess(body, normalized) {
   if (includedQuestion) {
     return {
       sessionId,
+      orderId,
       productId,
       readingId,
       questionNumber,
@@ -937,12 +942,12 @@ function normalizePaidAccess(body, normalized) {
   if (!singleUseProduct || readingId !== normalized.reading.createdAt || questionNumber !== expectedQuestionNumber) {
     throw new PaymentLedgerError("payment_required", 402);
   }
-  return { sessionId, productId, readingId, questionNumber, accessMode: "single" };
+  return { sessionId, orderId, productId, readingId, questionNumber, accessMode: "single" };
 }
 
 function requestFingerprint(normalized, ip, paidAccess = null) {
   const source = JSON.stringify({
-    ip,
+    ip: paidAccess ? undefined : ip,
     paymentSessionId: paidAccess?.sessionId ?? "",
     paymentClaimScope: paidAccess?.claimScope ?? "",
     paymentClaimSlot: paidAccess?.claimSlot ?? 0,
@@ -980,8 +985,7 @@ async function executePaidAgent911(normalized, providerPlan, paidAccess, fingerp
   await claimAccess(claim);
   try {
     const payload = await executeAgent911(normalized, providerPlan);
-    await settleAccess(claim, "consumed");
-    return payload;
+    return await completePaidContent(claim, payload, { reading: { ...normalized.reading, readingMode: normalized.readingMode }, action: normalized.action, message: normalized.message });
   } catch (error) {
     try {
       await settleAccess(claim, "released");
@@ -1079,12 +1083,23 @@ export default async function handler(request, response) {
     return sendJson(response, 400, { error: "invalid_payload" });
   }
 
+  if (paidAccess) {
+    try {
+      const stored = await readPaidContent(paidAccess);
+      const saved = stored.results?.find((item) => item.scope === (paidAccess.claimScope || "single")
+        && item.slot === (paidAccess.claimSlot || 0));
+      if (saved) return sendJson(response, 200, saved.payload);
+    } catch (error) {
+      return sendJson(response, error.status || 503, { error: error.code || "payment_ledger_unavailable" });
+    }
+  }
+
   const ip = requestIp(request);
   const fingerprint = requestFingerprint(normalized, ip, paidAccess);
   const now = Date.now();
   cleanTransientStores(now);
 
-  const cached = responseStore.get(fingerprint);
+  const cached = paidAccess ? null : responseStore.get(fingerprint);
   if (cached && cached.expiresAt > now) {
     console.info("agent911_request_completed", {
       requestId: normalized.requestId || fingerprint.slice(0, 16),

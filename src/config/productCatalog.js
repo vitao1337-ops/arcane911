@@ -54,10 +54,10 @@ export function createProductCatalog(env = {}) {
     astralDocument: Object.freeze({
       id: productId(env.VITE_ASTRO911_PRODUCT_ID, "astro911-documento-completo"),
       name: "Documento Astral 911",
-      // O produto só fecha quando o valor for deliberadamente configurado.
-      // Zero mantém somente o mapa calculado aberto e impede cobrança ou IA acidental.
-      priceCents: optionalCents(env.VITE_ASTRO911_PRICE_CENTS),
+      // Ticket premium padrão. A variável de ambiente continua podendo sobrescrever o valor.
+      priceCents: positiveCents(env.VITE_ASTRO911_PRICE_CENTS, 11_990),
       kind: "astral_document",
+      includedSpecificQuestions: 5,
     }),
   });
 }
