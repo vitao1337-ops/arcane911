@@ -18,7 +18,9 @@ npm test
 npm run build
 ```
 
-Verificação desta entrega: 171 testes passaram e o build de produção foi concluído. Os testes de cobrança e IA usam provedores isolados; não comprovam saldo/cota das contas nem substituem uma compra real acompanhada.
+Verificação desta entrega: 172 testes passaram e o build de produção foi concluído. Os testes de cobrança e IA usam provedores isolados; não comprovam saldo/cota das contas nem substituem uma compra real acompanhada.
+
+A instalação ajusta automaticamente o formato de módulos da biblioteca astronômica para o Node da Vercel. Esse ajuste também é verificado sem a detecção automática de módulos do Node.
 
 ## Correções desta versão
 

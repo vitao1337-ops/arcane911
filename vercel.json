@@ -7,10 +7,12 @@
       "maxDuration": 60
     },
     "api/checkout.js": {
-      "maxDuration": 30
+      "maxDuration": 30,
+      "includeFiles": "node_modules/astronomy-engine/esm/package.json"
     },
     "api/payment.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "node_modules/astronomy-engine/esm/package.json"
     },
     "api/payment-status.js": {
       "maxDuration": 30

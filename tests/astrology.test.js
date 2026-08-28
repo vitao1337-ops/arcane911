@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from 'node:child_process';
 import { resolveBirthInstant } from '../src/lib/birthTime.js';
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -15,6 +16,14 @@ const sample = calculateNatalChart({
   date: "1990-01-01",
   time: "12:00",
   location: fallbackLocations[0],
+});
+
+test('rotas de cobrança carregam com a detecção automática de módulos desativada', () => {
+  const result = spawnSync(process.execPath, [
+    '--no-experimental-detect-module', '--input-type=module', '--eval',
+    "await import('./api/checkout.js'); await import('./api/payment.js');",
+  ], { cwd: fileURLToPath(new URL('../', import.meta.url)), encoding: 'utf8', timeout: 15000 });
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
 });
 
 test("o mapa natal calcula os dez planetas, as doze casas e os ângulos", () => {

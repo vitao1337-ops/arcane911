@@ -1,3 +1,4 @@
+import './prepare-runtime.mjs';
 import { createHash } from 'node:crypto';
 import { readFile, mkdir, writeFile, readdir, unlink } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
