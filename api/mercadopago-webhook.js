@@ -30,6 +30,15 @@ function webhookDataId(request) {
   ).trim().toLowerCase();
 }
 
+export function isMercadoPagoPanelTest(request, dataId = webhookDataId(request)) {
+  const body = request?.body;
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  return String(dataId ?? "").trim().toLowerCase() === "123456"
+    && body.live_mode === false
+    && String(body.type ?? "").trim() === "payment"
+    && String(body.action ?? "").trim() === "payment.updated";
+}
+
 export function verifyMercadoPagoWebhookSignature(request, dataId, secretOverride = "") {
   const { ts, v1 } = parseSignature(request.headers?.["x-signature"]);
   const requestId = String(request.headers?.["x-request-id"] ?? "").trim();
@@ -57,6 +66,15 @@ export default async function handler(request, response) {
   const dataId = webhookDataId(request);
   try {
     verifyMercadoPagoWebhookSignature(request, dataId);
+
+    // O testador de Webhooks do Mercado Pago envia o pagamento ficticio 123456.
+    // Ele serve apenas para validar a entrega da notificacao e nao existe na API
+    // /v1/payments, portanto deve ser reconhecido sem tentar fazer fulfillment.
+    if (isMercadoPagoPanelTest(request, dataId)) {
+      console.info("mercadopago_webhook_panel_test_acknowledged", { paymentId: dataId });
+      return sendJson(response, 200, { received: true, test: true });
+    }
+
     if (type && type !== "payment") return sendJson(response, 200, { received: true, ignored: true });
 
     const result = await fulfillMercadoPagoPayment(dataId);
