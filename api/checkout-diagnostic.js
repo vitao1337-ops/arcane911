@@ -13,18 +13,33 @@ function safeError(error) {
   };
 }
 
+function supabaseTarget() {
+  try {
+    const url = new URL(String(process.env.SUPABASE_URL ?? "").trim());
+    return {
+      host: url.hostname,
+      projectRef: url.hostname.endsWith(".supabase.co") ? url.hostname.split(".")[0] : "custom",
+    };
+  } catch {
+    return { host: "", projectRef: "" };
+  }
+}
+
 export default async function handler(request, response) {
   if (request.method !== "GET") {
     response.setHeader("Allow", "GET");
     return response.status(405).json({ error: "method_not_allowed" });
   }
 
+  const target = supabaseTarget();
   const result = {
     mercadoPagoConfigured: mercadoPagoConfigured(process.env),
     webhookConfigured: String(process.env.MERCADOPAGO_WEBHOOK_SECRET ?? "").trim().length >= 16,
     paymentLedgerConfigured: paymentLedgerConfigured(process.env),
     supabaseUrlConfigured: Boolean(String(process.env.SUPABASE_URL ?? "").trim()),
     supabaseSecretConfigured: Boolean(String(process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim()),
+    supabaseHost: target.host,
+    supabaseProjectRef: target.projectRef,
   };
 
   try {
