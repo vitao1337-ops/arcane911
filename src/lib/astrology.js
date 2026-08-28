@@ -1,7 +1,14 @@
 import { searchLocalBirthplaces } from "./birthplaces.js";
 import { resolveBirthInstant } from "./birthTime.js";
 import * as horoscopeModule from "circular-natal-horoscope-js/dist/index.js";
-import { Body, Ecliptic, GeoVector } from "astronomy-engine";
+import * as astronomyModule from "astronomy-engine";
+
+// Vercel's Node loader can expose the same dependency through a CJS default.
+// Keep the browser's ESM build and the server's CJS build on the same engine.
+const astronomyDefault = Reflect.get(astronomyModule, "default");
+const astronomyPackage = astronomyModule.Body ? astronomyModule
+  : astronomyDefault?.default ?? astronomyDefault;
+const { Body, Ecliptic, GeoVector } = astronomyPackage;
 
 const horoscopePackage = horoscopeModule.default?.default
   ?? horoscopeModule.default
