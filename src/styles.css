@@ -147,6 +147,65 @@ body {
   font-size: calc(var(--mystic-icon-size, 18px) * 0.82);
 }
 
+/* Directional controls are drawn geometrically instead of using font glyphs.
+   This keeps every chevron optically centered inside buttons and summaries. */
+.mystic-icon-chevron {
+  position: relative;
+  display: inline-block;
+  font-size: 0;
+  line-height: 0;
+  transform: none;
+}
+
+.mystic-icon-chevron::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 31%;
+  height: 31%;
+  border-top: 1.45px solid currentColor;
+  border-right: 1.45px solid currentColor;
+  content: "";
+  transform-origin: center;
+}
+
+.mystic-icon-chevron-right::before {
+  transform: translate(-58%, -50%) rotate(45deg);
+}
+
+.mystic-icon-chevron-left::before {
+  transform: translate(-42%, -50%) rotate(-135deg);
+}
+
+.mystic-icon-close {
+  position: relative;
+  display: block;
+  width: var(--mystic-icon-size, 18px);
+  height: var(--mystic-icon-size, 18px);
+  transform: none;
+}
+
+.mystic-icon-close::before,
+.mystic-icon-close::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 58%;
+  height: 1.5px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+  transform-origin: center;
+}
+
+.mystic-icon-close::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.mystic-icon-close::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
 button,
 textarea,
 input,
@@ -317,8 +376,8 @@ p {
 }
 
 .brand > span:last-child {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: center;
 }
 
 .brand strong {
