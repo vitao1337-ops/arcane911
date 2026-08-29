@@ -19,7 +19,7 @@ import {
   Shuffle,
   Sparkles,
   X,
-} from "lucide-react";
+} from "./components/MysticIcons";
 import { completePositions, intents, positions, tarotBySlug, tarotCards } from "./data/tarot";
 import { getReadingForIntent } from "./data/products";
 import { agent911Config } from "./config/agent911";
@@ -1754,15 +1754,15 @@ function App() {
 
       <header className="topbar">
         <Link className="brand" to="/" aria-label="Arcane911, início">
-          <span className="brand-mark" aria-hidden="true"><span>✦</span></span>
+          <span className="brand-mark" aria-hidden="true"><span>☾</span></span>
           <span>
             <strong>Arcane911</strong>
-            <small>Projeto Arcano · 10.08.26</small>
+            <small>10.08.26</small>
           </span>
         </Link>
 
         <nav className="desktop-nav" aria-label="Navegação principal">
-          <Link to="/tiragem-gratis" aria-current={isFreeRoute ? "page" : undefined}>Tarot gratuito</Link>
+          <Link to="/tiragem-gratis" aria-current={isFreeRoute ? "page" : undefined}>Tarot</Link>
           <Link to="/mapa-astral" aria-current={isAstroRoute ? "page" : undefined}>Mapa Astral</Link>
           <a href="/#baralho">Os 22 Arcanos</a>
         </nav>
@@ -1902,7 +1902,7 @@ function App() {
               <strong>Explorar os 22 Arcanos</strong>
               <small>Abra a coleção completa sem alongar a landing.</small>
             </span>
-            <ChevronRight size={22} aria-hidden="true" />
+            <span className="deck-disclosure-sigil" aria-hidden="true">☾</span>
           </button>
 
           <div className="deck-disclosure-content" id="arcane-deck-content" hidden={!deckOpen}>
@@ -1993,12 +1993,12 @@ function App() {
 
       <footer>
         <Link className="brand footer-brand" to="/">
-          <span className="brand-mark" aria-hidden="true"><span>✦</span></span>
-          <span><strong>Arcane911</strong><small>Projeto Arcano · Fase 1</small></span>
+          <span className="brand-mark" aria-hidden="true"><span>☾</span></span>
+          <span><strong>Arcane911</strong><small>Tarot · 2026</small></span>
         </Link>
         <p>Uma experiência de reflexão simbólica criada no universo Sorriso Marcado.</p>
         <div className="footer-links">
-          <Link to="/tiragem-gratis">Tarot gratuito</Link>
+          <Link to="/tiragem-gratis">Tarot</Link>
           <Link to="/mapa-astral">Mapa Astral</Link>
           <Link to="/recuperar-compra">Recuperar compra</Link>
           <Link to="/termos">Termos</Link>
@@ -2012,7 +2012,7 @@ function App() {
         <div className="overlay" role="presentation" onMouseDown={() => setMobileNavOpen(false)}>
           <nav className="mobile-nav" aria-label="Navegação móvel" onMouseDown={(event) => event.stopPropagation()}>
             <button type="button" onClick={() => setMobileNavOpen(false)} aria-label="Fechar menu"><X /></button>
-            <Link to="/tiragem-gratis" onClick={() => setMobileNavOpen(false)}>Tarot gratuito <ArrowRight size={18} /></Link>
+            <Link to="/tiragem-gratis" onClick={() => setMobileNavOpen(false)}>Tarot <ArrowRight size={18} /></Link>
             <Link to="/mapa-astral" onClick={() => setMobileNavOpen(false)}>Mapa Astral <ArrowRight size={18} /></Link>
             <Link to="/recuperar-compra" onClick={() => setMobileNavOpen(false)}>Recuperar compra <ArrowRight size={18} /></Link>
             <a href="/#metodo" onClick={() => setMobileNavOpen(false)}>A origem <ArrowRight size={18} /></a>

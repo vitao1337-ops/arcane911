@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, Copy, LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, Copy } from "../components/MysticIcons";
 import { Link, useNavigate } from "react-router-dom";
 import { commerceConfig } from "../config/commerce";
 import {
@@ -36,6 +36,12 @@ function loadMercadoPagoSdk() {
 
 function productFor(productId) {
   return Object.values(commerceConfig.products).find((product) => product.id === productId) ?? null;
+}
+
+function friendlyOrderReference(orderId) {
+  const clean = String(orderId ?? "").replace(/^order-/u, "").replace(/-/gu, "").toUpperCase();
+  if (clean.length < 8) return "A911";
+  return `A911-${clean.slice(0, 4)}-${clean.slice(-4)}`;
 }
 
 async function postJson(url, body) {
@@ -235,6 +241,15 @@ export default function PaymentPage() {
     }
   }
 
+  async function copyRecoveryKey() {
+    try {
+      await navigator.clipboard.writeText(pending.orderId);
+      setMessage("Chave de recuperação copiada. Guarde só se quiser abrir a compra em outro dispositivo.");
+    } catch {
+      setMessage("Não foi possível copiar automaticamente. Abra a chave abaixo e copie manualmente.");
+    }
+  }
+
   if (!pending || !product) {
     return (
       <main className="payment-page-shell">
@@ -251,19 +266,35 @@ export default function PaymentPage() {
   return (
     <main className="payment-page-shell">
       <section className="payment-heading">
-        <Link className="text-button" to={pending.returnPath || "/"}><ArrowLeft size={15} /> Voltar</Link>
-        <span className="section-kicker">Checkout Arcane911</span>
+        <div className="payment-heading-meta">
+          <Link className="text-button" to={pending.returnPath || "/"}><ArrowLeft size={15} /> Voltar</Link>
+          <span className="section-kicker">Checkout Arcane911</span>
+        </div>
         <h1>Pagamento protegido pelo <em>Mercado Pago.</em></h1>
         <p>{product.name} · <strong>{product.price}</strong></p>
-        <div className="payment-trust-row">
-          <span><ShieldCheck size={15} /> Mercado Pago</span>
-          <span><LockKeyhole size={15} /> Dados do cartão não passam pelo Arcane</span>
-          <span><Sparkles size={15} /> Liberação vinculada ao pedido</span>
+        <div className="payment-trust-row" aria-label="Garantias do checkout">
+          <span>Processado pelo Mercado Pago</span>
+          <span>Cartão protegido pelo provedor</span>
+          <span>Liberação ligada ao pedido</span>
         </div>
       </section>
 
       <section className="payment-panel">
-        <p className="payment-order-code">Guarde o código da compra: <strong>{pending.orderId}</strong>. <Link to="/recuperar-compra">Recuperar compra</Link></p>
+        <div className="payment-order-reference">
+          <div>
+            <span>Referência desta compra</span>
+            <strong>{friendlyOrderReference(pending.orderId)}</strong>
+          </div>
+          <Link to="/recuperar-compra">Recuperar compra</Link>
+        </div>
+        <details className="payment-recovery-key">
+          <summary>Vai abrir em outro aparelho? Mostrar chave de recuperação</summary>
+          <p>Você não precisa decorar isso. Copie somente se quiser recuperar esta compra fora deste navegador.</p>
+          <div>
+            <code>{pending.orderId}</code>
+            <button type="button" onClick={copyRecoveryKey}><Copy size={15} /> Copiar chave</button>
+          </div>
+        </details>
         <div className={`payment-status is-${state}`} aria-live="polite">
           {state === "approved" ? <Check size={18} /> : <span className="payment-status-dot" />}
           <span>{message}</span>
@@ -283,7 +314,7 @@ export default function PaymentPage() {
               </>
             ) : null}
             {pix?.ticketUrl ? <a className="text-button" href={pix.ticketUrl} target="_blank" rel="noreferrer">Abrir instruções do Pix</a> : null}
-            <small>Pedido {pending.orderId}. Esta tela confirma automaticamente assim que o Mercado Pago aprovar.</small>
+            <small>Referência {friendlyOrderReference(pending.orderId)}. Esta tela confirma automaticamente assim que o Mercado Pago aprovar.</small>
           </div>
         ) : null}
       </section>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, MessageCircleQuestion, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, MessageCircleQuestion, ShieldCheck, Sparkles } from "./MysticIcons";
 import { askAstralQuestion, astralQuestionErrorMessage } from "../lib/astralQuestions.js";
 
 export default function Astral911Questions({ chart, entitlement, deliveryStatus, onStatus, onRefresh }) {

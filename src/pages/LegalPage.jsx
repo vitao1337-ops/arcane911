@@ -1,4 +1,4 @@
-import { ArrowLeft, ExternalLink, Mail, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ExternalLink, Mail, ShieldCheck } from "../components/MysticIcons";
 import { Link } from "react-router-dom";
 import { legalConfig } from "../config/legal";
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RotateCcw, Sparkles } from "lucide-react";
+import { RotateCcw, Sparkles } from "./MysticIcons";
 import { agent911Config } from "../config/agent911";
 import { normalizeAgent911ReadingMode } from "../config/agent911ReadingModes";
 import {

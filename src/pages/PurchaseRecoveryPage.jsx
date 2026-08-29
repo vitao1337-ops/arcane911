@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Check, KeyRound, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, KeyRound, ShieldCheck } from "../components/MysticIcons";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { commerceConfig, formatBRL } from "../config/commerce";

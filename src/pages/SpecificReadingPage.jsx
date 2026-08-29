@@ -7,7 +7,7 @@ import {
   ShieldCheck,
   Shuffle,
   Sparkles,
-} from "lucide-react";
+} from "../components/MysticIcons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import Agent911Summary from "../components/Agent911Summary";

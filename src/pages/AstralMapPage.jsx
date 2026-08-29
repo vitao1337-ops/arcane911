@@ -14,7 +14,7 @@ import {
   ShieldCheck,
   Sparkles,
   UserRound,
-} from "lucide-react";
+} from "../components/MysticIcons";
 import Astral911Document from "../components/Astral911Document";
 import Astral911Questions from "../components/Astral911Questions";
 import NatalWheel from "../components/NatalWheel";

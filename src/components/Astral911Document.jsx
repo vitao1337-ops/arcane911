@@ -7,7 +7,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
-} from "lucide-react";
+} from "./MysticIcons";
 import {
   formatAstro911Document,
   readCachedAstro911Document,
