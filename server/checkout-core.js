@@ -60,6 +60,15 @@ function mercadoPagoAccessToken(env = process.env) {
   if (!/^APP_USR-[A-Za-z0-9-]{20,}$/u.test(token) && !/^TEST-[A-Za-z0-9-]{20,}$/u.test(token)) {
     throw new CheckoutError("checkout_not_configured", 503);
   }
+  if (String(env.VERCEL_ENV ?? "").trim().toLowerCase() === "production") {
+    const mode = String(env.MERCADOPAGO_MODE ?? "").trim().toLowerCase();
+    // Mercado Pago test credentials can also start with APP_USR. Production
+    // therefore requires an explicit launch gate and still verifies live_mode
+    // on every payment returned by the provider.
+    if (mode !== "production" || token.startsWith("TEST-")) {
+      throw new CheckoutError("checkout_not_configured", 503);
+    }
+  }
   return token;
 }
 
@@ -227,9 +236,12 @@ async function retrieveMercadoPagoPayment(paymentIdValue, options = {}) {
   return mercadoPagoRequest(`/v1/payments/${encodeURIComponent(id)}`, options);
 }
 
-function assertPaymentMatches(payment, order, { requireApproved = true } = {}) {
+function assertPaymentMatches(payment, order, { requireApproved = true, env = process.env } = {}) {
   const reference = paymentReference(payment?.id);
   if (!reference) throw new CheckoutError("checkout_invalid_response", 502);
+  if (String(env.VERCEL_ENV ?? "").trim().toLowerCase() === "production" && payment?.live_mode !== true) {
+    throw new CheckoutError("payment_environment_mismatch", 503);
+  }
   if (requireApproved && payment?.status !== "approved") {
     const code = ['refunded', 'charged_back', 'cancelled'].includes(payment?.status) ? 'payment_revoked'
       : payment?.status === 'rejected' ? 'payment_rejected' : 'payment_not_confirmed';
@@ -240,12 +252,16 @@ function assertPaymentMatches(payment, order, { requireApproved = true } = {}) {
   if (amountCents !== order.product.priceCents || payment?.external_reference !== order.orderId) throw new CheckoutError("payment_mismatch", 409);
 
   const metadata = payment?.metadata ?? {};
-  if (metadata.product_id !== order.product.id || metadata.order_id !== order.orderId || metadata.reading_id !== order.readingId) {
+  if (metadata.product_id !== order.product.id
+      || metadata.product_kind !== order.product.kind
+      || metadata.order_id !== order.orderId
+      || metadata.reading_id !== order.readingId) {
     throw new CheckoutError("payment_mismatch", 409);
   }
   if ((order.readingSlug || "") !== String(metadata.reading_slug ?? "")) throw new CheckoutError("payment_mismatch", 409);
   if ((order.offerContext || "") !== String(metadata.offer_context ?? "")) throw new CheckoutError("payment_mismatch", 409);
   if ((order.questionNumber || 0) !== Number(metadata.question_number || 0)) throw new CheckoutError("payment_mismatch", 409);
+  if ((order.parentSessionId || "") !== String(metadata.parent_payment_id ?? "")) throw new CheckoutError("payment_mismatch", 409);
 
   const type = String(payment?.payment_type_id ?? "");
   const method = String(payment?.payment_method_id ?? "").toLowerCase();
@@ -253,8 +269,8 @@ function assertPaymentMatches(payment, order, { requireApproved = true } = {}) {
   return reference;
 }
 
-function entitlementFromPayment(payment, order) {
-  const sessionId = assertPaymentMatches(payment, order, { requireApproved: true });
+function entitlementFromPayment(payment, order, env = process.env) {
+  const sessionId = assertPaymentMatches(payment, order, { requireApproved: true, env });
   return {
     sessionId,
     providerTransactionId: sessionId,
@@ -274,10 +290,15 @@ function entitlementFromPayment(payment, order) {
 async function assertCompleteEntitlement(order, options = {}) {
   const payment = await retrieveMercadoPagoPayment(order.parentSessionId, options);
   const completeProduct = order.catalog.completeReading;
+  if (String(options.env?.VERCEL_ENV ?? process.env.VERCEL_ENV ?? "").trim().toLowerCase() === "production"
+      && payment?.live_mode !== true) {
+    throw new CheckoutError("payment_environment_mismatch", 503);
+  }
   if (payment?.status !== "approved"
       || String(payment.currency_id ?? "").toUpperCase() !== "BRL"
       || Math.round(Number(payment.transaction_amount) * 100) !== completeProduct.priceCents
       || payment?.metadata?.product_id !== completeProduct.id
+      || payment?.metadata?.product_kind !== completeProduct.kind
       || payment?.metadata?.reading_id !== order.readingId) {
     throw new CheckoutError("complete_entitlement_required", 403);
   }
@@ -307,7 +328,7 @@ export async function createMercadoPagoPayment(raw, {
   let attemptKey = order.orderId;
   if (raw.retryPaymentId) {
     const previous = await retrieveMercadoPagoPayment(raw.retryPaymentId, { env, fetchImplementation });
-    assertPaymentMatches(previous, order, { requireApproved: false });
+    assertPaymentMatches(previous, order, { requireApproved: false, env });
     if (!['rejected', 'cancelled'].includes(previous.status)) throw new CheckoutError('payment_not_confirmed', 409);
     attemptKey = `${order.orderId}:${paymentReference(previous.id)}`;
   }
@@ -350,7 +371,7 @@ export async function createMercadoPagoPayment(raw, {
     idempotencyKey: deterministicIdempotencyKey(attemptKey),
   });
 
-  const sessionId = assertPaymentMatches(payment, order, { requireApproved: false });
+  const sessionId = assertPaymentMatches(payment, order, { requireApproved: false, env });
   const status = cleanIdentifier(payment?.status, 32) || "unknown";
   const response = {
     provider: "mercadopago",
@@ -371,14 +392,14 @@ export async function createMercadoPagoPayment(raw, {
       ticketUrl: cleanText(transactionData.ticket_url, 1600),
     };
   }
-  if (status === "approved") response.entitlement = entitlementFromPayment(payment, order);
+  if (status === "approved") response.entitlement = entitlementFromPayment(payment, order, env);
   return response;
 }
 
 export async function verifyMercadoPagoPayment(raw, { env = process.env, fetchImplementation = globalThis.fetch } = {}) {
   const order = normalizeOrder(raw, env);
   const payment = await retrieveMercadoPagoPayment(raw.paymentId ?? raw.sessionId, { env, fetchImplementation });
-  return { paid: true, entitlement: entitlementFromPayment(payment, order) };
+  return { paid: true, entitlement: entitlementFromPayment(payment, order, env) };
 }
 
 export async function fulfillMercadoPagoPayment(paymentIdValue, { env = process.env, fetchImplementation = globalThis.fetch } = {}) {
@@ -399,7 +420,7 @@ export async function fulfillMercadoPagoPayment(paymentIdValue, { env = process.
     parentSessionId: metadata.parent_payment_id,
   };
   const order = normalizeOrder(raw, env);
-  return { paid: true, entitlement: entitlementFromPayment(payment, order) };
+  return { paid: true, entitlement: entitlementFromPayment(payment, order, env) };
 }
 
 export function checkoutErrorPayload(error) {

@@ -79,12 +79,13 @@ test("checkout astral falha fechado se a fila humana não estiver instalada", ()
   assert.match(sql, /'version', 1/u);
 });
 
-test('V29: compra, recuperação e pós-venda com SQL real e provedores isolados', async (t) => {
+test('V30: compra, recuperação e pós-venda com SQL real e provedores isolados', async (t) => {
   const db = new PGlite();
   const env = { SUPABASE_URL: 'https://isolated-ledger.example.invalid',
     SUPABASE_SECRET_KEY: 'sb_secret_local_regression_test_only',
-    MERCADOPAGO_ACCESS_TOKEN: 'TEST-LOCAL-0000000000000000000000000000',
+    MERCADOPAGO_ACCESS_TOKEN: 'APP_USR-LOCAL-0000000000000000000000000000',
     MERCADOPAGO_WEBHOOK_SECRET: 'local-regression-webhook-secret',
+    MERCADOPAGO_MODE: 'production',
     GEMINI_API_KEY: 'local-regression-not-a-real-key', OPENAI_API_KEY: '',
     ASTRO911_PROVIDER: 'gemini', ASTRO911_FALLBACK_MODEL: 'off', VERCEL_ENV: 'production' };
   const previousEnv = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
@@ -163,7 +164,7 @@ test('V29: compra, recuperação e pós-venda com SQL real e provedores isolados
         const key = options.headers['X-Idempotency-Key'];
         if (keys.has(key)) return json(payments.get(keys.get(key)));
         const body = JSON.parse(options.body), id = String(900000000000 + payments.size + 1);
-        const payment = { ...body, id, status: nextStatus, currency_id: 'BRL', live_mode: false,
+        const payment = { ...body, id, status: nextStatus, currency_id: 'BRL', live_mode: true,
           date_approved: new Date().toISOString(), payment_type_id: body.payment_method_id === 'pix' ? 'bank_transfer' : 'credit_card',
           point_of_interaction: { transaction_data: { qr_code: 'NOT_A_REAL_PIX' } } };
         payments.set(id, payment); keys.set(key, id);
@@ -195,6 +196,11 @@ test('V29: compra, recuperação e pós-venda com SQL real e provedores isolados
     });
     const paid = await buy();
     await t.test('pagamento confirmado cria a fila mesmo sem retorno do navegador', async () => {
+      assert.equal(paid.payment.transaction_amount, 119.9);
+      const entitlement = (await db.query('select amount_total,currency,livemode from arcane911_private.payment_entitlements where order_id=$1', [paid.access.orderId])).rows[0];
+      assert.equal(Number(entitlement.amount_total), 11_990);
+      assert.equal(entitlement.currency, 'brl');
+      assert.equal(entitlement.livemode, true);
       const rows = (await db.query('select * from arcane911_private.astral_orders where order_id=$1', [paid.access.orderId])).rows;
       assert.equal(rows.length, 1); assert.equal(rows[0].email, fulfillment.email);
       assert.equal(new Date(rows[0].birth_utc).toISOString(), new Date(chart.birth.utc).toISOString());

@@ -1,4 +1,4 @@
-# Mercado Pago · configuração do Arcane911 V29
+# Mercado Pago · configuração do Arcane911 V30
 
 O checkout usa o Payment Brick oficial no navegador e a API de pagamentos no servidor. O Brick exibe apenas cartão de crédito e Pix. Dados completos do cartão não passam pelo código do Arcane911.
 
@@ -6,6 +6,7 @@ O checkout usa o Payment Brick oficial no navegador e a API de pagamentos no ser
 
 ```env
 MERCADOPAGO_ACCESS_TOKEN=
+MERCADOPAGO_MODE=production
 VITE_MERCADOPAGO_PUBLIC_KEY=
 MERCADOPAGO_WEBHOOK_SECRET=
 VITE_PUBLIC_SITE_URL=https://arcane911.vercel.app
@@ -15,6 +16,8 @@ ASTRO911_ADMIN_SECRET=
 ```
 
 `MERCADOPAGO_NOTIFICATION_URL` é opcional. Se vazio, o backend usa `VITE_PUBLIC_SITE_URL + /api/mercadopago-webhook`.
+
+Em produção Vercel, `MERCADOPAGO_MODE=production` é obrigatório. Use esse valor somente depois de copiar a Public Key e o Access Token da seção **Credenciais de produção** do Mercado Pago. O prefixo `APP_USR` sozinho não prova o ambiente; o backend também exige `live_mode=true` em toda resposta do provedor.
 
 Nunca coloque Access Token, segredo de webhook, chave do Supabase, Gemini ou OpenAI em variável `VITE_`.
 
@@ -71,7 +74,7 @@ O backend valida `x-signature` usando `data.id`, `x-request-id` e `ts`, depois c
 - só `credit_card` e `pix` são aceitos pelo backend;
 - o meio enviado pelo navegador é conferido contra `/v1/payment_methods` antes da cobrança;
 - retries do mesmo pedido reutilizam a mesma chave de idempotência;
-- a liberação exige status `approved`, BRL, valor correto, pedido correto e metadata correta.
+- a liberação exige ambiente real, status `approved`, BRL, valor correto, pedido correto e metadata completa correta.
 
 
 ## Documento Astral premium

@@ -15,6 +15,7 @@ const checkoutMessages = Object.freeze({
   astral_order_invalid: "Confira o e-mail e os dados de nascimento antes de pagar.",
   astral_order_requires_support: "Use o código da compra no suporte para recuperar os dados deste pedido antigo.",
   payment_mismatch: "Não foi possível vincular este pagamento à leitura. O acesso não foi liberado.",
+  payment_environment_mismatch: "O pagamento recebido não pertence ao ambiente de produção. O acesso não foi liberado.",
   payment_ledger_not_configured: "A liberação segura ainda não está configurada. Nenhuma cobrança foi aberta.",
   payment_ledger_not_ready: "O pagamento foi confirmado, mas a liberação ainda está sendo preparada. Tente confirmar novamente.",
   astral_fulfillment_not_ready: "O Documento Astral está em preparação e ainda não pode receber pagamentos.",

@@ -119,6 +119,58 @@ test("confirmação consulta o Mercado Pago e rejeita valor divergente", async (
   );
 });
 
+test("produção recusa credencial de teste antes de abrir pagamento", async () => {
+  await assert.rejects(
+    prepareMercadoPagoCheckout(order, {
+      env: { ...env, VERCEL_ENV: "production", MERCADOPAGO_MODE: "production", MERCADOPAGO_ACCESS_TOKEN: "TEST-arcane911-test-access-token-123456789" },
+      origin: "https://arcane911.vercel.app",
+    }),
+    (error) => error?.code === "checkout_not_configured",
+  );
+});
+
+test("produção exige o gate explícito do Mercado Pago antes do checkout", async () => {
+  await assert.rejects(
+    prepareMercadoPagoCheckout(order, {
+      env: { ...env, VERCEL_ENV: "production", MERCADOPAGO_MODE: "test" },
+      origin: "https://arcane911.vercel.app",
+    }),
+    (error) => error?.code === "checkout_not_configured",
+  );
+});
+
+test("produção aceita somente pagamento live_mode confirmado pelo Mercado Pago", async () => {
+  const productionEnv = { ...env, VERCEL_ENV: "production", MERCADOPAGO_MODE: "production" };
+  await assert.rejects(
+    verifyMercadoPagoPayment({ ...order, paymentId: "mp-12345678901" }, {
+      env: productionEnv,
+      fetchImplementation: async () => jsonResponse(approvedPixPayment()),
+    }),
+    (error) => error?.code === "payment_environment_mismatch",
+  );
+
+  const result = await verifyMercadoPagoPayment({ ...order, paymentId: "mp-12345678901" }, {
+    env: productionEnv,
+    fetchImplementation: async () => jsonResponse({ ...approvedPixPayment(), live_mode: true }),
+  });
+  assert.equal(result.entitlement.livemode, true);
+});
+
+test("confirmação valida product_kind e parent_payment_id da metadata", async () => {
+  for (const metadata of [
+    { ...approvedPixPayment().metadata, product_kind: "astral_document" },
+    { ...approvedPixPayment().metadata, parent_payment_id: "mp-99999999999" },
+  ]) {
+    await assert.rejects(
+      verifyMercadoPagoPayment({ ...order, paymentId: "mp-12345678901" }, {
+        env,
+        fetchImplementation: async () => jsonResponse({ ...approvedPixPayment(), metadata }),
+      }),
+      (error) => error?.code === "payment_mismatch",
+    );
+  }
+});
+
 test("cartão só passa quando o método consultado é credit_card", async () => {
   const calls = [];
   const cardPayment = {
