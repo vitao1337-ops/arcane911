@@ -191,6 +191,7 @@ test("a tiragem de sete cartas usa checkout em produção e bypass somente no DE
   assert.match(app, /renderSpecificQuestionOffer\("complete"\)/);
   assert.match(app, /renderSpecificQuestionOffer\("standalone"\)/);
   assert.doesNotMatch(app, /buildCompleteSpread[(]/);
+  assert.deepEqual(vercel.regions, ["gru1"]);
   assert.deepEqual(vercel.rewrites, [{ source: "/(.*)", destination: "/index.html" }]);
 });
 

@@ -11,10 +11,13 @@ export async function preparePurchaseBeforeCharge(raw, options = {}) {
   if (String(env.MERCADOPAGO_WEBHOOK_SECRET ?? '').trim().length < 16) {
     throw new CheckoutError('webhook_not_configured', 503);
   }
-  await assertPaymentLedgerReady(options);
+  const readinessChecks = [assertPaymentLedgerReady(options)];
+  if (order.product.kind === 'astral_document') {
+    readinessChecks.push(assertAstralFulfillmentReady(options));
+  }
+  await Promise.all(readinessChecks);
   let snapshot = options.createDraft ? {} : null;
   if (order.product.kind === 'astral_document') {
-    await assertAstralFulfillmentReady(options);
     const input = raw.fulfillment;
     if (!input && !options.createDraft) {
       const saved = await preparePurchase({ ...order, snapshot: null }, options);
