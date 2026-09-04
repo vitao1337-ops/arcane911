@@ -31,6 +31,10 @@
     "api/astral-admin-delivery.js": {
       "maxDuration": 20
     },
+    "api/astral-admin.js": {
+      "maxDuration": 60,
+      "includeFiles": "node_modules/astronomy-engine/esm/package.json"
+    },
     "api/astro-question.js": {
       "maxDuration": 60
     }

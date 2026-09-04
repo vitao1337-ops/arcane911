@@ -264,6 +264,28 @@ function resolveProviderPlan() {
   return candidates.slice(0, MAX_PROVIDER_CALLS);
 }
 
+export async function generateAstro911DocumentForReview({ context, questionnaire, requestId }) {
+  const normalized = validateAstro911Request({
+    agent: "astro-911",
+    schemaVersion: ASTRO911_SCHEMA_VERSION,
+    requestId: String(requestId || `review-${Date.now()}`).slice(0, 100),
+    context: {
+      experience: "astrology.natal-document.v1",
+      chart: context,
+      personalization: questionnaire,
+    },
+  });
+  const providerPlan = resolveProviderPlan();
+  if (!providerPlan.length) {
+    throw new Astro911ProviderError("provider_unavailable", {
+      kind: "unavailable",
+      status: 503,
+      providerCode: "provider_not_configured",
+    });
+  }
+  return executeAstro911(normalized, providerPlan);
+}
+
 function repairInstruction(reasons) {
   if (!reasons.length) return "";
   const reasonList = reasons.map((reason) => String(reason).slice(0, 60)).join(", ");

@@ -2,6 +2,7 @@ import { normalizeOrder, CheckoutError, mercadoPagoConfigured } from './checkout
 import { assertPaymentLedgerReady, assertAstralFulfillmentReady, preparePurchase } from './payment-ledger.js';
 import { calculateNatalChart } from '../src/lib/astrology.js';
 import { astro911Fingerprint, createAstro911Context } from '../src/lib/astro911.js';
+import { normalizeAstralQuestionnaire } from '../src/config/astralQuestionnaire.js';
 
 // Both checkout entry points must persist the fulfillment data BEFORE charging.
 export async function preparePurchaseBeforeCharge(raw, options = {}) {
@@ -28,7 +29,10 @@ export async function preparePurchaseBeforeCharge(raw, options = {}) {
     try { chart = calculateNatalChart(input); }
     catch { throw new CheckoutError('astral_order_invalid', 400); }
     if (astro911Fingerprint(chart) !== order.readingId) throw new CheckoutError('payment_mismatch', 409);
-    snapshot = { chart, context: createAstro911Context(chart).chart, email };
+    let questionnaire;
+    try { questionnaire = normalizeAstralQuestionnaire(input.questionnaire, { requireAnswers: true }); }
+    catch { throw new CheckoutError('astral_questionnaire_incomplete', 400); }
+    snapshot = { chart, context: createAstro911Context(chart).chart, email, questionnaire };
     // Generated timestamps are not part of the immutable purchase identity.
     delete snapshot.chart.id;
     delete snapshot.chart.createdAt;

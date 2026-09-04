@@ -47,7 +47,7 @@ function TermsContent() {
       </section>
       <section>
         <h2>4. Inteligência artificial e limites</h2>
-        <p>Algumas sínteses usam provedores de inteligência artificial. A saída é revisada por regras automáticas, mas ainda pode conter imprecisões. O usuário deve confrontar hipóteses simbólicas com fatos observáveis e preservar a própria autonomia.</p>
+        <p>Algumas sínteses usam provedores de inteligência artificial. A leitura imediata passa por regras automáticas; o PDF individual é preparado pelo Agent911 e revisado por uma pessoa antes da entrega. Mesmo assim, interpretações simbólicas podem conter imprecisões. O usuário deve confrontar hipóteses com fatos observáveis e preservar a própria autonomia.</p>
       </section>
       <section>
         <h2>5. Disponibilidade e conduta</h2>
@@ -70,15 +70,15 @@ function PrivacyContent() {
       </section>
       <section>
         <h2>2. Compra e autorização</h2>
-        <p>O Mercado Pago processa os dados de pagamento conforme sua própria política. O livro-caixa privado registra identificadores técnicos e consumo dos acessos. Uma área privada de entrega guarda os dados da compra, as cartas, a pergunta necessária à leitura e as respostas pagas concluídas para permitir recuperação. Quando o Documento Astral é comprado, o Arcane911 também guarda, em área privada, nome, e-mail, data, horário, cidade, fuso e coordenadas necessários para preparar e entregar a síntese humana contratada. O código do pedido funciona como chave privada para recuperar o conteúdo. Não o compartilhe nem publique capturas de tela com ele.</p>
+        <p>O Mercado Pago processa os dados de pagamento conforme sua própria política. O livro-caixa privado registra identificadores técnicos e consumo dos acessos. Uma área privada de entrega guarda os dados da compra, as cartas, a pergunta necessária à leitura e as respostas pagas concluídas para permitir recuperação. Quando o Documento Astral é comprado, o Arcane911 também guarda nome, e-mail, data, horário, cidade, fuso, coordenadas e as escolhas do questionário de personalização necessários para preparar e entregar a síntese contratada. O código do pedido funciona como chave privada para recuperar o conteúdo. Não o compartilhe nem publique capturas de tela com ele.</p>
       </section>
       <section>
         <h2>3. Conteúdo enviado à inteligência artificial</h2>
-        <p>Para o tarot, são enviados a pergunta, as cartas, posições e o contexto necessário à síntese. Para o documento astral, a interpretação recebe o mapa já calculado; a interface foi projetada para não enviar cidade, data e hora brutas ao modelo. Provedores podem manter registros técnicos conforme contratos e políticas próprias.</p>
+        <p>Para o tarot, são enviados a pergunta, as cartas, posições e o contexto necessário à síntese. Para o documento astral, a interpretação recebe o mapa já calculado e as escolhas do questionário de personalização; a interface foi projetada para não enviar cidade, data e hora brutas ao modelo. Provedores podem manter registros técnicos conforme contratos e políticas próprias.</p>
       </section>
       <section>
         <h2>4. Serviços técnicos</h2>
-        <p>Vercel hospeda o aplicativo e pode registrar IP, horário, rota e diagnóstico. Supabase guarda o livro-caixa, as respostas contratadas e a fila de entrega em área privada. A busca de cidades usa dados GeoNames incluídos no próprio site, sob licença CC BY 4.0; não envia dados de nascimento a um serviço externo de geocodificação. Não há publicidade comportamental incorporada nesta versão.</p>
+        <p>Vercel hospeda o aplicativo e pode registrar IP, horário, rota e diagnóstico. Supabase guarda o livro-caixa, as respostas contratadas, a fila de revisão e o PDF em armazenamento privado. O serviço de e-mail configurado pelo operador realiza a notificação e a entrega por link temporário. A busca de cidades usa dados GeoNames incluídos no próprio site, sob licença CC BY 4.0; não envia dados de nascimento a um serviço externo de geocodificação. Não há publicidade comportamental incorporada nesta versão.</p>
       </section>
       <section>
         <h2>5. Controle, exclusão e segurança</h2>

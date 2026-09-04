@@ -1,4 +1,8 @@
 import { astro911SectionIds } from "../src/config/astro911Sections.js";
+import {
+  labelAstralQuestionnaire,
+  normalizeAstralQuestionnaire,
+} from "../src/config/astralQuestionnaire.js";
 
 export const ASTRO911_SCHEMA_VERSION = "2026-08-22.3";
 
@@ -292,6 +296,7 @@ export function validateAstro911Request(body) {
 
   const normalized = {
     requestId,
+    personalization: normalizeAstralQuestionnaire(context.personalization),
     chart: {
       person,
       method,
@@ -398,6 +403,8 @@ QUALIDADE EDITORIAL
 - Seja acolhedor sem ser açucarado e incisivo sem rotular. Nomeie contradições, recursos e custos concretos.
 - Evite frases de horóscopo genérico como “você é uma pessoa profunda”, “confie no universo”, “grandes mudanças estão chegando” ou “tudo acontece por uma razão”.
 - Não use Markdown, emojis, listas dentro dos campos narrativos nem jargão sem tradução.
+- Quando houver AUTORRELATO, trate-o como a voz atual da própria pessoa: conecte escolhas concretas do autorrelato ao mapa, sem psicologizar além do que ela declarou e sem fingir que o céu revelou essas respostas.
+- Dê prioridade editorial aos temas assinalados no autorrelato. A pessoa precisa se reconhecer em cenas, dilemas e decisões observáveis, não em elogios vazios.
 
 LIMITES
 - Use linguagem de possibilidade: “pode”, “tende”, “quando”, “se”. Nunca declare destino, diagnóstico, trauma, fidelidade, gravidez, morte, doença, riqueza ou acontecimento futuro.
@@ -429,6 +436,7 @@ export function buildAstro911ModelInput(normalized, repairReasons = []) {
   return JSON.stringify({
     task: "Escreva o Documento Astral 911 completo obedecendo ao contrato.",
     person: normalized.chart.person,
+    selfReport: labelAstralQuestionnaire(normalized.personalization),
     method: normalized.chart.method,
     balance: {
       elementScores: normalized.chart.elementScores,

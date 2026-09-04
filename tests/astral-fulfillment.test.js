@@ -79,7 +79,7 @@ test("checkout astral falha fechado se a fila humana não estiver instalada", ()
   assert.match(sql, /'version', 1/u);
 });
 
-test('V30: compra, recuperação e pós-venda com SQL real e provedores isolados', async (t) => {
+test('V31: compra, revisão humana, recuperação e pós-venda com SQL real e provedores isolados', async (t) => {
   const db = new PGlite();
   const env = { SUPABASE_URL: 'https://isolated-ledger.example.invalid',
     SUPABASE_SECRET_KEY: 'sb_secret_local_regression_test_only',
@@ -114,7 +114,12 @@ test('V30: compra, recuperação e pós-venda com SQL real e provedores isolados
   function order() {
     return { orderId: `order-${randomUUID()}`, productId: 'astro911-documento-completo', readingId: astro911Fingerprint(chart), offerContext: 'astral_document' };
   }
-  const fulfillment = { name: chart.person, email: 'test@example.invalid', date: chart.birth.date, time: chart.birth.time, location: chart.location };
+  const questionnaire = {
+    clarity: ['work_money', 'identity_purpose'],
+    patterns: ['urgency_all_or_nothing'],
+    traits: ['determined_intense', 'creative_visionary'],
+  };
+  const fulfillment = { name: chart.person, email: 'test@example.invalid', date: chart.birth.date, time: chart.birth.time, location: chart.location, questionnaire };
   const paymentData = { payment_method_id: 'pix', payer: { email: 'test@example.invalid' } };
   async function notify(payment) {
     const id = String(payment.id), ts = String(Date.now()), requestId = randomUUID();
@@ -130,7 +135,10 @@ test('V30: compra, recuperação e pós-venda com SQL real e provedores isolados
     payment.status = 'approved';
     assert.equal((await notify(payment)).statusCode, 200);
     const access = { ...purchase, sessionId: created.payload.paymentId };
-    if (delivered) await rpc('arcane911_mark_astral_order_delivered', { p_order_id: access.orderId });
+    if (delivered) {
+      await rpc('arcane911_admin_attach_astral_pdf', { p_order_id: access.orderId, p_pdf_path: `astral/${access.orderId}/reviewed.pdf` });
+      await rpc('arcane911_admin_finalize_astral_delivery', { p_order_id: access.orderId, p_email_id: 'email-test' });
+    }
     return { access, payment };
   }
   function question(access, text = 'Como posso compreender meus relacionamentos?') {
@@ -141,6 +149,7 @@ test('V30: compra, recuperação e pós-venda com SQL real e provedores isolados
     await db.exec('create role anon; create role authenticated; create role service_role bypassrls;');
     await db.exec(source('../database/arcane911-payment-ledger.sql'));
     await db.exec(source('../database/arcane911-v29.sql'));
+    await db.exec(source('../database/arcane911-v31.sql'));
     globalThis.fetch = async (url, options = {}) => {
       const target = String(url);
       if (target.startsWith(`${env.SUPABASE_URL}/rest/v1/rpc/`)) {
@@ -156,6 +165,9 @@ test('V30: compra, recuperação e pós-venda com SQL real e provedores isolados
           }
           return json(result);
         } catch (error) { return json({ code: error.code === '42883' ? 'PGRST202' : error.code, message: error.message }, 503); }
+      }
+      if (target.startsWith(`${env.SUPABASE_URL}/storage/v1/object/sign/`)) {
+        return json({ signedURL: '/object/sign/arcane911-astral-pdfs/private.pdf?token=test' });
       }
       if (target === 'https://api.mercadopago.com/v1/payment_methods') return json([{ id: 'visa', payment_type_id: 'credit_card' }]);
       if (target.startsWith('https://api.mercadopago.com/v1/payments')) {
@@ -210,7 +222,7 @@ test('V30: compra, recuperação e pós-venda com SQL real e provedores isolados
     });
     await t.test('pedido não aceita troca de dados depois da cobrança', async () => {
       const response = await invoke(orderHandler, { ...paid.access, action: 'register', fullName: chart.person, email: fulfillment.email,
-        birth: { date: '2000-02-02', time: '05:00' }, location: chart.location });
+        questionnaire, birth: { date: '2000-02-02', time: '05:00' }, location: chart.location });
       assert.equal(response.statusCode, 409);
       const duplicate = await invoke(checkoutHandler, { ...paid.access, fulfillment: { ...fulfillment, email: 'different@example.invalid' } });
       assert.equal(duplicate.statusCode, 409);
@@ -235,7 +247,15 @@ test('V30: compra, recuperação e pós-venda com SQL real e provedores isolados
       const request = sampleAstroRequest({ payment: { ...paid.access, orderId: 'order-wrong-code-123456789' } });
       assert.equal((await invoke(astroHandler, request)).statusCode, 403);
     });
-    await rpc('arcane911_mark_astral_order_delivered', { p_order_id: paid.access.orderId });
+    await rpc('arcane911_admin_attach_astral_pdf', { p_order_id: paid.access.orderId, p_pdf_path: `astral/${paid.access.orderId}/reviewed.pdf` });
+    await rpc('arcane911_admin_finalize_astral_delivery', { p_order_id: paid.access.orderId, p_email_id: 'email-test' });
+    await t.test('PDF entregue ganha link privado e nunca expõe o caminho antes da autorização', async () => {
+      const download = await invoke(orderHandler, { ...paid.access, action: 'download' });
+      assert.equal(download.statusCode, 200);
+      assert.match(download.payload.url, /^https:\/\/isolated-ledger\.example\.invalid\/storage\/v1\/object\/sign\//u);
+      const status = await invoke(orderHandler, { ...paid.access, action: 'status' });
+      assert.equal(status.payload.downloadAvailable, true);
+    });
     await t.test('resposta vazia ou superficial não consome crédito', async () => {
       answerMode = 'tiny';
       assert.equal((await invoke(questionHandler, question(paid.access))).statusCode, 502);

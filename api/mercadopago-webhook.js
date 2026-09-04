@@ -1,6 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { CheckoutError, checkoutErrorPayload, fulfillMercadoPagoPayment } from "../server/checkout-core.js";
-import { PaymentLedgerError, registerPaymentEntitlement, revokePaymentEntitlement } from "../server/payment-ledger.js";
+import {
+  PaymentLedgerError,
+  getAstralOrderForReview,
+  registerPaymentEntitlement,
+  revokePaymentEntitlement,
+} from "../server/payment-ledger.js";
+import { notifyAstralReviewer } from "../server/astral-delivery.js";
 
 function sendJson(response, status, payload) {
   response.setHeader("Cache-Control", "no-store, max-age=0");
@@ -83,6 +89,17 @@ export default async function handler(request, response) {
       return sendJson(response, 200, { received: true, revoked: true });
     }
     await registerPaymentEntitlement(result.entitlement);
+    if (result.entitlement.offerContext === "astral_document") {
+      try {
+        const queued = await getAstralOrderForReview(result.entitlement.orderId);
+        if (queued?.found) await notifyAstralReviewer(queued.order);
+      } catch (notificationError) {
+        console.warn("astral_reviewer_notification_failed", {
+          orderId: result.entitlement.orderId,
+          type: notificationError?.code || "notification_unavailable",
+        });
+      }
+    }
     console.info("mercadopago_webhook_fulfilled", {
       paymentId: result.entitlement.sessionId,
       orderId: result.entitlement.orderId,

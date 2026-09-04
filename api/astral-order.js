@@ -2,9 +2,12 @@ import { createProductCatalog } from "../src/config/productCatalog.js";
 import {
   PaymentLedgerError,
   findPaymentEntitlementByOrder,
+  getAstralPdfPath,
   getAstralOrderStatus,
   readPaidContent,
 } from "../server/payment-ledger.js";
+import { AstralDeliveryError, createAstralPdfSignedUrl } from "../server/astral-delivery.js";
+import { normalizeAstralQuestionnaire } from "../src/config/astralQuestionnaire.js";
 
 function sendJson(response, status, payload) {
   response.setHeader("Cache-Control", "no-store, max-age=0");
@@ -76,6 +79,10 @@ export default async function handler(request, response) {
       const status = await getAstralOrderStatus(entitlement);
       return sendJson(response, 200, status);
     }
+    if (body.action === "download") {
+      const result = await getAstralPdfPath(entitlement);
+      return sendJson(response, 200, await createAstralPdfSignedUrl(result.path, { expiresIn: 86_400 }));
+    }
     if (body.action !== "register") return sendJson(response, 400, { error: "invalid_action" });
 
     // New orders are queued transactionally by the payment callback, never by
@@ -85,6 +92,8 @@ export default async function handler(request, response) {
       const chart = content.snapshot.chart;
       if (body.birth?.date !== chart.birth.date || body.birth?.time !== chart.birth.time
           || body.fullName !== chart.person || String(body.email).trim().toLowerCase() !== content.snapshot.email
+          || JSON.stringify(normalizeAstralQuestionnaire(body.questionnaire))
+            !== JSON.stringify(normalizeAstralQuestionnaire(content.snapshot.questionnaire))
           || Number(body.location?.latitude) !== chart.location.latitude
           || Number(body.location?.longitude) !== chart.location.longitude) {
         throw new PaymentLedgerError("payment_mismatch", 409);
@@ -93,8 +102,9 @@ export default async function handler(request, response) {
     }
     throw new PaymentLedgerError("astral_order_requires_support", 409);
   } catch (error) {
-    const code = error instanceof PaymentLedgerError ? error.code : "astral_order_unavailable";
-    const status = error instanceof PaymentLedgerError ? error.status : 503;
+    const known = error instanceof PaymentLedgerError || error instanceof AstralDeliveryError;
+    const code = known ? error.code : "astral_order_unavailable";
+    const status = known ? error.status : 503;
     return sendJson(response, status, { error: code });
   }
 }

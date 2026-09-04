@@ -56,7 +56,7 @@ export async function assertPaymentLedgerReady(options = {}) {
 
 export async function assertAstralFulfillmentReady(options = {}) {
   const result = await callLedgerRpc("arcane911_astral_fulfillment_health", {}, options);
-  if (result?.ready !== true || Number(result?.version) !== 2) {
+  if (result?.ready !== true || Number(result?.version) !== 3) {
     throw new PaymentLedgerError("astral_fulfillment_not_ready", 503, 5_000);
   }
   return result;
@@ -373,6 +373,93 @@ export async function markAstralOrderDelivered(orderIdValue, options = {}) {
     p_order_id: orderId,
   }, options);
   if (result?.updated !== true) throw new PaymentLedgerError("purchase_not_found", 404);
+  return result;
+}
+
+export async function listAstralOrdersForReview(status = "", limit = 50, options = {}) {
+  return callLedgerRpc("arcane911_admin_list_astral_orders", {
+    p_status: String(status ?? "").trim().slice(0, 24),
+    p_limit: Math.max(1, Math.min(100, Number(limit) || 50)),
+  }, options);
+}
+
+export async function getAstralOrderForReview(orderIdValue, options = {}) {
+  const orderId = cleanIdentifier(orderIdValue, 120);
+  if (!orderId.startsWith("order-") || orderId.length < 18) {
+    throw new PaymentLedgerError("invalid_order", 400);
+  }
+  return callLedgerRpc("arcane911_admin_get_astral_order", { p_order_id: orderId }, options);
+}
+
+export async function saveAstralDraft(orderIdValue, draft, note = "", options = {}) {
+  const orderId = cleanIdentifier(orderIdValue, 120);
+  if (!orderId.startsWith("order-") || orderId.length < 18 || !draft || typeof draft !== "object") {
+    throw new PaymentLedgerError("astral_draft_invalid", 400);
+  }
+  const result = await callLedgerRpc("arcane911_admin_save_astral_draft", {
+    p_order_id: orderId,
+    p_draft: draft,
+    p_note: String(note ?? "").trim().slice(0, 4000),
+  }, options);
+  if (result?.updated !== true) throw new PaymentLedgerError(result?.state || "purchase_not_found", 404);
+  return result;
+}
+
+export async function requestAstralRevision(orderIdValue, note = "", options = {}) {
+  const orderId = cleanIdentifier(orderIdValue, 120);
+  if (!orderId.startsWith("order-") || orderId.length < 18) {
+    throw new PaymentLedgerError("invalid_order", 400);
+  }
+  const result = await callLedgerRpc("arcane911_admin_request_astral_revision", {
+    p_order_id: orderId,
+    p_note: String(note ?? "").trim().slice(0, 4000),
+  }, options);
+  if (result?.updated !== true) throw new PaymentLedgerError("purchase_not_found", 404);
+  return result;
+}
+
+export async function attachAstralPdf(orderIdValue, pathValue, options = {}) {
+  const orderId = cleanIdentifier(orderIdValue, 120);
+  const pdfPath = String(pathValue ?? "").trim().slice(0, 500);
+  if (!orderId.startsWith("order-") || orderId.length < 18 || !/^astral\/[a-zA-Z0-9._/-]+\.pdf$/u.test(pdfPath)) {
+    throw new PaymentLedgerError("astral_pdf_invalid", 400);
+  }
+  const result = await callLedgerRpc("arcane911_admin_attach_astral_pdf", {
+    p_order_id: orderId,
+    p_pdf_path: pdfPath,
+  }, options);
+  if (result?.updated !== true) throw new PaymentLedgerError(result?.state || "purchase_not_found", 404);
+  return result;
+}
+
+export async function finalizeAstralDelivery(orderIdValue, emailId = "", options = {}) {
+  const orderId = cleanIdentifier(orderIdValue, 120);
+  if (!orderId.startsWith("order-") || orderId.length < 18) {
+    throw new PaymentLedgerError("invalid_order", 400);
+  }
+  const result = await callLedgerRpc("arcane911_admin_finalize_astral_delivery", {
+    p_order_id: orderId,
+    p_email_id: String(emailId ?? "").trim().slice(0, 240),
+  }, options);
+  if (result?.updated !== true) throw new PaymentLedgerError("astral_pdf_required", 409);
+  return result;
+}
+
+export async function getAstralPdfPath(access, options = {}) {
+  const normalized = {
+    sessionId: cleanIdentifier(access?.sessionId),
+    orderId: cleanIdentifier(access?.orderId, 120),
+    readingId: cleanIdentifier(access?.readingId, 120),
+  };
+  if (!normalized.sessionId || !normalized.orderId || !normalized.readingId) {
+    throw new PaymentLedgerError("astral_order_invalid", 400);
+  }
+  const result = await callLedgerRpc("arcane911_get_astral_pdf_path", {
+    p_payment_id: normalized.sessionId,
+    p_order_id: normalized.orderId,
+    p_reading_id: normalized.readingId,
+  }, options);
+  if (result?.authorized !== true || !result?.path) throw new PaymentLedgerError("astral_pdf_unavailable", 404);
   return result;
 }
 

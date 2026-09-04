@@ -19,10 +19,15 @@ import Astral911Document from "../components/Astral911Document";
 import Astral911Questions from "../components/Astral911Questions";
 import NatalWheel from "../components/NatalWheel";
 import { astro911Config } from "../config/astro911";
+import {
+  astralQuestionnaireGroups,
+  normalizeAstralQuestionnaire,
+} from "../config/astralQuestionnaire";
 import { commerceConfig } from "../config/commerce";
 import { astro911Fingerprint, clearCachedAstro911Document } from "../lib/astro911";
 import {
   clearAstralOrderDraft,
+  fetchAstralPdfDownload,
   fetchAstralOrderStatus,
   loadAstralOrderDraft,
   registerAstralOrder,
@@ -207,7 +212,7 @@ function AstralPurchaseGate({ product, paymentState, paymentMessage, onCheckout 
   );
 }
 
-function HumanSynthesisStatus({ product, entitlement, deliveryStatus, deliveryError, onRefresh }) {
+function HumanSynthesisStatus({ product, entitlement, deliveryStatus, deliveryError, onRefresh, onDownload, downloading }) {
   const delivered = deliveryStatus?.status === "delivered";
   const questionsAvailable = Number(deliveryStatus?.questionsAvailable) || 0;
   const questionsUsed = Number(deliveryStatus?.questionsUsed) || 0;
@@ -243,6 +248,11 @@ function HumanSynthesisStatus({ product, entitlement, deliveryStatus, deliveryEr
       <div className="astro-human-delivery-foot">
         {entitlement?.orderId ? <small>Código da compra: <strong>{entitlement.orderId}</strong>. Guarde este código para suporte e entrega.</small> : null}
         {deliveryError ? <small className="is-error">{deliveryError}</small> : null}
+        {delivered && deliveryStatus?.downloadAvailable ? (
+          <button className="button button-primary" type="button" onClick={onDownload} disabled={downloading}>
+            <FileText size={15} /> {downloading ? "Abrindo PDF…" : "Baixar minha síntese em PDF"}
+          </button>
+        ) : null}
         <button className="text-button" type="button" onClick={onRefresh}><RotateCcw size={14} /> Atualizar status da síntese</button>
       </div>
     </section>
@@ -253,6 +263,7 @@ export default function AstralMapPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: "", email: loadAstralOrderDraft()?.email ?? "", date: "", time: "", city: "" });
+  const [questionnaire, setQuestionnaire] = useState(() => normalizeAstralQuestionnaire(loadAstralOrderDraft()?.questionnaire));
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [offsetOptions, setOffsetOptions] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -265,6 +276,7 @@ export default function AstralMapPage() {
   const [paymentMessage, setPaymentMessage] = useState("");
   const [astralOrderStatus, setAstralOrderStatus] = useState(null);
   const [astralOrderError, setAstralOrderError] = useState("");
+  const [pdfDownloading, setPdfDownloading] = useState(false);
   const controllerRef = useRef(null);
   const resultRef = useRef(null);
   const checkoutVerificationRef = useRef("");
@@ -416,7 +428,7 @@ export default function AstralMapPage() {
           setAstralOrderError("A entrega ainda não foi cadastrada. Reabra esta compra no mesmo navegador ou use o código do pedido no suporte.");
           return null;
         }
-        await registerAstralOrder(entitlement, chart, draft.email);
+        await registerAstralOrder(entitlement, chart, draft.email, { questionnaire: draft.questionnaire });
         clearAstralOrderDraft();
         remote = await fetchAstralOrderStatus(entitlement);
       }
@@ -445,6 +457,16 @@ export default function AstralMapPage() {
     if (["date", "time", "city"].includes(field)) setOffsetOptions([]);
     setError("");
     if (field === "city") setSelectedLocation(null);
+  }
+
+  function toggleQuestionnaire(groupId, optionId) {
+    setQuestionnaire((current) => {
+      const selected = new Set(current[groupId] || []);
+      if (selected.has(optionId)) selected.delete(optionId);
+      else selected.add(optionId);
+      return { ...current, [groupId]: [...selected] };
+    });
+    setError("");
   }
 
   function chooseLocation(location) {
@@ -485,8 +507,11 @@ export default function AstralMapPage() {
     setError("");
 
     try {
-      if (!saveAstralOrderDraft({ email: form.email })) {
-        throw new Error("Informe um e-mail válido para receber a síntese em PDF.");
+      if (!saveAstralOrderDraft({ email: form.email, questionnaire })) {
+        const hasValidEmail = /^\S+@\S+\.\S+$/u.test(form.email.trim());
+        throw new Error(hasValidEmail
+          ? "Marque ao menos uma resposta em cada pergunta de personalização."
+          : "Informe um e-mail válido para receber a síntese em PDF.");
       }
       const nextChart = calculateNatalChart({ ...form, location: selectedLocation });
       setChart(nextChart);
@@ -540,6 +565,7 @@ export default function AstralMapPage() {
         time: targetChart.birth.time,
         utcOffsetMinutes: targetChart.birth.utcOffsetMinutes,
         location: targetChart.location,
+        questionnaire: loadAstralOrderDraft()?.questionnaire || questionnaire,
       } });
       trackCommercialEvent("begin_checkout", {
         product_id: astralProduct.id,
@@ -580,6 +606,7 @@ export default function AstralMapPage() {
     clearStoredChart();
     setChart(null);
     setForm({ name: "", email: "", date: "", time: "", city: "" });
+    setQuestionnaire(normalizeAstralQuestionnaire(null));
     clearAstralOrderDraft();
     setSelectedLocation(null);
     setOffsetOptions([]);
@@ -592,6 +619,21 @@ export default function AstralMapPage() {
     setError("");
     setStatus("Pronto para um novo mapa.");
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function downloadAstralPdf() {
+    if (!astralEntitlement || pdfDownloading) return;
+    setPdfDownloading(true);
+    setAstralOrderError("");
+    try {
+      const result = await fetchAstralPdfDownload(astralEntitlement);
+      if (!result?.url) throw new Error("astral_pdf_unavailable");
+      window.location.assign(result.url);
+    } catch {
+      setAstralOrderError("O PDF está entregue, mas o link privado não pôde ser aberto agora. Tente atualizar em instantes.");
+    } finally {
+      setPdfDownloading(false);
+    }
   }
 
   return (
@@ -766,6 +808,31 @@ export default function AstralMapPage() {
             </div>
           ) : null}
 
+          <fieldset className="astro-questionnaire astro-field-wide">
+            <legend>Para a leitura falar de você — e não de “qualquer pessoa”</legend>
+            <p>Marque uma ou mais respostas em cada bloco. Isso vira autorrelato na leitura; não altera o cálculo do seu mapa.</p>
+            {astralQuestionnaireGroups.map((group, groupIndex) => (
+              <section key={group.id}>
+                <span>{String(groupIndex + 1).padStart(2, "0")} · {group.question}</span>
+                <div>
+                  {group.options.map((option) => {
+                    const selected = questionnaire[group.id]?.includes(option.id);
+                    return (
+                      <label className={selected ? "is-selected" : ""} key={option.id}>
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleQuestionnaire(group.id, option.id)}
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+          </fieldset>
+
           {error ? <p className="astro-error astro-field-wide" role="alert">{error}</p> : null}
 
           <button className="button button-primary button-large astro-submit astro-field-wide" type="submit" disabled={paymentState === "opening" || paymentState === "verifying"}>
@@ -829,6 +896,8 @@ export default function AstralMapPage() {
             deliveryStatus={astralOrderStatus}
             deliveryError={astralOrderError}
             onRefresh={() => syncAstralOrder()}
+            onDownload={downloadAstralPdf}
+            downloading={pdfDownloading}
           />
           <Astral911Questions
             chart={chart}

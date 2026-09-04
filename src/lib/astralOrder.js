@@ -1,3 +1,5 @@
+import { normalizeAstralQuestionnaire } from "../config/astralQuestionnaire.js";
+
 const ASTRAL_ORDER_DRAFT_KEY = "arcane911.astral-order-draft.v1";
 
 function cleanText(value, maximum = 150) {
@@ -15,7 +17,10 @@ function safeSession() {
 export function saveAstralOrderDraft(draft) {
   const email = cleanText(draft?.email, 150).toLowerCase();
   if (!/^\S+@\S+\.\S+$/u.test(email)) return null;
-  const normalized = { email, savedAt: new Date().toISOString() };
+  let questionnaire;
+  try { questionnaire = normalizeAstralQuestionnaire(draft?.questionnaire, { requireAnswers: true }); }
+  catch { return null; }
+  const normalized = { email, questionnaire, savedAt: new Date().toISOString() };
   try {
     safeSession()?.setItem(ASTRAL_ORDER_DRAFT_KEY, JSON.stringify(normalized));
   } catch {
@@ -32,7 +37,7 @@ export function loadAstralOrderDraft() {
       safeSession()?.removeItem(ASTRAL_ORDER_DRAFT_KEY);
       return null;
     }
-    return value;
+    return { ...value, questionnaire: normalizeAstralQuestionnaire(value.questionnaire) };
   } catch {
     return null;
   }
@@ -78,6 +83,7 @@ export async function registerAstralOrder(entitlement, chart, email, options = {
     ...access,
     fullName: cleanText(chart?.person, 80),
     email: cleanText(email, 150).toLowerCase(),
+    questionnaire: normalizeAstralQuestionnaire(options.questionnaire),
     birth: {
       date: cleanText(chart?.birth?.date, 10),
       time: cleanText(chart?.birth?.time, 8),
@@ -95,4 +101,8 @@ export async function registerAstralOrder(entitlement, chart, email, options = {
 
 export async function fetchAstralOrderStatus(entitlement, options = {}) {
   return request({ action: "status", ...accessPayload(entitlement) }, options.fetchImplementation);
+}
+
+export async function fetchAstralPdfDownload(entitlement, options = {}) {
+  return request({ action: "download", ...accessPayload(entitlement) }, options.fetchImplementation);
 }

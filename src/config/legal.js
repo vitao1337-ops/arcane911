@@ -13,6 +13,6 @@ export const legalConfig = Object.freeze({
   operatorName: clean(viteEnv.VITE_LEGAL_OPERATOR_NAME, "Arcane911"),
   supportEmail,
   siteUrl: clean(viteEnv.VITE_PUBLIC_SITE_URL),
-  revisedAt: "28 de agosto de 2026",
+  revisedAt: "4 de setembro de 2026",
   ready: Boolean(supportEmail && clean(viteEnv.VITE_LEGAL_OPERATOR_NAME)),
 });

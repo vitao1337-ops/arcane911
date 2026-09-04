@@ -57,6 +57,7 @@ const SpecificReadingPage = lazy(() => import("./pages/SpecificReadingPage"));
 const LegalPage = lazy(() => import("./pages/LegalPage"));
 const PurchaseRecoveryPage = lazy(() => import("./pages/PurchaseRecoveryPage"));
 const PaymentPage = lazy(() => import("./pages/PaymentPage"));
+const AstralAdminPage = lazy(() => import("./pages/AstralAdminPage"));
 
 const STORAGE_KEY = "arcane911.readings.v1";
 const READING_SESSION_KEY = "arcane911.active-reading.v1";
@@ -383,6 +384,7 @@ function App() {
   const isLegalRoute = Boolean(legalRouteType);
   const isRecoveryRoute = route === "/recuperar-compra";
   const isPaymentRoute = route === "/pagamento";
+  const isAdminRoute = route === "/admin/mapas";
   const featuredSpecificReading = getReadingForIntent(intentId);
   const specificReadingOrigin = new URLSearchParams(location.search).get("origem");
   const specificReadingHasCompleteContext = specificReadingOrigin === "tiragem-completa"
@@ -576,6 +578,7 @@ function App() {
       "/tiragem-gratis": "Tiragem gratuita · Arcane911",
       "/tiragem-completa": "Ferradura completa · Arcane911",
       "/mapa-astral": "Mapa Astral · Arcane911",
+      "/admin/mapas": "Revisão de Mapas · Arcane911",
       "/recuperar-compra": "Recuperar compra · Arcane911",
       "/termos": "Termos de Uso · Arcane911",
       "/privacidade": "Privacidade · Arcane911",
@@ -1746,7 +1749,7 @@ function App() {
 
   return (
     <div className="app-shell" data-agent911-ready="true">
-      <a className="skip-link" href={isLegalRoute ? "#legal-content" : isRecoveryRoute ? "#recovery-content" : isAstroRoute ? "#criar-mapa" : isCompleteRoute ? "#complete-reading-top" : isSpecificRoute ? "#specific-reading-top" : "#ritual"}>
+      <a className="skip-link" href={isAdminRoute ? "#astral-admin-main" : isLegalRoute ? "#legal-content" : isRecoveryRoute ? "#recovery-content" : isAstroRoute ? "#criar-mapa" : isCompleteRoute ? "#complete-reading-top" : isSpecificRoute ? "#specific-reading-top" : "#ritual"}>
         {isLegalRoute || isRecoveryRoute ? "Pular para o conteúdo" : isAstroRoute ? "Pular para criar o mapa" : isSpecificRoute ? "Pular para o conteúdo" : "Pular para a leitura"}
       </a>
       <div className="ambient ambient-one" aria-hidden="true" />
@@ -1988,7 +1991,12 @@ function App() {
           <LegalPage type={legalRouteType} />
         </Suspense>
       ) : null}
-      {!["/", "/tiragem-gratis", "/tiragem-completa", "/mapa-astral", "/recuperar-compra", "/pagamento", "/termos", "/privacidade", "/reembolsos"].includes(route) && !isSpecificRoute ? <Navigate to="/" replace /> : null}
+      {isAdminRoute ? (
+        <Suspense fallback={<div className="route-loading"><span>✦</span><p>Abrindo a bancada privada…</p></div>}>
+          <AstralAdminPage />
+        </Suspense>
+      ) : null}
+      {!["/", "/tiragem-gratis", "/tiragem-completa", "/mapa-astral", "/recuperar-compra", "/pagamento", "/admin/mapas", "/termos", "/privacidade", "/reembolsos"].includes(route) && !isSpecificRoute ? <Navigate to="/" replace /> : null}
 
       <footer>
         <Link className="brand footer-brand" to="/">
