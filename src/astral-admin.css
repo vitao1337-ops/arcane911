@@ -350,6 +350,8 @@
   box-shadow: 0 20px 60px rgba(49, 34, 53, 0.14);
   color: #2c2331;
   padding: 6.5% 7.5% 5%;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1100px;
 }
 
 .astral-pdf-page::before,
@@ -522,6 +524,8 @@
     box-shadow: none;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+    content-visibility: visible;
+    contain-intrinsic-size: none;
   }
   .astral-pdf-page:last-child { break-after: auto; }
 }

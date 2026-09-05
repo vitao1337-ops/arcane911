@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 const zodiacSigns = [
   { key: "aries", glyph: "♈" },
   { key: "taurus", glyph: "♉" },
@@ -54,7 +56,7 @@ function normalize(value) {
   return ((value % 360) + 360) % 360;
 }
 
-export default function NatalWheel({ chart, preview = false }) {
+function NatalWheel({ chart, preview = false }) {
   const ascendant = chart?.ascendant?.longitude ?? 210;
   const planets = chart?.planets ?? previewPlanets;
   const aspects = chart?.aspects ?? previewAspects;
@@ -172,3 +174,5 @@ export default function NatalWheel({ chart, preview = false }) {
     </figure>
   );
 }
+
+export default memo(NatalWheel);

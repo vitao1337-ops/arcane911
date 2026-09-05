@@ -10,6 +10,7 @@ import {
   fallbackLocations,
   planetOrder,
 } from "../src/lib/astrology.js";
+import { searchBirthplaces } from "../src/lib/birthplaceSearch.js";
 
 const sample = calculateNatalChart({
   name: "Pessoa de Teste",
@@ -106,6 +107,32 @@ test("a interface astrológica expõe cálculo, privacidade e atribuição", () 
   assert.match(page, /id="birth-time"/);
   assert.match(page, /sessionStorage/u);
   assert.match(page, /ASTRO_STORAGE_MAX_AGE_MS/u);
+});
+
+test("o motor astrológico pesado só aquece depois da primeira interação", () => {
+  const pagePath = fileURLToPath(new URL("../src/pages/AstralMapPage.jsx", import.meta.url));
+  const page = readFileSync(pagePath, "utf8");
+
+  assert.doesNotMatch(page, /from\s+["']\.\.\/lib\/astrology["']/u);
+  assert.match(page, /import\(["']\.\.\/lib\/astrology["']\)/u);
+  assert.match(page, /onFocusCapture/u);
+});
+
+test("uma capital revisada responde sem baixar o índice mundial", async () => {
+  const originalFetch = globalThis.fetch;
+  let networkCalls = 0;
+  globalThis.fetch = async () => {
+    networkCalls += 1;
+    throw new Error("a rede não deveria ser usada");
+  };
+
+  try {
+    const matches = await searchBirthplaces("Sao Paulo");
+    assert.equal(networkCalls, 0);
+    assert.equal(matches[0]?.id, "br-sao-paulo");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('horário de verão inexistente é rejeitado antes de calcular ou cobrar', () => {

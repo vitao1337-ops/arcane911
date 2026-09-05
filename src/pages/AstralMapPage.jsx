@@ -34,11 +34,9 @@ import {
   saveAstralOrderDraft,
 } from "../lib/astralOrder";
 import {
-  buildAstroShareText,
-  calculateNatalChart,
   fallbackLocations,
-  searchBirthplaces,
-} from "../lib/astrology";
+} from "../data/birthplaces";
+import { searchBirthplaces } from "../lib/birthplaceSearch";
 import {
   checkoutErrorMessage,
   clearPendingCheckout,
@@ -58,6 +56,10 @@ const ASTRO_STORAGE_KEY = "arcane911.astral.v2";
 const LEGACY_ASTRO_STORAGE_KEY = "arcane911.astral.v1";
 const ASTRO_STORAGE_MAX_AGE_MS = 12 * 60 * 60 * 1_000;
 const ASTRAL_OFFER_CONTEXT = "astral_document";
+const loadAstrologyEngine = () => import("../lib/astrology");
+const featuredCities = fallbackLocations.slice(0, 5);
+const astralProduct = commerceConfig.products.astralDocument;
+const longDateFormatter = new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" });
 
 function formatLocation(location) {
   return [location.name, location.admin1, location.country].filter(Boolean).join(" · ");
@@ -262,8 +264,9 @@ function HumanSynthesisStatus({ product, entitlement, deliveryStatus, deliveryEr
 export default function AstralMapPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: "", email: loadAstralOrderDraft()?.email ?? "", date: "", time: "", city: "" });
-  const [questionnaire, setQuestionnaire] = useState(() => normalizeAstralQuestionnaire(loadAstralOrderDraft()?.questionnaire));
+  const initialDraft = useMemo(loadAstralOrderDraft, []);
+  const [form, setForm] = useState(() => ({ name: "", email: initialDraft?.email ?? "", date: "", time: "", city: "" }));
+  const [questionnaire, setQuestionnaire] = useState(() => normalizeAstralQuestionnaire(initialDraft?.questionnaire));
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [offsetOptions, setOffsetOptions] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -287,8 +290,6 @@ export default function AstralMapPage() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   }, []);
-  const featuredCities = fallbackLocations.slice(0, 5);
-  const astralProduct = commerceConfig.products.astralDocument;
   const chartFingerprint = useMemo(() => {
     try {
       return chart ? astro911Fingerprint(chart) : "";
@@ -513,6 +514,7 @@ export default function AstralMapPage() {
           ? "Marque ao menos uma resposta em cada pergunta de personalização."
           : "Informe um e-mail válido para receber a síntese em PDF.");
       }
+      const { calculateNatalChart } = await loadAstrologyEngine();
       const nextChart = calculateNatalChart({ ...form, location: selectedLocation });
       setChart(nextChart);
       storeChart(nextChart);
@@ -586,6 +588,7 @@ export default function AstralMapPage() {
 
   async function shareChart() {
     if (!chart) return;
+    const { buildAstroShareText } = await loadAstrologyEngine();
     const text = buildAstroShareText(chart);
 
     try {
@@ -700,7 +703,12 @@ export default function AstralMapPage() {
           </div>
         </div>
 
-        <form className="astro-form" onSubmit={createChart} noValidate>
+        <form
+          className="astro-form"
+          onFocusCapture={() => { void loadAstrologyEngine(); }}
+          onSubmit={createChart}
+          noValidate
+        >
           {offsetOptions.length > 1 ? (
             <label className="astro-field astro-field-wide">
               <span>Confirmação do horário de verão</span>
@@ -862,7 +870,7 @@ export default function AstralMapPage() {
               <span className="section-kicker">02 · Pagamento confirmado · seu mapa está aberto</span>
               <h2 id="astro-result-title">O céu de {chart.person}.</h2>
               <p>
-                {new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" }).format(new Date(`${chart.birth.date}T12:00:00`))}
+                {longDateFormatter.format(new Date(`${chart.birth.date}T12:00:00`))}
                 {` às ${chart.birth.time} · ${chart.location.name}, ${chart.location.country}`}
               </p>
             </div>

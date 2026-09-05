@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { CheckCircle2, FileText, Mail, RotateCcw, ShieldCheck, Sparkles } from "../components/MysticIcons";
 import { pdfFileToBase64, readAstralAdminSecret, requestAstralAdmin, storeAstralAdminSecret } from "../lib/astralAdmin";
 import "../astral-admin.css";
@@ -34,7 +34,7 @@ function OrderQueue({ orders, selectedId, onSelect }) {
   ))}</div>;
 }
 
-function EditablePage({ page, onChange }) {
+const EditablePage = memo(function EditablePage({ page, onChange }) {
   return <details className="astral-admin-page-editor">
     <summary><span>{String(page.number).padStart(2, "0")}</span>{page.section} · {page.title}</summary>
     <label>Seção<input value={page.section} onChange={(event) => onChange("section", event.target.value)} maxLength={80} /></label>
@@ -43,23 +43,27 @@ function EditablePage({ page, onChange }) {
     <label>Texto<textarea value={page.body} onChange={(event) => onChange("body", event.target.value)} maxLength={12000} rows={10} /></label>
     <label>Destaque<textarea value={page.callout} onChange={(event) => onChange("callout", event.target.value)} maxLength={1200} rows={3} /></label>
   </details>;
-}
+}, (previous, next) => previous.page === next.page);
+
+const PreviewPage = memo(function PreviewPage({ page }) {
+  return <article className={`astral-pdf-page ${page.number === 1 ? "is-cover" : ""}`}>
+    <img className="astral-pdf-card" src={`/cards/${page.card}`} alt="" aria-hidden="true" loading="lazy" decoding="async" />
+    <div className="astral-pdf-brand"><span>☾</span><strong>ARCANE911</strong><small>DOCUMENTO ASTRAL</small></div>
+    <div className="astral-pdf-content">
+      <span className="astral-pdf-kicker">{page.section}</span><h2>{page.title}</h2>
+      {page.subtitle ? <p className="astral-pdf-subtitle">{page.subtitle}</p> : null}
+      <div className="astral-pdf-body">{page.body}</div>
+      {page.callout ? <blockquote>{page.callout}</blockquote> : null}
+    </div>
+    <footer><span>Agent911 · curadoria humana</span><b>{String(page.number).padStart(2, "0")}</b></footer>
+  </article>;
+});
 
 function DocumentPreview({ draft }) {
   if (!draft?.pages?.length) return null;
-  return <section className="astral-admin-document" aria-label="Prévia do Documento Astral 911">{draft.pages.map((page) => (
-    <article className={`astral-pdf-page ${page.number === 1 ? "is-cover" : ""}`} key={page.number}>
-      <img className="astral-pdf-card" src={`/cards/${page.card}`} alt="" aria-hidden="true" />
-      <div className="astral-pdf-brand"><span>☾</span><strong>ARCANE911</strong><small>DOCUMENTO ASTRAL</small></div>
-      <div className="astral-pdf-content">
-        <span className="astral-pdf-kicker">{page.section}</span><h2>{page.title}</h2>
-        {page.subtitle ? <p className="astral-pdf-subtitle">{page.subtitle}</p> : null}
-        <div className="astral-pdf-body">{page.body}</div>
-        {page.callout ? <blockquote>{page.callout}</blockquote> : null}
-      </div>
-      <footer><span>Agent911 · curadoria humana</span><b>{String(page.number).padStart(2, "0")}</b></footer>
-    </article>
-  ))}</section>;
+  return <section className="astral-admin-document" aria-label="Prévia do Documento Astral 911">
+    {draft.pages.map((page) => <PreviewPage page={page} key={page.number} />)}
+  </section>;
 }
 
 export default function AstralAdminPage() {
@@ -76,8 +80,8 @@ export default function AstralAdminPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [confirmingDelivery, setConfirmingDelivery] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const delivered = record?.order?.status === "delivered";
-  const dirty = useMemo(() => record?.draft && JSON.stringify(record.draft) !== JSON.stringify(draft), [draft, record]);
 
   async function call(body, label = "") {
     setBusy(label || body.action); setError(""); setMessage("");
@@ -94,7 +98,7 @@ export default function AstralAdminPage() {
   async function loadDetail(orderId) {
     setSelectedId(orderId); setConfirmingDelivery(false);
     const result = await call({ action: "detail", orderId }, "detail");
-    setRecord(result); setDraft(result.draft || null); setNote(result.order?.reviewNote || "");
+    setRecord(result); setDraft(result.draft || null); setNote(result.order?.reviewNote || ""); setDirty(false);
   }
   function enter(event) {
     event.preventDefault(); const normalized = storeAstralAdminSecret(secretInput); setSecret(normalized);
@@ -104,18 +108,19 @@ export default function AstralAdminPage() {
   async function generate(force = false) {
     try {
       const result = await call({ action: "generate", orderId: selectedId, force, note }, force ? "regenerate" : "generate");
-      setRecord(result); setDraft(result.draft); setNote(result.order?.reviewNote || ""); await loadQueue();
+      setRecord(result); setDraft(result.draft); setNote(result.order?.reviewNote || ""); setDirty(false); await loadQueue();
       setMessage(force ? "Nova versão gerada. Leia tudo antes de salvar o PDF." : "Rascunho de 21 páginas preparado para sua revisão.");
     } catch { /* A mensagem já foi traduzida pela chamada. */ }
   }
   async function save() {
     try {
       const result = await call({ action: "save", orderId: selectedId, draft, note }, "save");
-      setRecord(result); setDraft(result.draft); setNote(result.order?.reviewNote || ""); await loadQueue(); setMessage("Sua revisão foi salva.");
+      setRecord(result); setDraft(result.draft); setNote(result.order?.reviewNote || ""); setDirty(false); await loadQueue(); setMessage("Sua revisão foi salva.");
     } catch { /* A mensagem já foi traduzida pela chamada. */ }
   }
   function updatePage(index, field, value) {
     setDraft((current) => ({ ...current, pages: current.pages.map((page, pageIndex) => pageIndex === index ? { ...page, [field]: value } : page) }));
+    setDirty(true);
   }
   async function upload(event) {
     const file = event.target.files?.[0]; event.target.value = "";
@@ -124,13 +129,25 @@ export default function AstralAdminPage() {
     try {
       const pdfBase64 = await pdfFileToBase64(file);
       const result = await call({ action: "upload_pdf", orderId: selectedId, pdfBase64 }, "upload");
-      setRecord(result); setDraft(result.draft); await loadQueue();
+      setRecord(result); setDraft(result.draft); setDirty(false); await loadQueue();
       setMessage(`PDF privado anexado (${Math.round(result.uploaded.bytes / 1024)} KB). Ainda não foi enviado.`);
     } catch (uploadError) { if (uploadError?.code === "pdf_invalid") setError(errorText(uploadError)); }
   }
   async function openUploadedPdf() {
     try { const result = await call({ action: "pdf_preview", orderId: selectedId }, "preview_pdf"); window.open(result.url, "_blank", "noopener,noreferrer"); }
     catch { /* A mensagem já foi traduzida pela chamada. */ }
+  }
+  async function printDocument() {
+    const images = [...document.querySelectorAll(".astral-admin-document .astral-pdf-card")];
+    await Promise.all(images.map((image) => {
+      image.loading = "eager";
+      if (image.complete) return Promise.resolve();
+      return new Promise((resolve) => {
+        image.addEventListener("load", resolve, { once: true });
+        image.addEventListener("error", resolve, { once: true });
+      });
+    }));
+    window.print();
   }
   async function approve() {
     try {
@@ -155,7 +172,7 @@ export default function AstralAdminPage() {
       <span className={configuration?.outboundEmailConfigured ? "is-ready" : "is-warning"}><ShieldCheck size={15} /> {configuration?.outboundEmailConfigured ? "Envio ao cliente configurado" : "Resend/remetente ainda não configurados"}</span>
     </section>
     <div className="astral-admin-layout">
-      <aside className="astral-admin-sidebar"><label>Fila<select value={filter} onChange={(event) => { setFilter(event.target.value); setSelectedId(""); setRecord(null); }}><option value="">Todos</option><option value="pending">Aguardando rascunho</option><option value="reviewing">Em revisão</option><option value="delivered">Entregues</option></select></label><OrderQueue orders={orders} selectedId={selectedId} onSelect={(id) => loadDetail(id).catch(() => {})} /></aside>
+      <aside className="astral-admin-sidebar"><label>Fila<select value={filter} onChange={(event) => { setFilter(event.target.value); setSelectedId(""); setRecord(null); setDirty(false); }}><option value="">Todos</option><option value="pending">Aguardando rascunho</option><option value="reviewing">Em revisão</option><option value="delivered">Entregues</option></select></label><OrderQueue orders={orders} selectedId={selectedId} onSelect={(id) => loadDetail(id).catch(() => {})} /></aside>
       <section className="astral-admin-workbench">
         {!record ? <div className="astral-admin-placeholder"><Sparkles size={28} /><h2>Escolha um pedido.</h2><p>Os dados, o autorrelato e o rascunho aparecem aqui.</p></div> : <>
           <div className="astral-admin-order-head"><div><small>{record.order.orderId}</small><h2>{record.order.fullName}</h2><p>{record.order.email} · {record.order.cityName}, {record.order.regionName}</p></div><span className={`astral-admin-status is-${record.order.status}`}>{statusLabels[record.order.status]}</span></div>
@@ -163,7 +180,7 @@ export default function AstralAdminPage() {
             {!draft && !delivered ? <button className="button button-primary" type="button" onClick={() => generate(false)} disabled={Boolean(busy)}><Sparkles size={16} /> Gerar rascunho Agent911</button> : null}
             {draft && !delivered ? <button className="button button-glass" type="button" onClick={save} disabled={Boolean(busy) || !dirty}>Salvar revisão</button> : null}
             {draft && !delivered ? <button className="button button-glass" type="button" onClick={() => generate(true)} disabled={Boolean(busy)}>Regenerar com Agent911</button> : null}
-            {draft ? <button className="button button-glass" type="button" onClick={() => window.print()} disabled={Boolean(busy)}><FileText size={15} /> Imprimir / salvar PDF</button> : null}
+            {draft ? <button className="button button-glass" type="button" onClick={printDocument} disabled={Boolean(busy)}><FileText size={15} /> Imprimir / salvar PDF</button> : null}
             {draft && !delivered ? <label className="button button-glass astral-admin-upload">Anexar PDF revisado<input type="file" accept="application/pdf" onChange={upload} disabled={Boolean(busy)} /></label> : null}
             {record.order.pdfReady ? <button className="button button-glass" type="button" onClick={openUploadedPdf} disabled={Boolean(busy)}>Conferir PDF anexado</button> : null}
             {record.order.pdfReady && !delivered && !confirmingDelivery ? <button className="button button-primary" type="button" onClick={() => setConfirmingDelivery(true)} disabled={Boolean(busy)}><CheckCircle2 size={16} /> Aprovar e enviar</button> : null}

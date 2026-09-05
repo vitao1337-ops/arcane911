@@ -82,3 +82,20 @@ test("a resposta específica usa contraste escuro na página clara e as rotas de
   assert.match(checkout, /PENDING_CHECKOUT_TTL_MS = 24 \* 60 \* 60 \* 1_000/);
   assert.match(checkout, /recoverHostedOrder/);
 });
+
+test("a primeira visita não monta módulos e cartas que ainda estão fechados", () => {
+  const app = source("../src/App.jsx");
+  const wheel = source("../src/components/NatalWheel.jsx");
+  const styles = source("../src/styles.css");
+  const vercel = JSON.parse(source("../vercel.json"));
+
+  assert.match(app, /lazy\(\(\) => import\("\.\/components\/Agent911Summary"\)\)/u);
+  assert.match(app, /lazy\(\(\) => import\("\.\/components\/Agent911Consultation"\)\)/u);
+  assert.doesNotMatch(app, /hidden=\{!deckOpen\}/u);
+  assert.match(app, /\{deckOpen \? <div className="deck-disclosure-content"/u);
+  assert.match(wheel, /export default memo\(NatalWheel\)/u);
+  assert.match(app, /IntersectionObserver/u);
+  assert.doesNotMatch(styles.match(/@keyframes card-glass-sweep \{[\s\S]*?\n\}/u)?.[0] ?? "", /\bleft\s*:/u);
+  assert.ok(vercel.headers.some((entry) => entry.source === "/cards/(.*)"));
+  assert.ok(vercel.headers.some((entry) => entry.source === "/geo/(.*)"));
+});

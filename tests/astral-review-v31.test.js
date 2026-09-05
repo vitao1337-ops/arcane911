@@ -51,6 +51,18 @@ test("modelo revisável cria 21 páginas Arcane com cartas discretas e autorrela
   assert.equal(sanitizeAstralDraft(tampered).pages[0].card, "21-o-mundo.webp");
 });
 
+test("bancada não redesenha as 21 páginas nem carrega todas as cartas a cada tecla", () => {
+  const page = source("../src/pages/AstralAdminPage.jsx");
+  const styles = source("../src/astral-admin.css");
+
+  assert.match(page, /const PreviewPage = memo/u);
+  assert.match(page, /loading="lazy" decoding="async"/u);
+  assert.match(page, /const \[dirty, setDirty\] = useState\(false\)/u);
+  assert.doesNotMatch(page, /JSON\.stringify\(record\.draft\)/u);
+  assert.match(styles, /content-visibility: auto/u);
+  assert.match(styles, /@media print[\s\S]*content-visibility: visible/u);
+});
+
 test("PDF é validado, vai para bucket privado e recebe URL assinada", async () => {
   const pdf = Buffer.alloc(400, 0x20);
   pdf.write("%PDF-1.7\n", 0, "ascii");

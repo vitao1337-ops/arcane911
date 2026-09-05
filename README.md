@@ -1,4 +1,4 @@
-# Arcane911 V31 — Agent911 + revisão humana + PDF privado
+# Arcane911 V31.2 — performance + Agent911 + revisão humana + PDF privado
 
 Base: V30 de lançamento localhost. Identidade visual e 22 cartas preservadas. Mercado Pago: Pix e cartão.
 
@@ -18,12 +18,17 @@ npm test
 npm run build
 ```
 
-Verificação desta entrega: 184 testes passaram e o build de produção foi concluído. Os testes de cobrança, Storage, e-mail e IA usam provedores isolados; não comprovam saldo/cota das contas nem substituem uma compra real acompanhada.
+Verificação desta entrega: 188 testes passaram e o build de produção foi concluído. Os testes de cobrança, Storage, e-mail e IA usam provedores isolados; não comprovam saldo/cota das contas nem substituem uma compra real acompanhada.
 
 A instalação ajusta automaticamente o formato de módulos da biblioteca astronômica para o Node da Vercel. Esse ajuste também é verificado sem a detecção automática de módulos do Node.
 
 ## Entrega desta versão
 
+- A página do mapa abre sem baixar antecipadamente os dois motores astronômicos; eles aquecem após a primeira interação e preservam o mesmo cálculo.
+- Os painéis do Agent911 deixam de pesar na primeira visita e são carregados somente quando a leitura é aberta.
+- Capitais revisadas, inclusive São Paulo sem acento digitado, respondem sem baixar o índice mundial de cidades.
+- Cartas e índices geográficos ganham cache persistente no navegador e no CDN da Vercel.
+- Regras antigas já anuladas pela cascata final foram removidas sem mudar o desenho calculado da interface.
 - Três blocos de autorrelato entram no snapshot imutável antes do Mercado Pago e personalizam a escrita do Agent911.
 - Bancada privada e não anunciada em `/admin/mapas`, protegida por segredo server-side.
 - Rascunho Arcane de 21 páginas, editável página por página e preparado para **Imprimir / salvar PDF**.

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
@@ -26,8 +26,6 @@ import { agent911Config } from "./config/agent911";
 import { getAgent911ReadingMode } from "./config/agent911ReadingModes";
 import { commerceConfig } from "./config/commerce";
 import { salesConfig } from "./config/sales";
-import Agent911Consultation from "./components/Agent911Consultation";
-import Agent911Summary from "./components/Agent911Summary";
 import NatalWheel from "./components/NatalWheel";
 import {
   checkoutErrorMessage,
@@ -53,6 +51,8 @@ import {
 } from "./lib/reading";
 
 const AstralMapPage = lazy(() => import("./pages/AstralMapPage"));
+const Agent911Consultation = lazy(() => import("./components/Agent911Consultation"));
+const Agent911Summary = lazy(() => import("./components/Agent911Summary"));
 const SpecificReadingPage = lazy(() => import("./pages/SpecificReadingPage"));
 const LegalPage = lazy(() => import("./pages/LegalPage"));
 const PurchaseRecoveryPage = lazy(() => import("./pages/PurchaseRecoveryPage"));
@@ -184,7 +184,7 @@ function saveStoredJournal(records) {
   }
 }
 
-function TarotCardVisual({ card, className = "", eager = false, onClick }) {
+const TarotCardVisual = memo(function TarotCardVisual({ card, className = "", eager = false, fetchPriority, onClick }) {
   const compactNameLength = Math.max(5, card.name.replace(/\s+/g, "").length);
   const visualStyle = {
     "--tarot-name-length": compactNameLength,
@@ -198,6 +198,8 @@ function TarotCardVisual({ card, className = "", eager = false, onClick }) {
         width="1024"
         height="1536"
         loading={eager ? "eager" : "lazy"}
+        decoding="async"
+        fetchPriority={fetchPriority ?? (eager ? "high" : "auto")}
         draggable="false"
       />
       <span className="tarot-roman" aria-hidden="true">
@@ -229,7 +231,7 @@ function TarotCardVisual({ card, className = "", eager = false, onClick }) {
       {content}
     </div>
   );
-}
+});
 
 function CardBack({ selectedOrder, isDisabled, onClick, style }) {
   return (
@@ -252,7 +254,7 @@ function CardBack({ selectedOrder, isDisabled, onClick, style }) {
   );
 }
 
-function MysticField({ compact = false }) {
+const MysticField = memo(function MysticField({ compact = false }) {
   const viewBox = compact ? "0 0 1200 480" : "0 0 1200 720";
   const rosetteTransform = compact ? "translate(152 392)" : "translate(152 584)";
   const rightConstellationTransform = compact ? "translate(0 -118)" : undefined;
@@ -314,7 +316,7 @@ function MysticField({ compact = false }) {
       <span className="mystic-star star-four">✧</span>
     </div>
   );
-}
+});
 
 function App() {
   const location = useLocation();
@@ -371,6 +373,7 @@ function App() {
   const [status, setStatus] = useState("");
   const timerRef = useRef(null);
   const ritualRef = useRef(null);
+  const heroRef = useRef(null);
   const checkoutVerificationRef = useRef("");
   const completeRestorePromiseRef = useRef(null);
   const isLanding = route === "/";
@@ -609,6 +612,16 @@ function App() {
       document.body.style.overflow = "";
     };
   }, [activeCard, checkoutOpen, journalOpen, mobileNavOpen]);
+
+  useEffect(() => {
+    const hero = heroRef.current;
+    if (!isLanding || !hero || typeof IntersectionObserver !== "function") return undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      hero.classList.toggle("is-paused", !entry.isIntersecting);
+    }, { rootMargin: "80px 0px" });
+    observer.observe(hero);
+    return () => observer.disconnect();
+  }, [isLanding]);
 
   useEffect(
     () => () => {
@@ -1281,20 +1294,22 @@ function App() {
     if (!createdAt || ![3, 7].includes(agentCards.length)) return null;
 
     return (
-      <Agent911Summary
-        key={`${createdAt}-${variant}-${readingMode}`}
-        cards={agentCards}
-        intentId={intentId}
-        intentLabel={selectedIntent.label}
-        question={resolvedQuestion}
-        readingMode={readingMode}
-        createdAt={createdAt}
-        variant={variant}
-        entitlement={variant === "complete" ? completeEntitlement : null}
-        onResult={(result) => setAgentSummaries((current) => (
-          current[variant] === result ? current : { ...current, [variant]: result }
-        ))}
-      />
+      <Suspense fallback={<div className="agent911-module-loading" role="status"><Sparkles size={17} /> Preparando o Agent911…</div>}>
+        <Agent911Summary
+          key={`${createdAt}-${variant}-${readingMode}`}
+          cards={agentCards}
+          intentId={intentId}
+          intentLabel={selectedIntent.label}
+          question={resolvedQuestion}
+          readingMode={readingMode}
+          createdAt={createdAt}
+          variant={variant}
+          entitlement={variant === "complete" ? completeEntitlement : null}
+          onResult={(result) => setAgentSummaries((current) => (
+            current[variant] === result ? current : { ...current, [variant]: result }
+          ))}
+        />
+      </Suspense>
     );
   }
 
@@ -1302,17 +1317,19 @@ function App() {
     if (!createdAt || completeSpread.length !== 7) return null;
 
     return (
-      <Agent911Consultation
-        key={`${createdAt}-consultation-${readingMode}`}
-        cards={completeSpread}
-        intentId={intentId}
-        intentLabel={selectedIntent.label}
-        question={resolvedQuestion}
-        readingMode={readingMode}
-        createdAt={createdAt}
-        initialResult={agentSummaries.complete}
-        parentSessionId={completeEntitlement?.sessionId ?? ""}
-      />
+      <Suspense fallback={<div className="agent911-module-loading" role="status"><Sparkles size={17} /> Abrindo a consulta…</div>}>
+        <Agent911Consultation
+          key={`${createdAt}-consultation-${readingMode}`}
+          cards={completeSpread}
+          intentId={intentId}
+          intentLabel={selectedIntent.label}
+          question={resolvedQuestion}
+          readingMode={readingMode}
+          createdAt={createdAt}
+          initialResult={agentSummaries.complete}
+          parentSessionId={completeEntitlement?.sessionId ?? ""}
+        />
+      </Suspense>
     );
   }
 
@@ -1788,7 +1805,7 @@ function App() {
 
       {isLanding ? (
       <main>
-        <section className="hero" id="top">
+        <section className="hero" id="top" ref={heroRef}>
           <div className="hero-copy">
             <div className="eyebrow"><span /> Experiência gratuita · Arcanos Maiores</div>
             <h1>O que você ainda não nomeou <em>já deixou um sinal.</em></h1>
@@ -1816,13 +1833,13 @@ function App() {
             <div className="hero-orbit orbit-inner" aria-hidden="true" />
             <div className="hero-glow" aria-hidden="true">✦</div>
             <div className="hero-card hero-card-left">
-              <TarotCardVisual card={tarotCards[18]} eager />
+              <TarotCardVisual card={tarotCards[18]} fetchPriority="low" />
             </div>
             <div className="hero-card hero-card-center">
-              <TarotCardVisual card={tarotCards[17]} eager />
+              <TarotCardVisual card={tarotCards[17]} eager fetchPriority="high" />
             </div>
             <div className="hero-card hero-card-right">
-              <TarotCardVisual card={tarotCards[1]} eager />
+              <TarotCardVisual card={tarotCards[1]} fetchPriority="low" />
             </div>
             <span className="hero-caption"><Sparkles size={14} /> Sistema simbólico Rider–Waite–Smith</span>
           </div>
@@ -1907,7 +1924,7 @@ function App() {
             <span className="deck-disclosure-sigil" aria-hidden="true">☾</span>
           </button>
 
-          <div className="deck-disclosure-content" id="arcane-deck-content" hidden={!deckOpen}>
+          {deckOpen ? <div className="deck-disclosure-content" id="arcane-deck-content">
             <div className="section-heading split-heading">
               <div>
                 <h2>Vinte e duas portas.<br />A mesma jornada humana.</h2>
@@ -1935,7 +1952,7 @@ function App() {
               <i />
               <span>XXI · O Mundo</span>
             </div>
-          </div>
+          </div> : null}
         </section>
 
         <section className="closing-section">
