@@ -40,6 +40,7 @@ Execute nesta ordem, somente no projeto que já contém o Arcane911:
 1. database/arcane911-payment-ledger.sql
 2. database/arcane911-v29.sql
 3. database/arcane911-v31.sql
+4. database/arcane911-v31-pdf-bucket.sql
 
 Depois confira:
 

@@ -38,6 +38,7 @@ Instalação nova:
 -- execute database/arcane911-payment-ledger.sql
 -- depois execute database/arcane911-v29.sql
 -- por último execute database/arcane911-v31.sql
+-- e depois execute database/arcane911-v31-pdf-bucket.sql
 select public.arcane911_payment_ledger_health();
 select public.arcane911_astral_fulfillment_health();
 ```
